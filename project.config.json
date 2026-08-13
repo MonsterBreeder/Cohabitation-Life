@@ -1,0 +1,18 @@
+{
+  "description": "微信开发者工具项目配置：小程序页面使用 uni-app 开发输出，云函数使用源码目录。",
+  "miniprogramRoot": "dist/dev/mp-weixin/",
+  "cloudfunctionRoot": "cloudfunctions/",
+  "compileType": "miniprogram",
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "postcss": false,
+    "minified": false,
+    "newFeature": true,
+    "bigPackageSizeSupport": true,
+    "minifyWXML": true
+  },
+  "appid": "wxd40af14967fa64fa",
+  "projectname": "cohabitation-life",
+  "condition": {}
+}
