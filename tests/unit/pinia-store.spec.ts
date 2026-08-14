@@ -9,13 +9,14 @@ describe('Pinia stores', () => {
     setActivePinia(createPinia())
   })
 
-  it('registers the task store and exposes its source task state', () => {
+  it('registers the task store and exposes its U1 minimal state', () => {
     const store = useTaskStore()
 
     expect(store.$id).toBe('task')
-    expect(store.$state).toHaveProperty('hasHome')
-    expect(store.$state).toHaveProperty('tasks')
-    expect(store.tasks).toHaveLength(3)
+    // U1 阶段：仅暴露 state 形状入口（current / hasLoaded）；U3 会补齐 actions 与云端调用。
+    expect(store.$state).toHaveProperty('current')
+    expect(store.$state).toHaveProperty('hasLoaded')
+    expect(store.hasLoaded).toBe(false)
   })
 
   it('registers the auth store and exposes every reactive state field', () => {

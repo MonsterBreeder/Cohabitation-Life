@@ -1,40 +1,44 @@
 import { defineStore } from 'pinia'
-import type { Task } from '../../types/task'
+import type { CurrentTasks } from '../../types/task'
 import store from '..'
 
-// 当前事项仅用于首页原型展示，后续事项模块会改为云端数据。
-const initialTasks: Task[] = [
-  { id: '1', title: '买洗衣液', type: 'low_stock', dueLabel: '今天', statusLabel: '待认领', isToday: true },
-  { id: '2', title: '联系房东续租', type: 'to_handle', dueLabel: '8 月 18 日前', statusLabel: '待处理' },
-  { id: '3', title: '更换净水器滤芯', type: 'expiring', dueLabel: '8 月 20 日到期', statusLabel: '待处理' },
-]
+// U1 占位：仅定义 state 形状与 getters 的入口。
+// U3 会用真实云端数据、in-flight 保护、操作凭证和重试逻辑重写整个 store。
+// 这里的空壳只为了让引用 task store 的地方能 typecheck 通过。
 
-/** 首页事项状态，采用参考项目一致的对象式 Pinia 写法。 */
+interface TaskStoreState {
+  /** 当前家庭未终止事项的分组：priority + 三个类型分组。 */
+  current: CurrentTasks | undefined
+  /** 是否已加载过；首页刷新时不闪烁。 */
+  hasLoaded: boolean
+}
+
+/** 首页事项状态，采用参考项目一致的对象式 Pinia 写法。U3 重写。 */
 export const useTaskStore = defineStore('task', {
-  state: () => ({
-    /** 是否已经加入家庭 */
-    hasHome: false,
-    /** 首页原型的原始事项列表 */
-    tasks: initialTasks as Task[],
+  state: (): TaskStoreState => ({
+    current: undefined,
+    hasLoaded: false,
   }),
   getters: {
-    /** 所有未完成事项 */
-    pendingTasks: (state) => state.tasks.filter((task) => task.statusLabel !== '已完成'),
-    /** 今天需要处理的事项 */
-    todayTasks(): Task[] {
-      return this.pendingTasks.filter((task) => task.isToday)
-    },
-    /** 库存不足事项 */
-    lowStockTasks(): Task[] {
-      return this.pendingTasks.filter((task) => task.type === 'low_stock')
-    },
-    /** 等待处理事项 */
-    waitingTasks(): Task[] {
-      return this.pendingTasks.filter((task) => task.type === 'to_handle')
-    },
-    /** 即将到期事项 */
-    expiringTasks(): Task[] {
-      return this.pendingTasks.filter((task) => task.type === 'expiring')
+    /** 当前是否有未终止事项。 */
+    hasOpenTasks: (state) => Boolean(state.current && (state.current.priority.length > 0
+      || state.current.groups.low_stock.length > 0
+      || state.current.groups.to_handle.length > 0
+      || state.current.groups.expiring.length > 0)),
+    /** 优先处理分组。 */
+    priorityTasks: (state) => state.current?.priority ?? [],
+    /** 快没了分组。 */
+    lowStockTasks: (state) => state.current?.groups.low_stock ?? [],
+    /** 待处理分组。 */
+    waitingTasks: (state) => state.current?.groups.to_handle ?? [],
+    /** 快到期分组。 */
+    expiringTasks: (state) => state.current?.groups.expiring ?? [],
+  },
+  actions: {
+    /** U1 占位：清空当前家庭的事项引用。U3 会重写。 */
+    resetForHouseholdChange(): void {
+      this.current = undefined
+      this.hasLoaded = false
     },
   },
 })

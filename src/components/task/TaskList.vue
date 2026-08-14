@@ -3,17 +3,17 @@
   <view class="section">
     <view class="section-heading"><text class="section-title">等待处理</text><text class="section-caption">{{ tasks.length }} 件</text></view>
     <view v-if="tasks.length" class="task-list">
-      <view v-for="task in tasks" :key="task.id" class="task-card"><view class="task-mark" :class="`task-mark--${task.type}`" /><view class="task-content"><text class="task-name">{{ task.title }}</text><text class="task-meta">{{ task.dueLabel }}</text></view><text class="task-status">{{ task.statusLabel }}</text></view>
+      <view v-for="task in tasks" :key="task.id" class="task-card"><view class="task-mark" :class="`task-mark--${task.type}`" /><view class="task-content"><text class="task-name">{{ task.title }}</text><text class="task-meta">{{ task.dueDate ? `${task.dueDate}${task.isOverdueOrToday ? ' · 今天/逾期' : ''}` : '无截止日期' }}</text></view><text class="task-status">{{ task.status === 'pending' ? '待认领' : `由 ${task.assignee?.nickname || '成员'} 处理` }}</text></view>
     </view>
     <view v-else class="empty-state"><text class="empty-title">现在没有等待处理的事</text><text class="empty-caption">要不要先记下一件？</text></view>
   </view>
 </template>
 
 <script setup lang="ts">
-import type { Task } from '../../types/task'
+import type { TaskSummary } from '../../types/task'
 
-// 事项由首页统一读取后传入，保持单向数据流。
-defineProps<{ tasks: Task[] }>()
+// 事项由首页统一读取后传入，保持单向数据流；U4 会替换为真实云端数据。
+defineProps<{ tasks: TaskSummary[] }>()
 </script>
 
 <style scoped>
