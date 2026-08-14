@@ -1,20 +1,32 @@
 <template>
-  <!-- 首页统计卡只展示父页面传入的标题、数量和色调。 -->
-  <view class="card" :class="cardClass"><text class="label">{{ label }}</text><text class="count">{{ count }}</text><text class="suffix">件</text></view>
+  <!-- 家庭资料是首页核心信息，使用独立业务卡片而不是通用统计卡。 -->
+  <button class="household-card" data-testid="household-profile" @click="emit('press')">
+    <wd-avatar :src="avatarSrc" :alt="`${name}的家庭头像`" size="144rpx" />
+    <view class="household-card__content">
+      <text class="household-card__eyebrow">我的家庭</text>
+      <text class="household-card__name">{{ name }}</text>
+      <text class="household-card__meta">{{ memberCount }} 位成员</text>
+    </view>
+    <wd-icon name="arrow-right" size="34rpx" color="#74847d" />
+  </button>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+interface Props {
+  name: string
+  avatarSrc: string
+  memberCount: number
+}
 
-// 卡片色调使用有限值，避免模板接受任意样式名。
-interface Props { label: string; count: number; tone: 'warm' | 'green' | 'blue' | 'pink' }
-const props = defineProps<Props>()
-const cardClass = computed(() => `card--${props.tone}`)
+defineProps<Props>()
+const emit = defineEmits<{ press: [] }>()
 </script>
 
-<style scoped>
-/* 统计卡布局与四种预设色调。 */
-.card { display: flex; flex-wrap: wrap; align-items: baseline; min-height: 166rpx; padding: 28rpx; box-sizing: border-box; border-radius: 24rpx; }
-.card--warm { background: #fff0d5; }.card--green { background: #e3f0df; }.card--blue { background: #e4eff6; }.card--pink { background: #f9e5e4; }
-.label { width: 100%; margin-bottom: 16rpx; color: #536057; font-size: 25rpx; }.count { color: #26372c; font-size: 48rpx; font-weight: 700; line-height: 1; }.suffix { margin-left: 4rpx; color: #627067; font-size: 24rpx; }
+<style lang="scss" scoped>
+.household-card { display: flex; width: 100%; align-items: center; padding: 36rpx; border: 0; border-radius: $brand-radius-card; background: linear-gradient(135deg, #fff, #effbf5); box-shadow: 0 16rpx 40rpx rgba(41, 68, 58, .08); text-align: left; line-height: 1; }
+.household-card::after { border: 0; }
+.household-card__content { display: flex; min-width: 0; flex: 1; flex-direction: column; margin-left: 28rpx; }
+.household-card__eyebrow { color: $brand-color-action; font-size: 23rpx; font-weight: 600; letter-spacing: 3rpx; }
+.household-card__name { max-width: 100%; margin-top: 16rpx; overflow: hidden; color: $brand-color-text; font-size: 40rpx; font-weight: 700; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
+.household-card__meta { margin-top: 14rpx; color: $brand-color-text-secondary; font-size: 24rpx; line-height: 1.4; }
 </style>

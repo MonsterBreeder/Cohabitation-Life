@@ -21,22 +21,24 @@
 			}
 		},
 		{
-			"path": "pages/create-home/index",
+			"path": "pages/profile/index",
 			"style": {
-				"navigationBarTitleText": "创建我们的家"
+				"navigationBarTitleText": "我的"
 			}
-		},
+		}
+	],
+	"subPackages": [
 		{
-			"path": "pages/join-home/index",
-			"style": {
-				"navigationBarTitleText": "加入我们的家"
-			}
-		},
-		{
-			"path": "pages/invite-status/index",
-			"style": {
-				"navigationBarTitleText": "邀请状态"
-			}
+			"root": "subpackages/household",
+			"pages": [
+				{ "path": "create-home/index", "style": { "navigationBarTitleText": "创建我们的家" } },
+				{ "path": "join-home/index", "style": { "navigationBarTitleText": "加入我们的家" } },
+				{ "path": "member-management/index", "style": { "navigationBarTitleText": "家庭成员" } },
+				{ "path": "invite-status/index", "style": { "navigationBarTitleText": "邀请状态" } },
+				{ "path": "edit-household/index", "style": { "navigationBarTitleText": "编辑家庭资料" } },
+				{ "path": "edit-profile/index", "style": { "navigationBarTitleText": "编辑个人资料" } },
+				{ "path": "crop-avatar/index", "style": { "navigationBarTitleText": "裁剪头像" } }
+			]
 		}
 	],
 	"globalStyle": {

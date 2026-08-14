@@ -4,9 +4,9 @@ import type { EntryNotice, EntryPage, EntryRouteDecision, EntryStatus } from '..
 const pageUrls: Record<EntryPage, string> = {
   login: '/pages/login/index',
   home: '/pages/index/index',
-  'create-home': '/pages/create-home/index',
-  'join-home': '/pages/join-home/index',
-  'invite-status': '/pages/invite-status/index',
+  'create-home': '/subpackages/household/create-home/index',
+  'join-home': '/subpackages/household/join-home/index',
+  'invite-status': '/subpackages/household/invite-status/index',
 }
 
 // 邀请异常只映射为有限提示，不携带云端内部原因。
@@ -15,6 +15,7 @@ const inviteNotices: Partial<Record<EntryStatus, EntryNotice>> = {
   INVITE_EXPIRED: 'invite_expired',
   INVITE_USED: 'invite_used',
   HOME_FULL: 'home_full',
+  REMOVED_FROM_HOME: 'removed_from_home',
 }
 
 /** 创建统一的重新进入页面动作。 */
@@ -35,6 +36,7 @@ export function resolveEntryRoute(status: unknown): EntryRouteDecision {
     case 'CREATE_HOME':
       return relaunch('create-home')
     case 'JOIN_CONFIRM':
+    case 'TRANSFER_CONFIRM':
       return relaunch('join-home')
     case 'HOME':
       return relaunch('home')
@@ -45,6 +47,8 @@ export function resolveEntryRoute(status: unknown): EntryRouteDecision {
     case 'INVITE_USED':
     case 'HOME_FULL':
       return relaunch('invite-status', inviteNotices[status])
+    case 'REMOVED_FROM_HOME':
+      return relaunch('create-home', inviteNotices[status])
     case 'TEMPORARY_FAILURE':
     default:
       return { type: 'none' }

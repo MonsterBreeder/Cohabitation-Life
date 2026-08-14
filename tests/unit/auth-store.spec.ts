@@ -1,5 +1,6 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { resetAuthCloudClientForTesting, setAuthCloudClientForTesting, useAuthStore } from '../../src/store/modules/auth'
+import { resetHouseholdCloudClientForTesting, useHouseholdStore } from '../../src/store/modules/household'
 
 // 保护 Pinia 登录状态在首次进入、恢复、邀请和失败时保持一致。
 describe('auth store', () => {
@@ -9,6 +10,25 @@ describe('auth store', () => {
 
   afterEach(() => {
     resetAuthCloudClientForTesting()
+    resetHouseholdCloudClientForTesting()
+  })
+
+  it('does not let an older restore result overwrite a newly created household', async () => {
+    let finish!: (value: { status: 'CREATE_HOME'; retryable: false }) => void
+    setAuthCloudClientForTesting({ resolve: jest.fn(() => new Promise((resolve) => { finish = resolve })) })
+    const auth = useAuthStore()
+    auth.hasCompletedLogin = true
+    const restoring = auth.restore()
+
+    useHouseholdStore().applyHome({
+      status: 'HOME', retryable: false, created: true,
+      household: { id: 'home_1', name: '我们的小家', avatar: { kind: 'builtin', id: 'household-01' }, memberCount: 1, currentMemberRole: 'owner' },
+      profile: { nickname: '小伙伴', avatar: { kind: 'builtin', id: 'person-neutral' }, profilePreset: 'neutral' },
+    })
+    finish({ status: 'CREATE_HOME', retryable: false })
+    await restoring
+
+    expect(auth.navigationIntent).toBeUndefined()
   })
 
   it('does not query or create a user on a first open', async () => {

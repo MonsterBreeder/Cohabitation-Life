@@ -4,6 +4,7 @@ import { resolveEntryRoute } from '../../services/entry-router'
 import type { AuthIntent, EntryNotice, EntryResolution, EntryRoute } from '../../types/auth'
 import { getStringStorage, setStringStorage } from '../../utils/storage'
 import store from '..'
+import { getHouseholdSuccessRevision } from './household'
 
 const loginMarkerKey = 'auth.login.completed'
 const inviteTokenKey = 'auth.invite.pending'
@@ -89,6 +90,7 @@ export const useAuthStore = defineStore('auth', {
         resolution.status !== 'TEMPORARY_FAILURE'
         && resolution.status !== 'NEED_LOGIN'
         && resolution.status !== 'JOIN_CONFIRM'
+        && resolution.status !== 'TRANSFER_CONFIRM'
       ) {
         this.clearInviteToken()
       }
@@ -99,12 +101,17 @@ export const useAuthStore = defineStore('auth', {
     async resolve(intent: AuthIntent) {
       if (inFlight) return inFlight
 
+      const householdRevision = getHouseholdSuccessRevision()
       this.lastIntent = intent
       this.isResolving = true
       this.errorMessage = undefined
 
       inFlight = cloudClient.resolve({ intent, inviteToken: this.pendingInviteToken })
-        .then((resolution) => this.applyResolution(resolution))
+        .then((resolution) => {
+          // 创建成功比更早发出的入口查询更新，旧结果不能把用户送回创建页。
+          if (resolution.status === 'CREATE_HOME' && householdRevision !== getHouseholdSuccessRevision()) return
+          this.applyResolution(resolution)
+        })
         .catch((error: unknown) => {
           this.navigationIntent = undefined
           this.notice = undefined

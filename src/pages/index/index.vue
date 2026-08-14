@@ -1,35 +1,37 @@
 <template>
-  <!-- 家庭状态确认完成前只显示安全状态，不展示任何事项。 -->
   <view class="page">
-    <view v-if="isCheckingHome" class="page__safe-state" data-testid="home-checking">
-      <text class="page__safe-title">正在确认我们的小家…</text>
-      <text class="page__safe-copy">确认完成后再为你展示家里的事项。</text>
+    <!-- 骨架保留两张资料卡的真实结构，但不展示伪造名称或头像。 -->
+    <view v-if="isLoading" class="home-skeleton" data-testid="home-loading">
+      <wd-skeleton :row-col="householdSkeleton" animation="gradient" />
+      <wd-skeleton :row-col="memberSkeleton" animation="gradient" />
     </view>
 
-    <view v-else-if="errorMessage" class="page__safe-state" data-testid="home-retry">
-      <text class="page__safe-title">暂时无法确认家庭状态</text>
-      <text class="page__safe-copy">{{ errorMessage }}</text>
-      <button class="page__retry" :disabled="isResolving" @click="confirmHome">重新确认</button>
+    <view v-else-if="loadError" class="page-state" data-testid="home-error">
+      <wd-icon name="warning" size="76rpx" color="#ff8f79" />
+      <text class="page-state__title">家庭资料暂时走丢了</text>
+      <text class="page-state__copy">{{ loadError }}</text>
+      <wd-button type="primary" :loading="isLoading" @click="loadHome">重新加载</wd-button>
     </view>
 
-    <template v-else-if="homeConfirmed">
-      <view v-if="showInviteConflictNotice" class="page__notice" data-testid="home-invite-conflict">
-        <text>你已经在自己的家中，这份邀请没有被使用。</text>
-      </view>
+    <view v-else-if="household && profile" class="home-content" :data-testid="household.memberCount === 1 ? 'home-single-member' : 'home-two-members'">
       <view class="hero">
-        <text class="eyebrow">家里有事</text>
-        <text class="title">{{ greeting }}</text>
-        <text class="subtitle">把家里的小事，一起记住、一起完成。</text>
+        <text class="hero__eyebrow">家里有事</text>
+        <text class="hero__title">欢迎回家</text>
+        <text class="hero__copy">家不在大小，有人惦记就好。</text>
       </view>
-      <view class="summary-grid">
-        <HomeSummaryCard label="今天要处理" :count="taskStore.todayTasks.length" tone="warm" />
-        <HomeSummaryCard label="家里快没了" :count="taskStore.lowStockTasks.length" tone="green" />
-        <HomeSummaryCard label="正在等待" :count="taskStore.waitingTasks.length" tone="blue" />
-        <HomeSummaryCard label="即将到期" :count="taskStore.expiringTasks.length" tone="pink" />
+
+      <HomeSummaryCard
+        :name="household.name"
+        :avatar-src="household.avatar.kind === 'builtin' ? householdAvatarSource(household.avatar.id) : householdAvatarUrl"
+        :member-count="household.memberCount"
+      />
+      <view class="home-empty">
+        <wd-icon name="calendar" size="68rpx" color="#43c89a" />
+        <text class="home-empty__title">今天还没有家里事项</text>
+        <text class="home-empty__copy">等邀请完成后，我们就从第一件小事开始。</text>
       </view>
-      <TaskList :tasks="taskStore.pendingTasks" />
-      <button class="quick-add" @click="handleQuickAdd"><text class="quick-add-symbol">＋</text>快速添加</button>
-    </template>
+    </view>
+    <AppTabBar active="home" />
   </view>
 </template>
 
@@ -38,74 +40,71 @@ import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { onShow } from '@dcloudio/uni-app'
 import HomeSummaryCard from '../../components/home/HomeSummaryCard.vue'
-import TaskList from '../../components/task/TaskList.vue'
+import AppTabBar from '../../components/AppTabBar.vue'
 import { useAuthStore } from '../../store/modules/auth'
-import { useTaskStore } from '../../store/modules/task'
+import { useHouseholdStore } from '../../store/modules/household'
+import { householdAvatarSource, resolveHomeLoadDestination } from './home-view'
+import { getAvatarTemporaryUrl } from '../../services/avatar-media'
 
 const authStore = useAuthStore()
-const taskStore = useTaskStore()
-// 首页拆出的状态使用 storeToRefs，操作仍通过原 store 调用。
-const { errorMessage, hasCompletedLogin, isResolving, notice } = storeToRefs(authStore)
-const { hasHome } = storeToRefs(taskStore)
-// 页面只在本次显示周期内保存确认结果。
-const isCheckingHome = ref(true)
-const homeConfirmed = ref(false)
-const showInviteConflictNotice = ref(notice.value === 'already_in_home')
-const greeting = computed(() => hasHome.value ? '我们的小家' : '我们的小家')
+const householdStore = useHouseholdStore()
+const { hasCompletedLogin, errorMessage: authError } = storeToRefs(authStore)
+const { phase, household, profile, errorMessage: householdError } = storeToRefs(householdStore)
 
-/** 使用 reLaunch 清空登录页，避免返回到身份确认流程。 */
+// 两组骨架分别对应家庭卡和成员卡，重试时复用同一布局。
+const householdSkeleton = [[{ type: 'circle', size: '72px', marginRight: '16px' }, { width: '65%', height: '72px' }]]
+const memberSkeleton = [[{ type: 'circle', size: '52px', marginRight: '14px' }, { width: '58%', height: '52px' }]]
+const isLoading = computed(() => phase.value === 'checking')
+const loadError = computed(() => authError.value || householdError.value)
+const householdAvatarUrl = ref('/static/avatars/households/household-01.png')
+
+/** 使用重新进入页面清空错误页面历史，避免返回到失效身份状态。 */
 function relaunch(url: string): void {
   uni.reLaunch({ url })
 }
 
-/** 每次显示首页都向云端重新确认家庭归属。 */
-async function confirmHome(): Promise<void> {
-  if (!hasCompletedLogin.value) {
+/** 登录确认和家庭查询串行执行，旧资料在查询开始时立即清空。 */
+async function loadHome(): Promise<void> {
+  if (resolveHomeLoadDestination(hasCompletedLogin.value) === 'login') {
     relaunch('/pages/login/index')
     return
   }
 
-  isCheckingHome.value = true
-  homeConfirmed.value = false
   await authStore.restore()
-
   const route = authStore.consumeNavigationIntent()
+  if (authError.value) return
   if (route && route.url !== '/pages/index/index') {
     relaunch(route.url)
     return
   }
 
-  if (!errorMessage.value) {
-    homeConfirmed.value = true
+  const result = await householdStore.loadCurrent()
+  if (result?.status === 'HOME') {
+    if (result.household.avatar.kind === 'custom') householdAvatarUrl.value = await getAvatarTemporaryUrl(result.household.avatar.resourceId).catch(() => householdAvatarUrl.value)
   }
-  isCheckingHome.value = false
+  const destination = resolveHomeLoadDestination(hasCompletedLogin.value, result?.status)
+  if (destination === 'login') relaunch('/pages/login/index')
+  if (destination === 'create-home') relaunch('/subpackages/household/create-home/index')
 }
 
-/** 当前 MVP 尚未实现添加事项，仅提供明确提示。 */
-function handleQuickAdd(): void {
-  uni.showToast({ title: '添加事项页面即将接入', icon: 'none' })
-}
 
 onShow(() => {
-  void confirmHome()
+  void loadHome()
 })
 </script>
 
-<style scoped>
-/* 首页安全状态、内容区和浮动操作按钮。 */
-.page { min-height: 100vh; padding: 48rpx 32rpx 160rpx; box-sizing: border-box; }
-.page__safe-state { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: calc(100vh - 208rpx); text-align: center; }
-.page__safe-title { color: #29443a; font-size: 36rpx; font-weight: 700; }
-.page__safe-copy { max-width: 520rpx; margin-top: 20rpx; color: #74847d; font-size: 28rpx; line-height: 1.7; }
-.page__retry { height: 80rpx; margin-top: 34rpx; border: 2rpx solid #43c89a; border-radius: 40rpx; background: #fff; color: #267a5a; font-size: 28rpx; line-height: 76rpx; }
-.page__retry::after { border: 0; }
-.page__notice { margin-bottom: 28rpx; padding: 20rpx 24rpx; border-radius: 16rpx; background: #effbf5; color: #267a5a; font-size: 26rpx; line-height: 1.6; }
-.hero { display: flex; flex-direction: column; gap: 12rpx; margin-bottom: 40rpx; }
-.eyebrow { color: #43c89a; font-size: 24rpx; font-weight: 600; letter-spacing: 4rpx; }
-.title { color: #29443a; font-size: 52rpx; font-weight: 700; }
-.subtitle { color: #74847d; font-size: 28rpx; line-height: 1.6; }
-.summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20rpx; margin-bottom: 48rpx; }
-.quick-add { position: fixed; right: 32rpx; bottom: 40rpx; display: flex; align-items: center; justify-content: center; width: 216rpx; height: 88rpx; border: 0; border-radius: 44rpx; background: #267a5a; box-shadow: 0 16rpx 28rpx rgba(38, 122, 90, 0.22); color: #fff; font-size: 30rpx; font-weight: 600; line-height: 88rpx; }
-.quick-add::after { border: 0; }
-.quick-add-symbol { margin-right: 6rpx; font-size: 38rpx; font-weight: 400; }
+<style lang="scss" scoped>
+.page { min-height: 100vh; padding: 48rpx 32rpx 80rpx; box-sizing: border-box; background: $brand-color-background; }
+.home-skeleton { display: flex; flex-direction: column; gap: 52rpx; padding-top: 180rpx; }
+.page-state { display: flex; min-height: calc(100vh - 128rpx); flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.page-state__title { margin-top: 28rpx; color: $brand-color-text; font-size: 34rpx; font-weight: 700; }
+.page-state__copy { max-width: 520rpx; margin: 16rpx 0 36rpx; color: $brand-color-text-secondary; font-size: 26rpx; line-height: 1.65; }
+.home-content { display: flex; flex-direction: column; }
+.hero { display: flex; flex-direction: column; margin-bottom: 42rpx; }
+.hero__eyebrow { color: $brand-color-primary; font-size: 23rpx; font-weight: 600; letter-spacing: 4rpx; }
+.hero__title { margin-top: 14rpx; color: $brand-color-text; font-size: 52rpx; font-weight: 700; line-height: 1.3; }
+.hero__copy { margin-top: 12rpx; color: $brand-color-text-secondary; font-size: 27rpx; line-height: 1.6; }
+.home-empty { display: flex; flex-direction: column; align-items: center; margin-top: 68rpx; padding: 54rpx 32rpx; border: 2rpx dashed $brand-color-border; border-radius: $brand-radius-card; background: rgba($brand-color-surface, .7); text-align: center; }
+.home-empty__title { margin-top: 20rpx; color: $brand-color-text; font-size: 30rpx; font-weight: 700; }
+.home-empty__copy { margin-top: 12rpx; color: $brand-color-text-secondary; font-size: 25rpx; line-height: 1.6; }
 </style>

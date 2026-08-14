@@ -12,6 +12,7 @@ interface Repository {
   ensureUser: jest.Mock
   findInvitationByTokenHash: jest.Mock
   findHouseholdById: jest.Mock
+  consumeMembershipNotice: jest.Mock
 }
 
 const { hashInviteToken, resolveLoginEntry } = require('../../cloudfunctions/resolve-login/entry-state')
@@ -26,6 +27,7 @@ function createRepository(overrides: Partial<Repository> = {}): Repository {
     ensureUser: jest.fn().mockResolvedValue(undefined),
     findInvitationByTokenHash: jest.fn().mockResolvedValue(null),
     findHouseholdById: jest.fn().mockResolvedValue(null),
+    consumeMembershipNotice: jest.fn().mockResolvedValue(undefined),
     ...overrides,
   }
 }
@@ -144,7 +146,32 @@ describe('resolveLoginEntry', () => {
       notice: 'already_in_home',
     })
     expect(repository.ensureUser).not.toHaveBeenCalled()
-    expect(repository.findInvitationByTokenHash).not.toHaveBeenCalled()
+    expect(repository.findInvitationByTokenHash).toHaveBeenCalledTimes(1)
+    expect(repository).not.toHaveProperty('consumeInvitation')
+  })
+
+  it('asks a one-person household user to explicitly confirm transfer before joining another home', async () => {
+    const repository = createRepository({
+      findUserByIdentityKey: jest.fn().mockResolvedValue({ createdAt: 'earlier' }),
+      findHouseholdByMemberKey: jest.fn().mockResolvedValue({ _id: 'own-home', memberKeys: ['trusted-identity-key'] }),
+      findInvitationByTokenHash: jest.fn().mockResolvedValue({ expiresAt: '2026-08-14T12:00:00.000Z', householdId: 'target-home' }),
+      findHouseholdById: jest.fn().mockResolvedValue({ _id: 'target-home', memberKeys: ['owner'] }),
+    })
+
+    await expect(resolve({ intent: 'resume', inviteToken: token }, repository)).resolves.toEqual({ status: 'TRANSFER_CONFIRM', retryable: false })
+    expect(repository.consumeMembershipNotice).not.toHaveBeenCalled()
+  })
+
+  it('routes a removed member to creation once and consumes only the controlled notice', async () => {
+    const repository = createRepository({
+      findUserByIdentityKey: jest.fn().mockResolvedValue({ membershipNotice: 'removed_from_home' }),
+      consumeMembershipNotice: jest.fn().mockResolvedValue(undefined),
+    })
+
+    await expect(resolve({ intent: 'resume' }, repository)).resolves.toEqual({
+      status: 'REMOVED_FROM_HOME', retryable: false, notice: 'removed_from_home',
+    })
+    expect(repository.consumeMembershipNotice).toHaveBeenCalledWith('trusted-identity-key')
   })
 
   it('returns NEED_LOGIN before querying a valid invitation during resume without a user', async () => {

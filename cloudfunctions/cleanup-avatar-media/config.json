@@ -1,0 +1,1 @@
+{"triggers":[{"name":"cleanup-avatar-media-daily","type":"timer","config":"0 0 3 * * * *"}]}

@@ -3,6 +3,7 @@ export const entryStatuses = [
   'NEED_LOGIN',
   'CREATE_HOME',
   'JOIN_CONFIRM',
+  'TRANSFER_CONFIRM',
   'HOME',
   'ALREADY_IN_HOME',
   'INVITE_INVALID',
@@ -10,6 +11,7 @@ export const entryStatuses = [
   'INVITE_USED',
   'HOME_FULL',
   'TEMPORARY_FAILURE',
+  'REMOVED_FROM_HOME',
 ] as const
 
 export type EntryStatus = (typeof entryStatuses)[number]
@@ -23,6 +25,7 @@ export type EntryNotice =
   | 'invite_expired'
   | 'invite_used'
   | 'home_full'
+  | 'removed_from_home'
 
 export interface EntryResolution {
   status: EntryStatus

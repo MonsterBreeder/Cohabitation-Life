@@ -55,7 +55,7 @@ async function resolveInvitation(inviteToken, repository, now) {
     return { kind: 'full' }
   }
 
-  return { kind: 'valid' }
+  return { kind: 'valid', household }
 }
 
 /**
@@ -85,9 +85,18 @@ async function resolveLoginEntry({ intent, inviteToken }, { identityKey, reposit
     : null
 
   if (existingHousehold) {
-    return validInviteToken
-      ? { status: 'ALREADY_IN_HOME', retryable: false, notice: 'already_in_home' }
-      : { status: 'HOME', retryable: false }
+    if (!validInviteToken) return { status: 'HOME', retryable: false }
+    const invitation = await resolveInvitation(validInviteToken, repository, now)
+    if (invitation.kind === 'valid' && invitation.household._id !== existingHousehold._id && (existingHousehold.memberKeys || []).length === 1) {
+      return { status: 'TRANSFER_CONFIRM', retryable: false }
+    }
+    return { status: 'ALREADY_IN_HOME', retryable: false, notice: 'already_in_home' }
+  }
+
+  // 被移除后的说明仅消费一次；没有家庭时优先显示该说明，避免被当成普通网络错误。
+  if (existingUser?.membershipNotice === 'removed_from_home') {
+    await repository.consumeMembershipNotice(identityKey)
+    return { status: 'REMOVED_FROM_HOME', retryable: false, notice: 'removed_from_home' }
   }
 
   if (intent === 'resume' && !existingUser) {

@@ -38,6 +38,9 @@ function createRepository() {
       const result = await db.collection('invitations').where({ tokenHash }).limit(1).get()
       return result.data[0] || null
     },
+    async consumeMembershipNotice(identityKey) {
+      await db.collection('users').doc(identityKey).update({ data: { membershipNotice: db.command.remove() } })
+    },
     async findHouseholdById(householdId) {
       if (typeof householdId !== 'string' || householdId.length === 0) return null
       const result = await db.collection('households').where({ _id: householdId }).limit(1).get()

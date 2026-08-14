@@ -6,12 +6,14 @@ describe('resolveEntryRoute', () => {
     ['NEED_LOGIN', 'login', undefined],
     ['CREATE_HOME', 'create-home', undefined],
     ['JOIN_CONFIRM', 'join-home', undefined],
+    ['TRANSFER_CONFIRM', 'join-home', undefined],
     ['HOME', 'home', undefined],
     ['ALREADY_IN_HOME', 'home', 'already_in_home'],
     ['INVITE_INVALID', 'invite-status', 'invite_invalid'],
     ['INVITE_EXPIRED', 'invite-status', 'invite_expired'],
     ['INVITE_USED', 'invite-status', 'invite_used'],
     ['HOME_FULL', 'invite-status', 'home_full'],
+    ['REMOVED_FROM_HOME', 'create-home', 'removed_from_home'],
   ])('maps %s to its fixed destination', (status, page, notice) => {
     expect(resolveEntryRoute(status)).toMatchObject({
       type: 'relaunch',

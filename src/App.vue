@@ -43,6 +43,16 @@ onShow(() => {
 <style scoped>
 /* 应用级基础颜色和字体，具体页面样式仍由页面自己管理。 */
 :global(page) {
+  --wot-button-primary-bg: #267a5a;
+  --wot-button-primary-bg-active: #1d6247;
+  --wot-button-primary-color: #267a5a;
+  --wot-button-primary-color-active: #1d6247;
+  --wot-button-primary-plain-bg: #ffffff;
+  --wot-button-primary-plain-bg-active: #effbf5;
+  --wot-button-primary-plain-border: #267a5a;
+  --wot-button-primary-plain-border-active: #1d6247;
+  --wot-button-primary-soft-bg: #effbf5;
+  --wot-button-primary-soft-bg-active: #dff5e9;
   background: #fff9f2;
   color: #29443a;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
