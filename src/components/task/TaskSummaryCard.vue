@@ -23,7 +23,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { TaskSummary } from '../../types/task'
-import { TASK_TYPES_DISPLAY } from '../../subpackages/task/add-task/add-task-view'
+import { TASK_TYPES_DISPLAY } from './task-shared'
 
 interface Props { task: TaskSummary }
 const props = defineProps<Props>()

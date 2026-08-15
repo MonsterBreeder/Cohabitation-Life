@@ -488,3 +488,24 @@ describe('TaskDomainError', () => {
     expect(error instanceof Error).toBe(true)
   })
 })
+
+// === 入口烟雾测试 ===
+// 微信云函数加载时做 `handler = require('./index')` 然后找 `handler.main`。
+// 如果 index.js 写了 `module.exports = exports.main`，require 返回 main 函数本身，
+// `handler.main` 变成 undefined，云端会报 "handler not found"。
+// 这个测试确保入口对象上有可调用的 main 导出，且不会因为任何赋值被覆盖。
+
+describe('task cloud function entry shape', () => {
+  it('index.js exports a callable main that survives module-level assignments', () => {
+    const path = require('path')
+    const entryPath = path.join(__dirname, '..', '..', 'cloudfunctions', 'task', 'index.js')
+    // 直接读取源文件并检查关键模式，避免拉起 wx-server-sdk 真实环境。
+    const fs = require('fs')
+    const source = fs.readFileSync(entryPath, 'utf8')
+    // 必须有 `exports.main = ` 赋值语句。
+    expect(source).toMatch(/exports\.main\s*=\s*/)
+    // 禁止出现 `module.exports = exports.main` —— 那种写法会覆盖整个导出对象，
+    // 让云函数加载时找不到 `handler.main`，状态码 443，错误 "handler not found"。
+    expect(source).not.toMatch(/module\.exports\s*=\s*exports\.main/)
+  })
+})

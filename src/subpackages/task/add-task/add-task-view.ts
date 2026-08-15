@@ -3,15 +3,11 @@ import type { TaskType } from '../../../types/task'
 
 // 添加页与测试共用：标题、类型、截止日期、备注的受限描述。
 // 返回受控的 valid / value / count / remaining / errorMessage，UI 只展示。
+// 注意：TASK_TYPES_DISPLAY 必须放在主包（src/components/task/task-shared.ts），
+// 因为主包的卡片组件也需要它；分包不能反向被主包 require。
 
 export const TITLE_MAX = 20
 export const NOTE_MAX = 100
-
-export const TASK_TYPES_DISPLAY: { value: TaskType; label: string; description: string }[] = [
-  { value: 'low_stock', label: '快没了', description: '纸巾、洗衣液等用完前提醒' },
-  { value: 'to_handle', label: '待处理', description: '退货、维修、联系房东等' },
-  { value: 'expiring', label: '快到期', description: '房租、会员、滤芯等到期前提醒' },
-]
 
 export const TYPE_ERROR = '请选择事项类型'
 

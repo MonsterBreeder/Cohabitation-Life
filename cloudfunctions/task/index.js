@@ -160,5 +160,3 @@ function humaniseError(code) {
     default: return '请求暂时无法处理，请稍后重试'
   }
 }
-
-module.exports = exports.main
