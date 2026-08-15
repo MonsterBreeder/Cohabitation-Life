@@ -25,9 +25,15 @@
     </view>
 
     <view v-else-if="items.length === 0" class="completed-page__empty" data-testid="completed-empty">
-      <wd-icon name="notes" size="80rpx" color="#a8b3ac" />
-      <text class="completed-page__empty-title">还没有已完成的事项</text>
-      <text class="completed-page__empty-copy">完成或放弃的事项会出现在这里。</text>
+      <!-- 空状态：直接用双团子 logo 强化品牌温度 -->
+      <image
+        class="completed-page__empty-logo"
+        src="/static/brand/logo.png"
+        mode="aspectFit"
+        data-testid="completed-empty-logo"
+      />
+      <text class="completed-page__empty-title">还没有完成过的事</text>
+      <text class="completed-page__empty-copy">完成或放弃的事项会在这里慢慢攒起来。</text>
     </view>
 
     <view v-else class="completed-page__list">
@@ -35,7 +41,8 @@
         v-for="item in items"
         :key="item.id"
         class="completed-page__item"
-        data-testid="completed-item"
+        :data-testid="`completed-item`"
+        :data-terminal="item.terminalKind"
       >
         <view class="completed-page__item-mark" :class="`completed-page__item-mark--${item.type}`" />
         <view class="completed-page__item-content">
@@ -45,6 +52,7 @@
         <text
           class="completed-page__item-tag"
           :class="`completed-page__item-tag--${item.terminalKind}`"
+          :data-testid="'completed-item-tag-' + item.terminalKind"
           @click="filterTo(item.terminalKind)"
         >
           {{ describeTerminalLabel(item.terminalKind) }}
@@ -52,15 +60,16 @@
       </view>
 
       <view v-if="hasMore" class="completed-page__more">
-        <wd-button
-          block
-          variant="plain"
-          :loading="isLoadingMore"
+        <button
+          class="completed-page__more-btn"
+          :disabled="isLoadingMore"
+          :data-loading="isLoadingMore"
           data-testid="completed-load-more"
           @click="loadMore"
         >
-          加载更多
-        </wd-button>
+          <wd-loading v-if="isLoadingMore" size="28rpx" color="#43c89a" />
+          <text v-else class="completed-page__more-text">加载更多</text>
+        </button>
       </view>
       <view v-else-if="items.length >= 5" class="completed-page__end" data-testid="completed-end">
         <text class="completed-page__end-text">已经到底了</text>
@@ -125,32 +134,77 @@ onShow(() => {
 </script>
 
 <style lang="scss" scoped>
-.completed-page { min-height: 100vh; padding: 48rpx 32rpx 80rpx; box-sizing: border-box; background: $brand-color-background; }
-.completed-page__heading { display: flex; flex-direction: column; margin-bottom: 24rpx; }
-.completed-page__eyebrow { color: $brand-color-primary; font-size: 23rpx; font-weight: 700; letter-spacing: 4rpx; }
-.completed-page__title { margin-top: 12rpx; color: $brand-color-text; font-size: 42rpx; font-weight: 700; }
-.completed-page__subtitle { margin-top: 8rpx; color: $brand-color-text-secondary; font-size: 25rpx; }
-.completed-page__filter { margin: 20rpx 0; text-align: right; }
+/* 整体：暖白底色 + 大留白，与 add-task/task-detail 保持一致。 */
+.completed-page { min-height: 100vh; padding: 64rpx 40rpx 120rpx; box-sizing: border-box; background: $brand-color-background; }
+.completed-page__heading { display: flex; flex-direction: column; margin-bottom: 40rpx; }
+.completed-page__eyebrow { color: $brand-color-primary; font-size: 22rpx; font-weight: 600; letter-spacing: 6rpx; opacity: .85; }
+.completed-page__title { margin-top: 18rpx; color: $brand-color-text; font-size: 46rpx; font-weight: 500; line-height: 1.35; letter-spacing: .5rpx; }
+.completed-page__subtitle { margin-top: 14rpx; color: $brand-color-text-secondary; font-size: 26rpx; line-height: 1.6; font-weight: 400; }
+
+.completed-page__filter { margin: 8rpx 0 24rpx; text-align: right; }
 .completed-page__filter-text { color: $brand-color-primary; font-size: 24rpx; }
+
+/* 加载/错误/空状态：纵向居中。 */
 .completed-page__state { display: flex; min-height: 40vh; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
-.completed-page__state-title { margin-top: 24rpx; color: $brand-color-text; font-size: 30rpx; font-weight: 700; }
+.completed-page__state-title { margin-top: 24rpx; color: $brand-color-text; font-size: 30rpx; font-weight: 600; }
 .completed-page__state-copy { margin-top: 12rpx; padding: 0 80rpx; color: $brand-color-text-secondary; font-size: 25rpx; line-height: 1.6; }
-.completed-page__empty { display: flex; flex-direction: column; align-items: center; padding: 96rpx 32rpx; }
-.completed-page__empty-title { margin-top: 24rpx; color: $brand-color-text; font-size: 30rpx; font-weight: 700; }
-.completed-page__empty-copy { margin-top: 12rpx; color: $brand-color-text-secondary; font-size: 25rpx; }
-.completed-page__list { display: flex; flex-direction: column; gap: 16rpx; }
-.completed-page__item { display: flex; align-items: center; padding: 24rpx 28rpx; border: 2rpx solid $brand-color-border; border-radius: 18rpx; background: $brand-color-surface; }
-.completed-page__item-mark { width: 12rpx; align-self: stretch; margin-right: 18rpx; border-radius: 6rpx; }
-.completed-page__item-mark--low_stock { background: #d99833; }
-.completed-page__item-mark--to_handle { background: #498469; }
-.completed-page__item-mark--expiring { background: #c66b68; }
+
+/* 空状态：用 logo 强化品牌温度，而不是抽象的笔记 icon。 */
+.completed-page__empty { display: flex; flex-direction: column; align-items: center; padding: 120rpx 32rpx; }
+.completed-page__empty-logo { width: 240rpx; height: 240rpx; opacity: .92; }
+.completed-page__empty-title { margin-top: 32rpx; color: $brand-color-text; font-size: 32rpx; font-weight: 500; letter-spacing: .5rpx; }
+.completed-page__empty-copy { margin-top: 12rpx; color: $brand-color-text-secondary; font-size: 25rpx; line-height: 1.6; }
+
+/* 列表项：色带 + 内容 + 描边徽章。 */
+.completed-page__list { display: flex; flex-direction: column; gap: 18rpx; }
+.completed-page__item { display: flex; align-items: center; padding: 24rpx 24rpx 24rpx 0; border-radius: 20rpx; background: $brand-color-surface; overflow: hidden; transition: transform .15s ease; }
+.completed-page__item:active { transform: scale(.99); }
+.completed-page__item-mark { width: 8rpx; align-self: stretch; margin-right: 22rpx; }
+.completed-page__item-mark--low_stock { background: #E8B647; }
+.completed-page__item-mark--to_handle { background: #5BBE93; }
+.completed-page__item-mark--expiring { background: #E78A7B; }
 .completed-page__item-content { display: flex; flex: 1; flex-direction: column; gap: 6rpx; }
-.completed-page__item-title { color: $brand-color-text; font-size: 28rpx; font-weight: 600; line-height: 1.4; }
-.completed-page__item-meta { color: $brand-color-text-secondary; font-size: 23rpx; }
-.completed-page__item-tag { padding: 6rpx 14rpx; border-radius: 999rpx; font-size: 21rpx; font-weight: 700; }
-.completed-page__item-tag--completed { background: #e6f5ed; color: #2c6e4a; }
-.completed-page__item-tag--abandoned { background: #f0e8e8; color: #8b5e5a; }
-.completed-page__more { margin-top: 20rpx; }
-.completed-page__end { margin-top: 24rpx; text-align: center; }
-.completed-page__end-text { color: $brand-color-text-secondary; font-size: 23rpx; }
+.completed-page__item-title { color: $brand-color-text; font-size: 28rpx; font-weight: 500; line-height: 1.4; }
+.completed-page__item-meta { color: $brand-color-text-secondary; font-size: 22rpx; }
+
+/* 状态徽章：完成=绿描边、放弃=珊瑚描边。描边而非填充，避免视觉重量。 */
+.completed-page__item-tag {
+  flex-shrink: 0;
+  padding: 6rpx 16rpx;
+  border-radius: 999rpx;
+  font-size: 21rpx;
+  font-weight: 600;
+  letter-spacing: .5rpx;
+  transition: opacity .15s ease;
+}
+.completed-page__item-tag:active { opacity: .7; }
+.completed-page__item-tag--completed {
+  color: $brand-color-action;
+  box-shadow: inset 0 0 0 1.5rpx $brand-color-primary;
+  background: transparent;
+}
+.completed-page__item-tag--abandoned {
+  color: #c5684d;
+  box-shadow: inset 0 0 0 1.5rpx #E78A7B;
+  background: transparent;
+}
+
+/* 加载更多：细描边 pill 风格。 */
+.completed-page__more { margin-top: 16rpx; }
+.completed-page__more-btn {
+  width: 100%;
+  height: 88rpx;
+  border: 0;
+  border-radius: 999rpx;
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5rpx #d6dfd9;
+  display: flex; align-items: center; justify-content: center;
+  transition: opacity .15s ease;
+}
+.completed-page__more-btn::after { border: 0; }
+.completed-page__more-btn:active { opacity: .7; }
+.completed-page__more-text { color: $brand-color-action; font-size: 27rpx; font-weight: 500; letter-spacing: 1rpx; }
+
+.completed-page__end { margin-top: 32rpx; text-align: center; }
+.completed-page__end-text { color: $brand-color-text-secondary; font-size: 22rpx; letter-spacing: 2rpx; }
 </style>

@@ -56,17 +56,18 @@
       </template>
     </view>
 
-    <!-- 底部固定"快速添加"按钮：仅在有家庭时显示 -->
+    <!-- 右下角悬浮"快速添加"按钮：仅在有家庭时显示，避开底部 tab bar -->
     <view v-if="household && household.memberCount === 2" class="home-quick-add" data-testid="home-quick-add">
-      <wd-button
-        block
-        round
-        type="primary"
-        :loading="isQuickAdd"
+      <view
+        class="home-quick-add__fab"
+        :class="{ 'home-quick-add__fab--busy': isQuickAdd }"
+        :aria-busy="isQuickAdd"
+        role="button"
         @click="goAdd"
       >
-        快速添加
-      </wd-button>
+        <text v-if="!isQuickAdd" class="home-quick-add__icon">+</text>
+        <wd-loading v-else size="24rpx" color="#ffffff" />
+      </view>
     </view>
 
     <AppTabBar active="home" />
@@ -184,5 +185,11 @@ onShow(() => {
 .home-error { display: block; margin-top: 24rpx; color: #c5684d; font-size: 25rpx; text-align: center; }
 .home-completed-link { margin-top: 32rpx; text-align: right; }
 .home-completed-link-text { color: $brand-color-primary; font-size: 24rpx; }
-.home-quick-add { position: fixed; right: 32rpx; left: 32rpx; bottom: 40rpx; z-index: 10; }
+/* 右下角圆形悬浮按钮：bottom 需大于 tab bar 高度（默认 ~100rpx + 安全区 ~34rpx），
+   留 50rpx 间距让按钮"浮在" tab 之上而不是压在 tab 上。 */
+.home-quick-add { position: fixed; right: 40rpx; bottom: 180rpx; z-index: 10; }
+.home-quick-add__fab { display: flex; align-items: center; justify-content: center; width: 100rpx; height: 100rpx; border-radius: 50%; background: $brand-color-primary; box-shadow: 0 12rpx 28rpx rgba(38, 122, 90, .28); transition: transform .15s ease, opacity .15s ease; }
+.home-quick-add__fab--busy { opacity: .7; }
+.home-quick-add__fab:active { transform: scale(.94); }
+.home-quick-add__icon { display: block; color: #fff; font-size: 56rpx; font-weight: 300; line-height: 56rpx; text-align: center; }
 </style>
