@@ -1,6 +1,6 @@
 {
   "description": "微信开发者工具项目配置：小程序页面使用 uni-app 开发输出，云函数使用源码目录。",
-  "miniprogramRoot": "dist/dev/mp-weixin/",
+  "miniprogramRoot": "dist/build/mp-weixin/",
   "cloudfunctionRoot": "cloudfunctions/",
   "compileType": "miniprogram",
   "setting": {
@@ -10,9 +10,34 @@
     "minified": false,
     "newFeature": true,
     "bigPackageSizeSupport": true,
-    "minifyWXML": true
+    "minifyWXML": true,
+    "compileWorklet": false,
+    "uglifyFileName": false,
+    "uploadWithSourceMap": true,
+    "enhance": false,
+    "packNpmManually": false,
+    "packNpmRelationList": [],
+    "minifyWXSS": true,
+    "localPlugins": false,
+    "disableUseStrict": false,
+    "useCompilerPlugins": false,
+    "condition": false,
+    "swc": false,
+    "disableSWC": true,
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    }
   },
   "appid": "wxd40af14967fa64fa",
   "projectname": "cohabitation-life",
-  "condition": {}
+  "condition": {},
+  "simulatorPluginLibVersion": {},
+  "packOptions": {
+    "ignore": [],
+    "include": []
+  },
+  "editorSetting": {},
+  "libVersion": "3.17.1"
 }

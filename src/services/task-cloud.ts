@@ -66,7 +66,12 @@ const TASK_STATUSES_TERMINAL_SET: ReadonlySet<string> = new Set(['completed', 'a
 const TASK_EVENT_KINDS_SET: ReadonlySet<string> = new Set(['create', 'claim', 'complete', 'abandon'])
 
 function isBuiltinPersonAvatarId(value: unknown): value is string {
-  return typeof value === 'string' && /^person-\d{2}$/.test(value)
+  // 接受默认中性头像 'person-neutral' 和数字编号 'person-01'..'person-99'。
+  // 数字编号来自 src/static/brand 的具体素材；中性头像用于 profile 还没设置
+  // avatar 的情况（新建任务的事件 actor 经常是这种）。
+  if (typeof value !== 'string') return false
+  if (value === 'person-neutral') return true
+  return /^person-\d{2}$/.test(value)
 }
 
 function isAssigneeDisplay(value: unknown): boolean {

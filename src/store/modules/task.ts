@@ -157,6 +157,10 @@ export const useTaskStore = defineStore('task', {
           loadCurrentInFlight = undefined
         }
       })()
+      // 关键：让调用方的 await 真正等到云函数结果回来。
+      // 之前没 await，页面 await loadCurrent 立刻 resolve，
+      // 然后页面检查 current 还是 undefined 就 fallback 错误。
+      await loadCurrentInFlight
     },
 
     /** 详情页加载；用于刷新和超时后重新确认。 */
@@ -185,6 +189,9 @@ export const useTaskStore = defineStore('task', {
           loadDetailInFlight = undefined
         }
       })()
+      // 必须 await：页面 await loadDetail 是要等 detail/errorMessage 落地。
+      // 之前没 await 时，loadDetail 立刻 resolve，页面 fallback "事项不存在或已被清理"。
+      await loadDetailInFlight
     },
 
     /** 已完成/已放弃分页加载。 */
@@ -216,6 +223,8 @@ export const useTaskStore = defineStore('task', {
           loadCompletedInFlight = undefined
         }
       })()
+      // 必须 await：页面 await loadCompleted 等数据落地后再检查 fallback。
+      await loadCompletedInFlight
     },
 
     /** 新建事项。草稿在调用前已校验。 */

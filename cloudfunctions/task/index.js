@@ -15,14 +15,26 @@ const {
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
 
-function getDocument(collection, id) {
-  try {
-    const result = collection.doc(id).get()
-    return Promise.resolve(result).then((r) => r.data || null)
-  } catch (error) {
-    if (error && (error.errCode === -1 || /not exist|not found/i.test(error.message || ''))) return null
-    throw error
+/**
+ * 单文档读取，加 3 次重试解决 WeChat Cloud DB 的最终一致性问题。
+ * 现象：刚 create 的 task 在主键查询时暂时不可见，但 where 列表查询已经能看到。
+ * 根因：.doc(id).get() 主键路径和 .where().get() 列表路径的索引/缓存不一致。
+ * 重试策略：3 次，每次间隔 200ms，覆盖秒级一致性窗口；超过 3 次仍 null 才视为真不存在。
+ */
+async function getDocument(collection, id) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const result = collection.doc(id).get()
+      const data = await Promise.resolve(result).then((r) => r.data || null)
+      if (data) return data
+    } catch (error) {
+      if (!error || !(error.errCode === -1 || /not exist|not found/i.test(error.message || ''))) {
+        throw error
+      }
+    }
+    if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 200))
   }
+  return null
 }
 
 function createRepository() {
