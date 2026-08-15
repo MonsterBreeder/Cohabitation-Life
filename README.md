@@ -1,39 +1,162 @@
 # 家里有事
 
-这是一个面向同居情侣和年轻夫妻的微信小程序，帮助两个人共同处理家里的琐事。
+一个面向同居情侣和年轻夫妻的微信小程序，让两个人一起把家里的琐事记下来、认领、完成、放下。
+
+- 两人共享同一个"家"，共同维护家里的待办事项
+- 事项按"快没了 / 待处理 / 快到期"分类，按"今天 + 逾期"单独置顶
+- 完成或放弃的事项永久保留，事后可以回看
+- 不做提醒、不做统计、不做积分
+
+## 技术栈
+
+| 层 | 选型 | 备注 |
+| --- | --- | --- |
+| 框架 | uni-app 3 + Vue 3 + TypeScript | 微信小程序目标，`pages.json` 用 easycom 注册 Wot UI |
+| UI 组件 | Wot UI v2 | 通用界面必须用 Wot UI；只在"项目独有的品牌组合"（如 3 张色带类型卡）才允许自排版 |
+| 状态 | Pinia 2.1 | 每个业务域一个 store，对象式 + 单飞保护 + 超时恢复 |
+| 样式 | SCSS + 品牌变量 | `src/uni.scss` 集中维护 `$brand-color-*`、`$brand-radius-*` |
+| 后端 | 微信云开发（云函数 + 云数据库） | 4 个云函数，见下表 |
+| 工具链 | Vite 5 + vue-tsc + Jest 29 | TS 严格模式、单元测试 27 套件 / 270 用例 |
 
 ## 本地运行
 
-1. 在 `src/manifest.json` 的 `mp-weixin.appid` 中填入你自己申请的 AppID。
-2. 在项目目录执行 `npm install`。
-3. 执行 `npm run dev:mp-weixin`。
-4. 用微信开发者工具导入项目根目录，不要直接导入 `dist/dev/mp-weixin`。根目录的 `project.config.json` 会同时连接小程序页面和 `cloudfunctions` 云函数目录。
-5. 用微信开发者工具导入后，在“云开发”中开通测试环境。
+1. 在 `src/manifest.json` 的 `mp-weixin.appid` 填入你自己的 AppID（**不要**把 AppID、AppSecret、云环境凭据提交到任何位置）。
+2. 安装依赖：`npm install`
+3. 启动开发：`npm run dev:mp-weixin`
+4. 微信开发者工具 → 导入项目 → 选择**项目根目录**（不要直接选 `dist/dev/mp-weixin`）。`project.config.json` 已经把 `miniprogramRoot` 指向 `dist/build/mp-weixin/`，`cloudfunctionRoot` 指向 `cloudfunctions/`。
+5. 微信开发者工具里点"云开发" → 创建/选择测试环境 → 记下环境 ID（用来填 `src/config/cloud.ts`）。
 
-## 云环境准备与部署
+> 注意：根目录 `project.config.json` 的 `miniprogramRoot` 指向 **`dist/build/mp-weixin/`**（生产构建产物），不是 `dist/dev/mp-weixin/`（dev watch 半成品）。开发时改完代码需要 `npm run build:mp-weixin` 让微信开发者工具拿到最新版本——这是 5f86bd5 修的坑。
 
-1. 在微信开发者工具中确认当前选择的是测试环境，记录环境编号；不要把环境管理凭据、AppSecret 或其他密钥写入代码和文档。
-2. 在云数据库中创建 `users`、`households`、`invitations` 三个集合。小程序客户端对三个集合的直接读取和写入都应设为拒绝，只允许云函数访问。
-3. 在 `src/config/cloud.ts` 填入测试环境编号，然后将 `cloudfunctions/resolve-login` 上传并部署到该测试环境。
-4. 前端编译和云函数上传是两个独立步骤；执行前端构建不会自动上传云函数。
+## 云环境准备
 
-当前登录模块只能部署到测试环境。正式发布前必须补齐用户协议、隐私政策、可查看入口、协议版本和服务端同意记录。
+每个模块的部署步骤都写在该模块的部署清单里，不要把任何密钥写进代码或文档：
 
-## 当前已有内容
+| 集合 | 权限 | 备注 |
+| --- | --- | --- |
+| `users` | 客户端读/写均**拒绝**，仅云函数访问 | 存放用户档案、昵称、头像 |
+| `households` | 客户端读/写均**拒绝**，仅云函数访问 | 家庭基本信息、成员键 |
+| `invitations` | 客户端读/写均**拒绝**，仅云函数访问 | 邀请码、过期时间、满员状态 |
+| `tasks` | 客户端读/写均**拒绝**，仅云函数访问 | 事项本体 + 事件流 + 终止态 |
 
-- 登录与启动分流：普通用户、受邀用户、已有家庭用户都会前往对应入口。
-- 创建家庭和加入家庭的说明页；它们目前不会写入家庭数据。
-- 仅在确认已有家庭后才展示首页示例事项。
-- 微信云端服务目录与登录入口云函数。
+云函数（在 `cloudfunctions/`）：
 
-## 验证步骤
+| 目录 | 动作数 | 责任 |
+| --- | --- | --- |
+| `resolve-login` | 1 | 首次登录创建 user / 已登录返回 profile |
+| `household` | 13 | 家庭 CRUD、邀请、加入、个人资料、头像、成员管理 |
+| `task` | 7 | 事项的创建、认领、完成、放弃、详情、首页列表、已完成分页 |
+| `cleanup-avatar-media` | 1 | 清理被替换/删除的临时头像文件 |
 
-1. 运行 `npm run test:unit` 和 `npm run type-check`。
-2. 运行 `npm run build:h5`、`npm run build:mp-weixin`，确认两种构建成功。
-3. 在微信开发者工具中分别准备无家庭用户、已有家庭用户和受邀用户；验证登录后的三个入口。
-4. 验证无效、过期、已使用和满员邀请均不会进入创建家庭页；已有家庭的用户打开其他邀请后，能看懂提示并回到自己的首页。
-5. 验证断网或云函数暂时不可用时，页面保留重试入口；再次恢复后不会重复创建用户。
+每个云函数都遵循同样的边界：
 
-## 下一步
+- 内部身份键（`householdId`、`actorKey`、`ownerKey`、`assigneeKey`、`_id`）**绝不**回给前端
+- 前端响应只暴露展示字段；任何携带内部键的响应被前端 service 校验直接拒绝
+- 写操作全部走"创建锁 (identityKey + requestId) + 操作凭证 (taskId + operationToken)"两道幂等闸门
+- 详情类查询做最终一致性重试（云端 `.doc(id).get()` 写入后存在 ~400ms 窗口，3 次 × 200ms 退避）
 
-下一模块将实现真实的创建家庭、接受邀请和事项数据。
+详细部署清单见 `cloudfunctions/README.md`，每个模块的部署步骤都列在对应小节。
+
+## 项目结构
+
+```
+src/
+├── pages/                          # 主包（启动必需）
+│   ├── login/                      # 登录入口
+│   ├── index/                      # 首页（家庭 + 事项 + 历史入口）
+│   └── profile/                    # 我的
+├── subpackages/
+│   ├── household/                  # 家庭与成员管理
+│   │   ├── create-home/            # 创建家庭
+│   │   ├── join-home/              # 通过邀请码加入
+│   │   ├── member-management/      # 成员管理
+│   │   ├── invite-status/          # 邀请状态展示
+│   │   ├── edit-household/         # 编辑家庭资料
+│   │   ├── edit-profile/           # 编辑个人资料
+│   │   └── crop-avatar/            # 头像裁剪
+│   └── task/                       # 共同事项
+│       ├── add-task/               # 新建事项
+│       ├── task-detail/            # 事项详情 / 状态机操作
+│       └── completed-tasks/        # 已完成 + 已放弃（按日期分组）
+├── components/                     # 全局复用组件
+│   ├── AppTabBar.vue
+│   ├── home/HomeSummaryCard.vue
+│   └── task/                       # TaskList / TaskSummaryCard + 共享 helper
+├── store/modules/                  # Pinia 状态
+│   ├── auth.ts
+│   ├── household.ts
+│   └── task.ts
+├── services/                       # 与云函数一一对应的前端 service
+├── utils/                          # 通用工具
+├── types/                          # 跨模块类型契约
+├── config/cloud.ts                 # 测试环境 ID
+├── uni.scss                        # 品牌变量
+└── manifest.json
+cloudfunctions/                     # 4 个云函数源码
+docs/
+├── prd/                            # 5 份产品需求文档
+├── plans/                          # 实施计划（按日期 + 模块名）
+└── brand/visual-standard.md        # 视觉规范
+tests/
+├── unit/                           # 27 套件 / 270 用例
+└── e2e/                            # 真机自动化（依赖微信开发者工具会话）
+```
+
+## 已完成模块
+
+每个模块都按 `ce → brainstorm → plan → work` 跑过，PRDs 在 `docs/prd/`，实施计划在 `docs/plans/`。
+
+### 1. 登录与启动分流（PRD 001 / Plan 2026-08-13-002）
+- 首次登录云端建 user，已登录返回 profile
+- 登录后根据"是否已有家庭"分流到首页 / 创建家庭 / 加入家庭
+- 邀请链接携带 token，登录后直达加入页
+
+### 2. 品牌视觉（PRD 002 / `docs/brand/visual-standard.md`）
+- 主色：暖米白底 `#FFF9F2` + 薄荷绿 `#43C89A`（主）/ `#267A5A`（动作）
+- 三个事项类型色：暖黄 `#E8B647`（快没了）/ 薄荷 `#5BBE93`（待处理）/ 珊瑚 `#E78A7B`（快到期）
+- 圆角：输入 16rpx / 卡片 24rpx / 按钮 999rpx
+- Logo 软插画风，纯文字"家里的事" eyebrow 标识 + 6rpx 字距
+
+### 3. 创建与加入家庭（PRD 003 / 004 / Plan 2026-08-14-001 / 2026-08-14-002）
+- 创建：名称 + 头像（内置或本地上传裁剪）
+- 邀请：6 位短码 + 7 天过期 + 满员保护
+- 加入：扫码 / 输码 → 验证 → 落到家庭
+- 成员管理：查看 / 移除
+- 双账号真机验证通过
+
+### 4. 共同事项（PRD 005 / Plan 2026-08-14-003）⭐ 当前焦点
+- **状态机**：`pending → claimed → (completed | abandoned)`，终止态不可重开
+- **任何成员都能完成/放弃**（避免"等认领人"死锁），但放弃需二次确认
+- **首页分组**：今天 + 逾期置顶 + 三个类型分组；类型色带左侧识别
+- **已完成页**：按本地日历日分组（今天 / 昨天 / M月D日 / YYYY-MM-DD），倒序；`onReachBottom` 自动加载下一页
+- **幂等性**：创建锁（`identityKey + requestId`）+ 操作凭证（`taskId + operationToken`），重复点击不重复创建
+- **超时恢复**：超时后先轻量查详情确认是否生效，已生效按成功处理
+- **双账号真机验证 10 条路径通过**（详见 `cloudfunctions/README.md` U5 段）
+
+## 验证
+
+```powershell
+npm run type-check      # vue-tsc --noEmit，0 错
+npm run test:unit       # 27 套件 / 270 用例
+npm run build:mp-weixin # 微信小程序构建
+npm run build:h5        # H5 构建
+npm run test:e2e        # 依赖微信开发者工具的 automator，会话不通则跳过
+```
+
+每次改完代码至少跑前三个。`build:mp-weixin` 是**发布构建**，dev 时不要手动重导 `dist/dev/mp-weixin`，要重导根目录。
+
+真机双账号验证脚本由 `cloudfunctions/README.md` 维护，按"创建 → 双方可见 → 认领 → 完成 → 已完成可见"等路径逐条走完。
+
+## 协作规范
+
+项目协作规则（分支策略、commit 规范、Vue 文件顺序、注释、UI 组件选型、分包体积、隐私安全）都在 `AGENTS.md`，**改任何东西之前先读这一份**。本文档不重复列。
+
+## 路线图
+
+按模块逐个交付，不一次做完一整个 MVP。已落地的写"已完成"，下一步看 PRD / Plan：
+
+- [x] 登录与启动分流
+- [x] 品牌视觉
+- [x] 创建 / 加入 / 邀请家庭
+- [x] 共同事项的增删改查（不含删）
+- [ ] 下一个模块：见 `docs/prd/` 最新编号
