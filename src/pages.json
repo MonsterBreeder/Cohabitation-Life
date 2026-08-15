@@ -39,6 +39,14 @@
 				{ "path": "edit-profile/index", "style": { "navigationBarTitleText": "编辑个人资料" } },
 				{ "path": "crop-avatar/index", "style": { "navigationBarTitleText": "裁剪头像" } }
 			]
+		},
+		{
+			"root": "subpackages/task",
+			"pages": [
+				{ "path": "add-task/index", "style": { "navigationBarTitleText": "记一件事" } },
+				{ "path": "task-detail/index", "style": { "navigationBarTitleText": "事项详情" } },
+				{ "path": "completed-tasks/index", "style": { "navigationBarTitleText": "已完成和已放弃" } }
+			]
 		}
 	],
 	"globalStyle": {
