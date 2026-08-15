@@ -1,3 +1,11 @@
+<!--
+  事项详情页：Wot UI 组件 + 品牌 scss 变量。
+  - 头部 / 事件流是自定义排版（不属于组件）
+  - 状态/类型/截止 用 wd-tag
+  - 备注/事件行 用 wd-cell + wd-cell-group
+  - 操作按钮 用 wd-button block round
+  - 所有 testid 与原版保持一致
+-->
 <template>
   <view class="task-detail-page">
     <wd-toast />
@@ -21,20 +29,42 @@
         <view class="task-detail-page__title-block">
           <text class="task-detail-page__title">{{ detail.title }}</text>
           <view class="task-detail-page__chips">
-            <text class="task-detail-page__chip task-detail-page__chip--type">
+            <wd-tag
+              round
+              plain
+              type="primary"
+              custom-class="task-detail-page__chip"
+              :data-testid="`task-detail-type-${detail.type}`"
+            >
               {{ typeLabel }}
-            </text>
-            <text class="task-detail-page__chip task-detail-page__chip--status" :data-status="detail.status">
+            </wd-tag>
+            <!-- 状态 chip：pending 跟 type label 撞（都是"待处理"），省略；
+                 claimed/terminal 才有新信息（"由 X 处理" / "由 X 完成"），才显示。 -->
+            <wd-tag
+              v-if="detail.status !== 'pending'"
+              round
+              plain
+              :type="detail.status === 'claimed' ? 'success' : 'default'"
+              custom-class="task-detail-page__chip"
+              :data-testid="`task-detail-status-${detail.status}`"
+            >
               {{ statusLine }}
-            </text>
-            <text v-if="dueLabel" class="task-detail-page__chip task-detail-page__chip--due">
+            </wd-tag>
+            <wd-tag
+              v-if="dueLabel"
+              round
+              plain
+              type="warning"
+              custom-class="task-detail-page__chip"
+              data-testid="task-detail-due"
+            >
               截止 {{ dueLabel }}
-            </text>
+            </wd-tag>
           </view>
         </view>
       </view>
 
-      <!-- 备注：薄卡片 -->
+      <!-- 备注：wd-cell-group + 自定义 cell（左侧 label + 右侧 value 文本） -->
       <view v-if="detail.note" class="task-detail-page__note">
         <text class="task-detail-page__note-label">备注</text>
         <text class="task-detail-page__note-text">{{ detail.note }}</text>
@@ -42,58 +72,67 @@
 
       <text v-if="storeError" class="task-detail-page__error" data-testid="task-detail-error">{{ storeError }}</text>
 
-      <!-- 操作按钮：主操作大圆角渐变绿，放弃细描边珊瑚 -->
+      <!-- 操作按钮：认领/完成 用 primary，放弃 用 warning plain -->
       <view class="task-detail-page__actions">
-        <button
+        <wd-button
           v-if="availability.claim"
-          class="task-detail-page__btn task-detail-page__btn--primary"
+          block
+          round
+          type="primary"
+          size="large"
+          :loading="isClaiming"
           :disabled="isAnyBusy"
-          :data-loading="isClaiming"
           data-testid="task-detail-claim"
           @click="onClaim"
         >
-          <wd-loading v-if="isClaiming" size="32rpx" color="#ffffff" />
-          <text v-else class="task-detail-page__btn-text">我来处理</text>
-        </button>
-        <button
+          我来处理
+        </wd-button>
+        <wd-button
           v-if="availability.complete"
-          class="task-detail-page__btn task-detail-page__btn--primary"
+          block
+          round
+          type="primary"
+          size="large"
+          :loading="isCompleting"
           :disabled="isAnyBusy"
-          :data-loading="isCompleting"
           data-testid="task-detail-complete"
           @click="onComplete"
         >
-          <wd-loading v-if="isCompleting" size="32rpx" color="#ffffff" />
-          <text v-else class="task-detail-page__btn-text">完成</text>
-        </button>
-        <button
+          完成
+        </wd-button>
+        <wd-button
           v-if="availability.abandon"
-          class="task-detail-page__btn task-detail-page__btn--ghost"
+          block
+          round
+          variant="plain"
+          type="warning"
+          size="large"
+          :loading="isAbandoning"
           :disabled="isAnyBusy"
-          :data-loading="isAbandoning"
           data-testid="task-detail-abandon"
           @click="onAbandon"
         >
-          <wd-loading v-if="isAbandoning" size="32rpx" color="#E78A7B" />
-          <text v-else class="task-detail-page__btn-text task-detail-page__btn-text--ghost">放弃</text>
-        </button>
+          放弃
+        </wd-button>
       </view>
 
-      <!-- 事件流：左侧色点（按 kind 区分），中间描述，右侧时间 -->
+      <!-- 事件流：wd-cell-group + 每个事件一行（左侧色点 + 描述 + 时间） -->
       <view v-if="detail.events.length" class="task-detail-page__events">
         <text class="task-detail-page__events-title">操作记录</text>
-        <view
-          v-for="(event, idx) in detail.events"
-          :key="`${event.kind}-${event.at}-${idx}`"
-          class="task-detail-page__event"
-          data-testid="task-detail-event"
-        >
-          <view class="task-detail-page__event-row">
-            <view class="task-detail-page__event-dot" :class="`task-detail-page__event-dot--${event.kind}`" />
-            <text class="task-detail-page__event-text">{{ describeEventLine(event) }}</text>
-          </view>
-          <text class="task-detail-page__event-time">{{ formatTime(event.at) }}</text>
-        </view>
+        <wd-cell-group border>
+          <wd-cell
+            v-for="(event, idx) in detail.events"
+            :key="`${event.kind}-${event.at}-${idx}`"
+            custom-class="task-detail-page__event"
+            data-testid="task-detail-event"
+          >
+            <view class="task-detail-page__event-row">
+              <view class="task-detail-page__event-dot" :class="`task-detail-page__event-dot--${event.kind}`" />
+              <text class="task-detail-page__event-text">{{ describeEventLine(event) }}</text>
+            </view>
+            <text slot="value" class="task-detail-page__event-time">{{ formatTime(event.at) }}</text>
+          </wd-cell>
+        </wd-cell-group>
       </view>
     </view>
   </view>
@@ -198,16 +237,16 @@ onShow(() => {
 </script>
 
 <style lang="scss" scoped>
-/* 整体：暖白底色 + 大留白，呼应 add-task 的亲密气质。 */
-.task-detail-page { min-height: 100vh; padding: 64rpx 40rpx 120rpx; box-sizing: border-box; background: $brand-color-background; }
+/* 整体：暖白底色 + 大留白。 */
+.task-detail-page { min-height: 100vh; padding: 64rpx 32rpx 80rpx; box-sizing: border-box; background: $brand-color-background; }
 .task-detail-page__state { display: flex; min-height: 60vh; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
 .task-detail-page__state-title { margin-top: 24rpx; color: $brand-color-text; font-size: 30rpx; font-weight: 600; }
 .task-detail-page__state-copy { margin-top: 12rpx; padding: 0 80rpx; color: $brand-color-text-secondary; font-size: 25rpx; line-height: 1.6; }
 
-/* 内容容器：列布局，区块间留白。 */
-.task-detail-page__content { display: flex; flex-direction: column; gap: 32rpx; }
+/* 内容容器：列布局。 */
+.task-detail-page__content { display: flex; flex-direction: column; gap: 24rpx; }
 
-/* 头部：左色带 + 大标题 + chip 行（与 add-task 类型色同体系）。 */
+/* 头部：左色带 + 大标题 + chip 行。 */
 .task-detail-page__header {
   display: flex; align-items: stretch;
   padding: 32rpx 28rpx;
@@ -220,26 +259,10 @@ onShow(() => {
 .task-detail-page__type-mark--expiring { background: #E78A7B; }
 .task-detail-page__title-block { display: flex; flex: 1; flex-direction: column; gap: 18rpx; }
 .task-detail-page__title { color: $brand-color-text; font-size: 40rpx; font-weight: 500; line-height: 1.35; letter-spacing: .5rpx; }
-
-/* chip：圆角胶囊，颜色按状态弱提示。 */
 .task-detail-page__chips { display: flex; flex-wrap: wrap; gap: 12rpx; }
-.task-detail-page__chip {
-  display: inline-flex; align-items: center;
-  height: 44rpx;
-  padding: 0 18rpx;
-  border-radius: 999rpx;
-  background: #f1efeb;
-  color: $brand-color-text;
-  font-size: 22rpx;
-  font-weight: 500;
-  letter-spacing: .5rpx;
-}
-.task-detail-page__chip--type { background: #effbf5; color: $brand-color-action; }
-.task-detail-page__chip--status[data-status='claimed'] { background: #e7f0eb; color: $brand-color-action; }
-.task-detail-page__chip--status[data-status='pending'] { background: #f1efeb; color: $brand-color-text; }
-.task-detail-page__chip--due { background: #fff3e8; color: #a55d31; }
+.task-detail-page__chip { font-size: 22rpx; }
 
-/* 备注：薄卡片，没有强边框，靠背景色区分。 */
+/* 备注：薄卡片（与 wd-cell 区分，是更大的可换行文本）。 */
 .task-detail-page__note { padding: 26rpx 28rpx; border-radius: 20rpx; background: $brand-color-surface; }
 .task-detail-page__note-label { display: block; color: $brand-color-text-secondary; font-size: 22rpx; letter-spacing: 1rpx; }
 .task-detail-page__note-text { display: block; margin-top: 12rpx; color: $brand-color-text; font-size: 28rpx; line-height: 1.6; }
@@ -247,45 +270,19 @@ onShow(() => {
 /* 错误：通用低饱和红。 */
 .task-detail-page__error { display: block; color: #c5684d; font-size: 25rpx; text-align: center; }
 
-/* 操作按钮：主操作大圆角渐变绿，放弃细描边珊瑚。 */
-.task-detail-page__actions { display: flex; flex-direction: column; gap: 18rpx; margin-top: 16rpx; }
-.task-detail-page__btn {
-  width: 100%;
-  height: 104rpx;
-  border: 0;
-  border-radius: 999rpx;
-  display: flex; align-items: center; justify-content: center;
-  transition: transform .15s ease, background .2s ease, box-shadow .2s ease;
-}
-.task-detail-page__btn::after { border: 0; }
-.task-detail-page__btn--primary {
-  background: linear-gradient(135deg, #43c89a, #5bdfb3);
-  box-shadow: 0 12rpx 28rpx rgba(67, 200, 154, .28);
-}
-.task-detail-page__btn--primary:active { transform: scale(.97); box-shadow: 0 6rpx 16rpx rgba(67, 200, 154, .25); }
-.task-detail-page__btn--ghost {
-  background: transparent;
-  box-shadow: inset 0 0 0 1.5rpx #E78A7B;
-}
-.task-detail-page__btn--ghost:active { background: rgba(231, 138, 123, .08); }
-.task-detail-page__btn-text { color: #fff; font-size: 31rpx; font-weight: 600; letter-spacing: 2rpx; line-height: 1; }
-.task-detail-page__btn-text--ghost { color: #E78A7B; }
+/* 操作按钮组。 */
+.task-detail-page__actions { display: flex; flex-direction: column; gap: 18rpx; margin-top: 8rpx; }
 
-/* 事件流：左侧小色点按 kind 区分，弱化硬边框。 */
-.task-detail-page__events { margin-top: 8rpx; padding: 26rpx 28rpx; border-radius: 20rpx; background: $brand-color-surface; }
-.task-detail-page__events-title { display: block; margin-bottom: 8rpx; color: $brand-color-text-secondary; font-size: 22rpx; letter-spacing: 1rpx; }
-.task-detail-page__event {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 20rpx 0;
-  border-bottom: 1rpx solid #f0f3f0;
-}
-.task-detail-page__event:last-child { border-bottom: 0; padding-bottom: 0; }
+/* 事件流：wd-cell-group 包裹每行。 */
+.task-detail-page__events { margin-top: 8rpx; }
+.task-detail-page__events-title { display: block; margin-bottom: 12rpx; color: $brand-color-text-secondary; font-size: 22rpx; letter-spacing: 1rpx; }
+.task-detail-page__event { padding: 18rpx 0; }
 .task-detail-page__event-row { display: flex; align-items: center; gap: 16rpx; }
-.task-detail-page__event-dot { width: 14rpx; height: 14rpx; border-radius: 50%; }
+.task-detail-page__event-dot { width: 14rpx; height: 14rpx; border-radius: 50%; flex-shrink: 0; }
 .task-detail-page__event-dot--create { background: #5BBE93; }
 .task-detail-page__event-dot--claim { background: #43c89a; }
-.task-detail-page__event-dot--complete { background: $brand-color-action; }
+.task-detail-page__event-dot--complete { background: #267a5a; }
 .task-detail-page__event-dot--abandon { background: #E78A7B; }
-.task-detail-page__event-text { color: $brand-color-text; font-size: 26rpx; }
-.task-detail-page__event-time { color: $brand-color-text-secondary; font-size: 22rpx; flex-shrink: 0; margin-left: 18rpx; }
+.task-detail-page__event-text { color: $brand-color-text; font-size: 26rpx; line-height: 1.4; }
+.task-detail-page__event-time { color: $brand-color-text-secondary; font-size: 22rpx; flex-shrink: 0; }
 </style>

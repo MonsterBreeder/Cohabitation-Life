@@ -50,25 +50,31 @@
           </view>
         </view>
         <view v-if="homeError" class="home-error" data-testid="home-tasks-error">{{ homeError }}</view>
-        <view v-if="hasCompletedLink" class="home-completed-link">
-          <text class="home-completed-link-text" @click="goCompleted">查看已完成和已放弃 ›</text>
+        <view v-if="hasCompletedLink" class="home-completed-link" data-testid="home-completed-link" @click="goCompleted">
+          <view class="home-completed-link__icon">
+            <wd-icon name="history" size="40rpx" color="#267A5A" />
+          </view>
+          <view class="home-completed-link__text">
+            <text class="home-completed-link__title">看看我们做完的事</text>
+            <text class="home-completed-link__copy">已完成和已放弃会一直留着</text>
+          </view>
+          <text class="home-completed-link__arrow">›</text>
         </view>
       </template>
     </view>
 
-    <!-- 右下角悬浮"快速添加"按钮：仅在有家庭时显示，避开底部 tab bar -->
-    <view v-if="household && household.memberCount === 2" class="home-quick-add" data-testid="home-quick-add">
-      <view
-        class="home-quick-add__fab"
-        :class="{ 'home-quick-add__fab--busy': isQuickAdd }"
-        :aria-busy="isQuickAdd"
-        role="button"
-        @click="goAdd"
-      >
-        <text v-if="!isQuickAdd" class="home-quick-add__icon">+</text>
-        <wd-loading v-else size="24rpx" color="#ffffff" />
-      </view>
-    </view>
+    <!-- 悬浮"快速添加"按钮：仅在有家庭时显示；用 Wot UI 的 wd-fab 组件，避开 tab bar -->
+    <wd-fab
+      v-if="household && household.memberCount === 2"
+      type="primary"
+      position="right-bottom"
+      :expandable="false"
+      :gap="{ right: 32, bottom: 180 }"
+      :loading="isQuickAdd"
+      :aria-busy="isQuickAdd"
+      data-testid="home-quick-add"
+      @click="goAdd"
+    />
 
     <AppTabBar active="home" />
   </view>
@@ -183,13 +189,24 @@ onShow(() => {
 .home-empty__copy { margin-top: 12rpx; color: $brand-color-text-secondary; font-size: 25rpx; line-height: 1.6; }
 .home-tasks { display: flex; flex-direction: column; margin-top: 36rpx; }
 .home-error { display: block; margin-top: 24rpx; color: #c5684d; font-size: 25rpx; text-align: center; }
-.home-completed-link { margin-top: 32rpx; text-align: right; }
-.home-completed-link-text { color: $brand-color-primary; font-size: 24rpx; }
-/* 右下角圆形悬浮按钮：bottom 需大于 tab bar 高度（默认 ~100rpx + 安全区 ~34rpx），
-   留 50rpx 间距让按钮"浮在" tab 之上而不是压在 tab 上。 */
-.home-quick-add { position: fixed; right: 40rpx; bottom: 180rpx; z-index: 10; }
-.home-quick-add__fab { display: flex; align-items: center; justify-content: center; width: 100rpx; height: 100rpx; border-radius: 50%; background: $brand-color-primary; box-shadow: 0 12rpx 28rpx rgba(38, 122, 90, .28); transition: transform .15s ease, opacity .15s ease; }
-.home-quick-add__fab--busy { opacity: .7; }
-.home-quick-add__fab:active { transform: scale(.94); }
-.home-quick-add__icon { display: block; color: #fff; font-size: 56rpx; font-weight: 300; line-height: 56rpx; text-align: center; }
+.home-completed-link {
+  display: flex; align-items: center; gap: 20rpx;
+  margin-top: 24rpx;
+  padding: 24rpx 24rpx;
+  border-radius: 20rpx;
+  background: $brand-color-surface;
+  transition: transform .12s ease, background .15s ease;
+}
+.home-completed-link:active { transform: scale(.99); background: #effbf5; }
+.home-completed-link__icon {
+  width: 64rpx; height: 64rpx;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 16rpx;
+  background: #effbf5;
+  flex-shrink: 0;
+}
+.home-completed-link__text { display: flex; flex: 1; flex-direction: column; gap: 4rpx; min-width: 0; }
+.home-completed-link__title { color: $brand-color-text; font-size: 28rpx; font-weight: 600; line-height: 1.3; }
+.home-completed-link__copy { color: $brand-color-text-secondary; font-size: 22rpx; line-height: 1.4; }
+.home-completed-link__arrow { color: $brand-color-text-secondary; font-size: 40rpx; font-weight: 300; line-height: 1; flex-shrink: 0; }
 </style>
