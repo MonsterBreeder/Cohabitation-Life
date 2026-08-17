@@ -85,9 +85,11 @@
 - 等待部署状态变为"部署成功"，记录版本号。
 - 确认 `task` 云函数内的 `package.json` 已经声明 `wx-server-sdk`。
 - `task` 云函数不需要图片安全检查，`config.json` 仅保留 `security.msgSecCheck` 权限。
-- `task` 云函数当前支持 9 个 action：`create` / `claim` / `complete` / `abandon` / `update` / `addComment` / `getDetail` / `listCurrent` / `listCompleted`。
+- `task` 云函数当前支持 10 个 action：`create` / `claim` / `complete` / `abandon` / `update` / `addComment` / `delete` / `getDetail` / `listCurrent` / `listCompleted`。
   - `update`（PRD 006）：编辑 name / type / dueDate / note；带 `editVersion` 乐观锁；只有 pending / claimed 可改；返回最新 `task` + `events` + `editVersion`。
   - `addComment`（PRD 006）：多人评论 1-200 字；评论不可改不可删；终态后拒绝；返回最新 `detail`（含 `comments` 数组 + `editVersion`）。
+  - `delete`（PRD 007）：软删除（写 `deletedAt` + `deletedBy`，30 天后由 `cleanup-deleted-tasks` 定时任务物理清理）；只有 pending / claimed 可删；返回 `DELETED` + `deletedAt`。
+- **新增定时任务** `cloudfunctions/cleanup-deleted-tasks`：每日 03:00 触发，扫 `deletedAt < now - 30d` 的 task 物理删除（同时删关联的 `taskOperations`）。部署到云开发后，在云开发控制台 → 云函数 → 找到 `cleanup-deleted-tasks` → 触发器 → 创建定时触发器（cron: `0 3 * * * *`）。
 
 ### 2.1 实时推送（WeChat Cloud db.watch）
 
@@ -124,6 +126,19 @@
 8. **非成员访问**。第三方账号 C（未加入任何家庭）直接打开分享链接或复制 URL，都看不到 A、B 家庭的事项详情；通过控制台拉取 `tasks` 集合的数据也只返回空（权限拒绝）。
 9. **移除成员后归属**。A 创建双人家庭 → B 加入 → A 创建 3 个未终止事项 → A 移除 B → A 仍能看到这 3 个未终止事项；B 刷新后回到无家庭状态，看不到 A 的任何事项，包括这 3 个。
 10. **历史保留与分页**。累计创建 25 个事项，完成 25 个；打开"我们的家→已完成"翻页 2 次，看到 20 + 5 条，按时间倒序排列。
+
+### 4.1 事项删除（PRD 007）
+
+11. **删除 pending**：A 创建 → A 进详情 → 点"删除" → 二次确认 → 弹窗选"继续" → A 跳回首页看不到这条；B 刷新也看不到
+12. **删除 claimed**：A 创建 → B 认领 → A 点"删除" → 二次确认 → 双方都看不到这条；A 详情页操作记录里有"由 A 删除了"事件
+13. **删除实时推送**：A 在首页看 → B 在另一台设备删一条 → A 看到这条消失（无需手动刷新）
+14. **已终止不能删**：A 完成某事项 → A 进详情 → "删除"按钮**不显示**（操作按钮区只有"由 X 完成"chip + 截止日期 chip，没有"删除"）
+
+### 4.2 30 天软删清理（PRD 007 U6）
+
+15. **删除后数据库状态**：A 删除一条 → 查 `tasks` 集合 → 该文档 `deletedAt` 字段是 ISO 时间；`deletedBy` 是 A 的 identityKey
+16. **30 天清理前查询**：创建一条 31 天前软删的 task + 操作记录 → 列表查询时**看不到**（`deletedAt: null` 过滤）；详情查询返回 `TASK_NOT_FOUND`
+17. **30 天后定时清理**：手动把系统时间调到 deletedAt 之后 30 天 → 触发 `cleanup-deleted-tasks` → 任务文档 + 关联 taskOperations 物理删除
 11. **编辑权限与可见**。A 创建事项后 B 刷新能看到 → B 进入详情 → 点"编辑事项" → 改名称和截止日期 → A 刷新后看到名称与截止日期均已更新，操作记录里出现"小美 修改了 名称、截止日期"。任一成员都能编辑（不含 assignee）。
 12. **editVersion CAS 冲突**。A、B 同时进入同一事项的编辑页 → A 先保存成功（editVersion +1）→ B 再保存 → B 收到"请求已处理，请刷新后查看最新状态"，刷新后看到 A 编辑后的内容。
 13. **评论实时推送**。A、B 同时打开同一事项详情 → A 发送"我下班顺路买"→ B 在 2 秒内看到这条评论出现在"备注对话"区，无需手动刷新。

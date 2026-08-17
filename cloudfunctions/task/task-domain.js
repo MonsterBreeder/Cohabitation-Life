@@ -10,7 +10,7 @@ const { commentId } = require('./repository-data')
 const TASK_TYPES = new Set(['low_stock', 'to_handle', 'expiring'])
 const OPEN_STATUSES = new Set(['pending', 'claimed'])
 const TERMINAL_STATUSES = new Set(['completed', 'abandoned'])
-const EVENT_KINDS = new Set(['create', 'claim', 'complete', 'abandon', 'edit'])
+const EVENT_KINDS = new Set(['create', 'claim', 'complete', 'abandon', 'edit', 'delete'])
 const EDIT_FIELDS = new Set(['name', 'type', 'dueDate', 'note'])
 
 const CREDENTIAL_PATTERN = /^[A-Za-z0-9_-]{16,128}$/
@@ -386,6 +386,8 @@ async function getTaskDetail(input, dependencies) {
 
   const task = await repository.getTask(input.taskId)
   if (!task) throw new TaskDomainError('TASK_NOT_FOUND')
+  // PRD 007：软删的任务对前端不可见
+  if (isTaskDeleted(task)) throw new TaskDomainError('TASK_NOT_FOUND')
   // 校验家庭归属
   if (!await repository.isMemberOfHousehold(identityKey, task.householdId)) {
     throw new TaskDomainError('TASK_FORBIDDEN')
@@ -731,6 +733,64 @@ async function getTaskDetailResponse(task, identityKey, repository) {
   }
 }
 
+// === PRD 007：删除事项（软删除） ===
+
+/** 软删除标记。R8/R15/R16：所有读路径过滤掉 deletedAt != null 的 task。 */
+function isTaskDeleted(record) {
+  return Boolean(record && record.deletedAt)
+}
+
+async function deleteTask(input, dependencies) {
+  const { identityKey, repository, now } = dependencies
+  if (!identityKey || !repository) throw new TaskDomainError('TASK_INVALID_REQUEST')
+  validateCommonAuth(input)
+  if (!input || typeof input.taskId !== 'string' || !input.taskId) {
+    throw new TaskDomainError('TASK_INVALID_REQUEST')
+  }
+
+  // 幂等：同 operationToken 重复提交 → 直接返回上次结果（前置，跟 updateTask 一样）
+  const opId = operationId(input.taskId, input.operationToken)
+  const existingOp = await repository.getOperation(opId)
+  if (existingOp && existingOp.kind === 'delete') {
+    // 读一次 task 拿 deletedAt；如果已被物理清理就按 found 兜底
+    const prev = await repository.getTask(input.taskId)
+    if (prev && prev.deletedAt) {
+      return { status: 'DELETED', retryable: false, taskId: input.taskId, deletedAt: toIsoString(prev.deletedAt) || new Date().toISOString() }
+    }
+    // 任务已被物理清理（30 天后）：返回 TASK_NOT_FOUND
+    throw new TaskDomainError('TASK_NOT_FOUND')
+  }
+
+  const task = await repository.getTask(input.taskId)
+  if (!task || isTaskDeleted(task)) throw new TaskDomainError('TASK_NOT_FOUND')
+  if (!await repository.isMemberOfHousehold(identityKey, task.householdId)) {
+    throw new TaskDomainError('TASK_FORBIDDEN')
+  }
+  // R7：终态任务不允许删（completed / abandoned 是永久记录）
+  if (TERMINAL_STATUSES.has(task.status)) throw new TaskDomainError('TASK_TERMINAL')
+
+  return repository.runTransaction(async (transaction) => {
+    const refreshed = await transaction.getTask(input.taskId)
+    if (!refreshed || isTaskDeleted(refreshed)) throw new TaskDomainError('TASK_NOT_FOUND')
+    if (TERMINAL_STATUSES.has(refreshed.status)) throw new TaskDomainError('TASK_TERMINAL')
+    const at = now()
+    await transaction.updateTask(input.taskId, {
+      deletedAt: at,
+      deletedBy: identityKey,
+      updatedAt: at,
+    })
+    await transaction.createOperation({
+      _id: opId,
+      taskId: input.taskId,
+      householdId: task.householdId,
+      kind: 'delete',
+      actorKey: identityKey,
+      at,
+    })
+    return { status: 'DELETED', retryable: false, taskId: input.taskId, deletedAt: toIsoString(at) }
+  })
+}
+
 module.exports = {
   createTask,
   listCurrentTasks,
@@ -742,6 +802,9 @@ module.exports = {
   // PRD 006
   updateTask,
   addComment,
+  // PRD 007
+  deleteTask,
+  isTaskDeleted,
   taskSummaryFromRecord,
   taskEventFromRecord,
   completedTaskItemFromRecord,

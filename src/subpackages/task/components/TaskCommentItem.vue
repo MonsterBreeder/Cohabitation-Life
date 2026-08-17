@@ -13,20 +13,25 @@
         <text class="task-comment-item__name">{{ comment.actor.nickname || '成员' }}</text>
         <text class="task-comment-item__time">{{ relativeTime }}</text>
       </view>
-      <text class="task-comment-item__text" :selectable="true">{{ comment.text }}</text>
+      <text class="task-comment-item__text" :user-select="true">{{ comment.text }}</text>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { TaskComment } from '../../../../types/task'
-import { formatRelativeTime } from '../task-detail-view'
+import type { TaskComment } from '../../../types/task'
+import { formatRelativeTime } from '../task-detail/task-detail-view'
 
 const props = defineProps<{ comment: TaskComment }>()
 
-/** avatar id 的最后两位数字作为字母显示；中性头像用一个圆点。 */
+/**
+ * 头像里显示的字符：优先取昵称首字（最直观），回退到 avatar id 的末两位数字；
+ * 中性头像显示一个圆点。空昵称显示默认占位。
+ */
 const avatarLetter = computed(() => {
+  const nickname = (props.comment.actor.nickname || '').trim()
+  if (nickname) return nickname.charAt(0)
   const id = props.comment.actor.avatar.id
   if (id === 'person-neutral') return '·'
   const m = /person-(\d{2})/.exec(id)
@@ -41,7 +46,7 @@ const relativeTime = computed(() => formatRelativeTime(props.comment.at))
   display: flex;
   align-items: flex-start;
   gap: 16rpx;
-  padding: 14rpx 0;
+  padding: 4rpx 0;
 }
 .task-comment-item__avatar {
   flex-shrink: 0;
@@ -50,7 +55,7 @@ const relativeTime = computed(() => formatRelativeTime(props.comment.at))
   display: flex; align-items: center; justify-content: center;
   background: $brand-color-primary;
   color: #fff;
-  font-size: 22rpx;
+  font-size: 26rpx;
   font-weight: 600;
   letter-spacing: 0;
   margin-top: 4rpx;

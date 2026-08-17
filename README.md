@@ -98,7 +98,7 @@ docs/
 ├── plans/                          # 实施计划（按日期 + 模块名）
 └── brand/visual-standard.md        # 视觉规范
 tests/
-├── unit/                           # 28 套件 / 357 用例
+├── unit/                           # 28 套件 / 386 用例
 └── e2e/                            # 真机自动化（依赖微信开发者工具会话）
 ```
 
@@ -143,11 +143,21 @@ tests/
 - **幂等性**：编辑 / 评论各用独立的 `operationToken`；同 token 重复提交返回上次结果
 - **双账号真机验证 8 条新增路径**（11-18，详见 `cloudfunctions/README.md`）
 
+### 6. 事项删除（PRD 007 / Plan 2026-08-17-001）
+- **删除范围**：仅 pending/claimed；completed/abandoned 永久保留
+- **软删除**：`deletedAt` + `deletedBy` 字段；30 天后由 `cleanup-deleted-tasks` 定时任务物理清理
+- **任一家庭成员都能删**（不限于创建者）
+- **删除后 reLaunch 回首页**（不留历史栈）
+- **删除也走 watch**：其他家庭成员实时看到事项消失（`onDeleted` 回调 → `applyRemovedFromWatch`）
+- **二次确认弹窗**：「「{title}」删除后无法在产品内恢复，30 天后系统清理。是否继续？」
+- **无产品级恢复 UI**：30 天软删仅供工程师运维恢复
+- **双账号真机验证 4 条新增路径**（19-22，详见 `cloudfunctions/README.md`）
+
 ## 验证
 
 ```powershell
 npm run type-check      # vue-tsc --noEmit，0 错
-npm run test:unit       # 28 套件 / 357 用例
+npm run test:unit       # 28 套件 / 386 用例
 npm run build:mp-weixin # 微信小程序构建
 npm run build:h5        # H5 构建
 npm run test:e2e        # 依赖微信开发者工具的 automator，会话不通则跳过

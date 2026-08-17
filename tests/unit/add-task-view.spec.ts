@@ -134,17 +134,17 @@ function buildDetail(overrides: Partial<TaskDetail> = {}): TaskDetail {
 
 describe('task-detail-view', () => {
   describe('describeActions', () => {
-    it('pending: claim / complete / abandon / edit all visible', () => {
+    it('pending: claim / complete / abandon / edit / delete all visible', () => {
       const a = describeActions(buildDetail({ status: 'pending' }))
-      expect(a).toEqual({ claim: true, complete: true, abandon: true, edit: true })
+      expect(a).toEqual({ claim: true, complete: true, abandon: true, edit: true, delete: true })
     })
 
-    it('claimed: claim hidden, complete / abandon / edit visible', () => {
+    it('claimed: claim hidden, complete / abandon / edit / delete visible', () => {
       const a = describeActions(buildDetail({
         status: 'claimed',
         assignee: { nickname: 'me', avatar: { kind: 'builtin', id: 'person-01' } },
       }))
-      expect(a).toEqual({ claim: false, complete: true, abandon: true, edit: true })
+      expect(a).toEqual({ claim: false, complete: true, abandon: true, edit: true, delete: true })
     })
 
     it('completed: all actions hidden', () => {
@@ -152,7 +152,7 @@ describe('task-detail-view', () => {
         status: 'pending',
         terminalKind: 'completed',
       }))
-      expect(a).toEqual({ claim: false, complete: false, abandon: false, edit: false })
+      expect(a).toEqual({ claim: false, complete: false, abandon: false, edit: false, delete: false })
     })
 
     it('abandoned: all actions hidden', () => {
@@ -160,12 +160,12 @@ describe('task-detail-view', () => {
         status: 'pending',
         terminalKind: 'abandoned',
       }))
-      expect(a).toEqual({ claim: false, complete: false, abandon: false, edit: false })
+      expect(a).toEqual({ claim: false, complete: false, abandon: false, edit: false, delete: false })
     })
 
     it('returns all false for undefined', () => {
       const a = describeActions(undefined)
-      expect(a).toEqual({ claim: false, complete: false, abandon: false, edit: false })
+      expect(a).toEqual({ claim: false, complete: false, abandon: false, edit: false, delete: false })
     })
   })
 

@@ -8,6 +8,7 @@ import type {
   ClaimTaskRequest,
   CompleteTaskRequest,
   CreateTaskRequest,
+  DeleteTaskRequest,
   TaskResult,
   TaskSummary,
   UpdateTaskRequest,
@@ -50,6 +51,7 @@ function makeCloudClient(handlers: Partial<{
   abandon: (input: AbandonTaskRequest) => Promise<TaskResult>
   update: (input: UpdateTaskRequest) => Promise<TaskResult>
   addComment: (input: AddCommentRequest) => Promise<TaskResult>
+  delete: (input: DeleteTaskRequest) => Promise<TaskResult>
 }> = {}) {
   return {
     listCurrent: handlers.listCurrent ?? (async () => ({ status: 'LISTED' as const, retryable: false, current: { priority: [], groups: { low_stock: [], to_handle: [], expiring: [] } } })),
@@ -75,6 +77,12 @@ function makeCloudClient(handlers: Partial<{
         comments: [{ id: 'c1', actor: { nickname: 'me', avatar: { kind: 'builtin' as const, id: 'person-01' } }, text: input.text, at: '2026-08-14T10:00:00.000Z' }],
         editVersion: 0,
       },
+    })),
+    delete: handlers.delete ?? (async (input: DeleteTaskRequest) => ({
+      status: 'DELETED' as const,
+      retryable: false,
+      taskId: input.taskId,
+      deletedAt: '2026-08-17T10:00:00.000Z',
     })),
   }
 }
@@ -668,5 +676,156 @@ describe('task store', () => {
       expect(watchers[0].close).toHaveBeenCalled()
     })
   })
+
+
+  // === PRD 007 U3：delete action + applyRemoved* ===
+
+  describe('delete（PRD 007 软删除）', () => {
+    it('DELETED 成功 → 从 current 三分组都移除 + 清空 detail', async () => {
+      const client = makeCloudClient({
+        listCurrent: async () => ({ status: 'LISTED', retryable: false, current: { priority: [], groups: { low_stock: [makeSummary({ id: 't1' })], to_handle: [makeSummary({ id: 't1' })], expiring: [] } } }),
+        delete: async () => ({ status: 'DELETED', retryable: false, taskId: 't1', deletedAt: '2026-08-17T10:00:00.000Z' }),
+      })
+      setTaskStoreCloudClientForTesting(client)
+      const store = useTaskStore()
+      await store.loadCurrent()
+      store.detail = { ...makeSummary({ id: 't1' }), events: [], comments: [], editVersion: 0 }
+      store.detailTaskId = 't1'
+      const ok = await store.delete('t1')
+      expect(ok).toBe(true)
+      expect(store.current?.groups.low_stock).toHaveLength(0)
+      expect(store.current?.groups.to_handle).toHaveLength(0)
+      expect(store.detail).toBeUndefined()
+      expect(store.detailTaskId).toBeUndefined()
+      expect(store.phase).toBe('loaded')
+    })
+
+    it('TASK_TERMINAL → 受控错误消息', async () => {
+      const client = makeCloudClient({ delete: async () => ({ status: 'TASK_TERMINAL', retryable: false, errorMessage: 'done' }) })
+      setTaskStoreCloudClientForTesting(client)
+      const store = useTaskStore()
+      const ok = await store.delete('t1')
+      expect(ok).toBe(false)
+      expect(store.errorMessage).toBe('事项已经结束，不能再操作')
+    })
+
+    it('TASK_FORBIDDEN → 受控错误消息', async () => {
+      const client = makeCloudClient({ delete: async () => ({ status: 'TASK_FORBIDDEN', retryable: false, errorMessage: 'no access' }) })
+      setTaskStoreCloudClientForTesting(client)
+      const store = useTaskStore()
+      const ok = await store.delete('t1')
+      expect(ok).toBe(false)
+      expect(store.errorMessage).toBe('你已经没有这个事项的访问权限')
+    })
+
+    it('in-flight 保护：重复点击只发一次', async () => {
+      let callCount = 0
+      const client = makeCloudClient({
+        delete: async () => {
+          callCount += 1
+          await new Promise((resolve) => setTimeout(resolve, 20))
+          return { status: 'DELETED', retryable: false, taskId: 't1', deletedAt: '2026-08-17T10:00:00.000Z' }
+        },
+      })
+      setTaskStoreCloudClientForTesting(client)
+      const store = useTaskStore()
+      const [r1, r2] = await Promise.all([store.delete('t1'), store.delete('t1')])
+      expect(callCount).toBe(1)
+      expect(r1 || r2).toBe(true)
+    })
+
+    it('applyRemovedFromCurrent 清掉 priority + 三分组', () => {
+      const store = useTaskStore()
+      store.current = {
+        priority: [makeSummary({ id: 't1' })],
+        groups: {
+          low_stock: [makeSummary({ id: 't1' })],
+          to_handle: [makeSummary({ id: 't1' })],
+          expiring: [makeSummary({ id: 't1' })],
+        },
+      }
+      store.applyRemovedFromCurrent('t1')
+      expect(store.current.priority).toHaveLength(0)
+      expect(store.current.groups.low_stock).toHaveLength(0)
+      expect(store.current.groups.to_handle).toHaveLength(0)
+      expect(store.current.groups.expiring).toHaveLength(0)
+    })
+
+    it('restorePending 映射 delete → deleting', async () => {
+      writePendingTask({ kind: 'delete', taskId: 't1', requestId: 'r1', operationToken: 'o1', startedAt: Date.now() })
+      const store = useTaskStore()
+      await store.restorePending()
+      expect(store.phase).toBe('deleting')
+    })
+  })
+
+
+  // === PRD 007 U5：watch 推删除通知 → applyRemovedFromWatch ===
+
+  describe('applyRemovedFromWatch', () => {
+    it('从 current 三分组都移除 + 清空正在看的 detail', () => {
+      const store = useTaskStore()
+      store.current = {
+        priority: [makeSummary({ id: 't1' })],
+        groups: {
+          low_stock: [makeSummary({ id: 't1' })],
+          to_handle: [makeSummary({ id: 't1' })],
+          expiring: [makeSummary({ id: 't1' })],
+        },
+      }
+      store.detail = { ...makeSummary({ id: 't1' }), events: [], comments: [], editVersion: 0 }
+      store.detailTaskId = 't1'
+      store.applyRemovedFromWatch('t1')
+      expect(store.current.priority).toHaveLength(0)
+      expect(store.current.groups.low_stock).toHaveLength(0)
+      expect(store.current.groups.to_handle).toHaveLength(0)
+      expect(store.current.groups.expiring).toHaveLength(0)
+      expect(store.detail).toBeUndefined()
+      expect(store.detailTaskId).toBeUndefined()
+    })
+
+    it('当前看的是别的 task → 不动 detail', () => {
+      const store = useTaskStore()
+      store.detail = { ...makeSummary({ id: 't_other' }), events: [], comments: [], editVersion: 0 }
+      store.detailTaskId = 't_other'
+      store.applyRemovedFromWatch('t1')
+      expect(store.detail?.id).toBe('t_other')
+    })
+
+    it('subscribeComments 把 onDeleted 接好（删除推送触发 applyRemovedFromWatch）', () => {
+      // 自包含：直接装一个 wx.cloud.database 触发 watch.onChange 推送 deletedAt
+      let onChangeCallback: ((snapshot: { type: 'init' | 'update'; docs: unknown[] }) => void) | undefined
+      const closeMock = jest.fn()
+      const watch = jest.fn((options: { onChange?: (s: { type: 'init' | 'update'; docs: unknown[] }) => void }) => {
+        onChangeCallback = options.onChange
+        return { close: closeMock }
+      })
+      setTaskCloudEnvironmentForTesting('test-env')
+      setTaskCloudRuntimeForTesting({
+        cloud: {
+          init: jest.fn(),
+          callFunction: jest.fn(),
+          database: { collection: () => ({ doc: () => ({ watch }) }) },
+        },
+      })
+      const store = useTaskStore()
+      store.current = {
+        priority: [makeSummary({ id: 't1' })],
+        groups: { low_stock: [], to_handle: [], expiring: [] },
+      }
+      store.subscribeComments('t1')
+      // 模拟 watch 推删除（deletedAt 非空 + comments 空数组）
+      onChangeCallback?.({
+        type: 'update',
+        docs: [{ _id: 't1', deletedAt: '2026-08-17T10:00:00.000Z', comments: [] }],
+      })
+      expect(store.current.priority).toHaveLength(0)
+      // cleanup：避免 resetTaskStoreForTesting 之前有未关的 watcher
+      store.unsubscribeComments()
+      resetTaskCloudForTesting()
+    })
+  })
 })
+
+
 

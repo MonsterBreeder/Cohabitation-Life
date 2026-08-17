@@ -11,6 +11,7 @@ const {
   listCompletedTasks,
   updateTask,
   addComment,
+  deleteTask,
   TaskDomainError,
 } = require('./task-domain')
 
@@ -57,9 +58,11 @@ function createRepository() {
       return Boolean(home && Array.isArray(home.memberKeys) && home.memberKeys.includes(identityKey))
     },
     findOpenTasksByHousehold: async (householdId, now) => {
+      // PRD 007：过滤软删（deletedAt IS NULL 或字段不存在）
       const result = await tasksCollection.where({
         householdId,
         status: db.command.in(['pending', 'claimed']),
+        deletedAt: null,
       }).limit(100).get()
       return result.data
     },
@@ -69,9 +72,11 @@ function createRepository() {
       return result.data.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
     },
     findCompletedTasksByHousehold: async (householdId, limit, cursor) => {
+      // PRD 007：过滤软删
       let query = tasksCollection.where({
         householdId,
         status: db.command.in(['completed', 'abandoned']),
+        deletedAt: null,
       })
       if (cursor && typeof cursor === 'string') {
         const decoded = decodeCursor(cursor)
@@ -79,6 +84,7 @@ function createRepository() {
           query = tasksCollection.where({
             householdId,
             status: db.command.in(['completed', 'abandoned']),
+            deletedAt: null,
             terminalAt: db.command.lt(decoded.at),
           })
         }
@@ -156,6 +162,8 @@ exports.main = async (event) => {
     // PRD 006
     if (action === 'update') return await updateTask(event, dependencies)
     if (action === 'addComment') return await addComment(event, dependencies)
+    // PRD 007
+    if (action === 'delete') return await deleteTask(event, dependencies)
     throw new TaskDomainError('TASK_INVALID_REQUEST')
   } catch (error) {
     if (error instanceof TaskDomainError) {

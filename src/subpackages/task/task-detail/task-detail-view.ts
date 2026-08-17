@@ -2,7 +2,7 @@ import type { TaskDetail, TaskEditField, TaskEvent } from '../../../types/task'
 
 // 详情页与测试共用的纯函数：操作按钮可见性、终止态文案、事件展示文案、编辑字段中文映射。
 
-export type DetailAction = 'claim' | 'complete' | 'abandon' | 'edit'
+export type DetailAction = 'claim' | 'complete' | 'abandon' | 'edit' | 'delete'
 
 export interface ActionAvailability {
   claim: boolean
@@ -10,11 +10,13 @@ export interface ActionAvailability {
   abandon: boolean
   /** 编辑：未终止时（pending / claimed）开放；终止态封口。 */
   edit: boolean
+  /** 删除：仅 pending/claimed 开放；终态不允许删。 */
+  delete: boolean
 }
 
-/** 任一成员都能完成/放弃/编辑；只有未负责人的事项可被认领。终止态全部禁用。 */
+/** 任一成员都能完成/放弃/编辑/删除；只有未负责人的事项可被认领。终止态全部禁用。 */
 export function describeActions(detail: TaskDetail | undefined): ActionAvailability {
-  if (!detail) return { claim: false, complete: false, abandon: false, edit: false }
+  if (!detail) return { claim: false, complete: false, abandon: false, edit: false, delete: false }
   // detail.status 字段是 OpenTaskStatus（pending/claimed）；终止态通过 terminalKind 表达。
   const isTerminal = Boolean(detail.terminalKind)
   return {
@@ -22,6 +24,7 @@ export function describeActions(detail: TaskDetail | undefined): ActionAvailabil
     complete: !isTerminal,
     abandon: !isTerminal,
     edit: !isTerminal,
+    delete: !isTerminal,
   }
 }
 
@@ -83,6 +86,12 @@ export function describeEventLine(event: TaskEvent): string {
 export function describeAbandonConfirmMessage(detail: TaskDetail | undefined): string {
   if (!detail) return '放弃后不可重新打开。是否继续？'
   return `「${detail.title}」放弃后不可重新打开。是否继续？`
+}
+
+/** 给定删除动作，需要先弹二次确认的文案（PRD 007 R3）。 */
+export function describeDeleteConfirmMessage(detail: TaskDetail | undefined): string {
+  if (!detail) return '删除后无法在产品内恢复，30 天后系统清理。是否继续？'
+  return `「${detail.title}」删除后无法在产品内恢复，30 天后系统清理。是否继续？`
 }
 
 /** 给定事项截止日期，给出"今天/已逾期/N 天后"等相对描述。 */

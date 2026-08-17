@@ -1,0 +1,9 @@
+{
+  "name": "cleanup-deleted-tasks",
+  "version": "1.0.0",
+  "description": "PRD 007：每日定时清理 30 天前软删的事项 + 关联 taskOperations",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

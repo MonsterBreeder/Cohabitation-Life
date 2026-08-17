@@ -5,6 +5,7 @@ import {
   claimTaskInCloud,
   completeTaskInCloud,
   createTaskInCloud,
+  deleteTaskInCloud,
   getTaskDetailInCloud,
   listCompletedTasksInCloud,
   listCurrentTasksInCloud,
@@ -22,6 +23,7 @@ import type {
   CompletedTaskItem,
   CreateTaskRequest,
   CurrentTasks,
+  DeleteTaskRequest,
   TaskComment,
   TaskDetail,
   TaskEvent,
@@ -46,7 +48,7 @@ import store from '..'
 // 4) 超时后先做轻量查询再决定显示结果
 // 5) authoritativeRevision 机制防 race（家庭归属变更时旧结果不覆盖新结果）
 
-type TaskPhase = 'checking' | 'editable' | 'creating' | 'claiming' | 'completing' | 'abandoning' | 'updating' | 'commenting' | 'loaded' | 'failed'
+type TaskPhase = 'checking' | 'editable' | 'creating' | 'claiming' | 'completing' | 'abandoning' | 'updating' | 'commenting' | 'deleting' | 'loaded' | 'failed'
 
 interface TaskCloudClient {
   create(input: CreateTaskRequest): Promise<TaskResult>
@@ -55,6 +57,7 @@ interface TaskCloudClient {
   abandon(input: AbandonTaskRequest): Promise<TaskResult>
   update(input: UpdateTaskRequest): Promise<TaskResult>
   addComment(input: AddCommentRequest): Promise<TaskResult>
+  delete(input: DeleteTaskRequest): Promise<TaskResult>
   getDetail(taskId: string): Promise<TaskResult>
   listCurrent(): Promise<TaskResult>
   listCompleted(input: { limit: number; cursor?: string }): Promise<TaskResult>
@@ -67,6 +70,7 @@ const defaultCloudClient: TaskCloudClient = {
   abandon: abandonTaskInCloud,
   update: updateTaskInCloud,
   addComment: addCommentInCloud,
+  delete: deleteTaskInCloud,
   getDetail: getTaskDetailInCloud,
   listCurrent: listCurrentTasksInCloud,
   listCompleted: listCompletedTasksInCloud,
@@ -81,6 +85,7 @@ let completeInFlight: Promise<unknown> | undefined
 let abandonInFlight: Promise<unknown> | undefined
 let updateInFlight: Promise<unknown> | undefined
 let addCommentInFlight: Promise<unknown> | undefined
+let deleteInFlight: Promise<unknown> | undefined
 let loadCurrentInFlight: Promise<unknown> | undefined
 let loadDetailInFlight: Promise<unknown> | undefined
 let loadCompletedInFlight: Promise<unknown> | undefined
@@ -616,6 +621,68 @@ export const useTaskStore = defineStore('task', {
       this.detail = { ...detail, comments: merged }
     },
 
+    /** 从 current 列表移除指定 taskId（priority + 三个 type 分组都清）。 */
+    applyRemovedFromCurrent(taskId: string): void {
+      const current = this.current
+      if (!current) return
+      current.priority = current.priority.filter((t) => t.id !== taskId)
+      current.groups.low_stock = current.groups.low_stock.filter((t) => t.id !== taskId)
+      current.groups.to_handle = current.groups.to_handle.filter((t) => t.id !== taskId)
+      current.groups.expiring = current.groups.expiring.filter((t) => t.id !== taskId)
+    },
+
+    /** watch 推删除通知用：从 current + detail 同时移除指定 task（保留其他字段不覆盖）。 */
+    applyRemovedFromWatch(taskId: string): void {
+      this.applyRemovedFromCurrent(taskId)
+      // 如果当前正在看这条详情，清空 detail（避免用户继续在已删除的页面操作）
+      if (this.detail && this.detail.id === taskId) {
+        this.detail = undefined
+        this.detailTaskId = undefined
+      }
+    },
+
+    /**
+     * 删除事项（PRD 007 软删除）。仅 pending/claimed 可删。
+     * 成功 → 清空 detail + 从 current 移除 + 返回 true；UI 应 reLaunch 回首页。
+     */
+    async delete(taskId: string): Promise<boolean> {
+      if (deleteInFlight) return false
+      const requestId = credential('request')
+      const operationToken = credential('operation')
+      this.pending = { kind: 'delete', taskId, requestId, operationToken, startedAt: Date.now() }
+      writePendingTask(this.pending)
+      this.phase = 'deleting'
+      this.errorMessage = undefined
+
+      deleteInFlight = (async () => {
+        try {
+          const result = await cloudClient.delete({ taskId, requestId, operationToken })
+          if (result.status === 'DELETED') {
+            this.applyRemovedFromCurrent(taskId)
+            this.detail = undefined
+            this.detailTaskId = undefined
+            clearPendingTask()
+            this.pending = undefined
+            this.phase = 'loaded'
+            return true
+          }
+          this.phase = 'failed'
+          this.errorMessage = humaniseError(result)
+          return false
+        } catch (error: unknown) {
+          if (error instanceof TaskCloudError && error.code === 'TIMEOUT') {
+            return this.recoverAfterTimeout('delete', taskId)
+          }
+          this.phase = 'failed'
+          this.errorMessage = '暂时无法删除，请稍后重试'
+          return false
+        } finally {
+          deleteInFlight = undefined
+        }
+      })()
+      return (await deleteInFlight) === true
+    },
+
     /**
      * 订阅指定事项的评论实时推送（WeChat Cloud db.watch）。
      * 同一 taskId 多次调用会关闭前一个 watcher；切换 taskId 也会先 close。
@@ -631,6 +698,10 @@ export const useTaskStore = defineStore('task', {
         onComments: (newComments) => {
           // R28：只合并评论，不覆盖 detail 其他字段（保留正在编辑的标题/截止日/类型）
           this.applyCommentedFromWatch(newComments)
+        },
+        // PRD 007 R18：watch 推删除通知 → 从 current + detail 移除
+        onDeleted: () => {
+          this.applyRemovedFromWatch(taskId)
         },
         onError() {
           // R30：连接断开静默回退到 onShow 拉取
@@ -657,7 +728,8 @@ export const useTaskStore = defineStore('task', {
         : pending.kind === 'complete' ? 'completing'
         : pending.kind === 'abandon' ? 'abandoning'
         : pending.kind === 'update' ? 'updating'
-        : 'commenting'
+        : pending.kind === 'addComment' ? 'commenting'
+        : 'deleting'
       this.errorMessage = '上次操作仍在确认中'
     },
   },
@@ -676,6 +748,7 @@ export function resetTaskStoreForTesting(): void {
   abandonInFlight = undefined
   updateInFlight = undefined
   addCommentInFlight = undefined
+  deleteInFlight = undefined
   loadCurrentInFlight = undefined
   loadDetailInFlight = undefined
   loadCompletedInFlight = undefined

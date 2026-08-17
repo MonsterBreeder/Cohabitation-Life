@@ -10,6 +10,7 @@ const {
   listCompletedTasks,
   updateTask,
   addComment,
+  deleteTask,
   computeIsOverdueOrToday,
   TaskDomainError,
 } = require('../../cloudfunctions/task/task-domain')
@@ -41,13 +42,15 @@ function createRepository(initial: { tasks?: any[]; operations?: any[]; househol
     getTask: jest.fn(async (id: string) => tasks.get(id) || null),
     getOperation: jest.fn(async (id: string) => operations.get(id) || null),
     findOpenTasksByHousehold: jest.fn(async (householdId: string) =>
-      [...tasks.values()].filter((t) => t.householdId === householdId && (t.status === 'pending' || t.status === 'claimed')),
+      // PRD 007：过滤软删（deletedAt 为 null 或字段不存在）
+      [...tasks.values()].filter((t) => t.householdId === householdId && (t.status === 'pending' || t.status === 'claimed') && !t.deletedAt),
     ),
     findOperationsByTaskId: jest.fn(async (taskId: string) =>
       [...operations.values()].filter((o) => o.taskId === taskId).sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime()),
     ),
     findCompletedTasksByHousehold: jest.fn(async (householdId: string, limit: number, cursor?: string) => {
-      let list = [...tasks.values()].filter((t) => t.householdId === householdId && (t.status === 'completed' || t.status === 'abandoned'))
+      // PRD 007：过滤软删
+      let list = [...tasks.values()].filter((t) => t.householdId === householdId && (t.status === 'completed' || t.status === 'abandoned') && !t.deletedAt)
       if (cursor) {
         const decoded = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'))
         list = list.filter((t) => new Date(t.terminalAt).getTime() < new Date(decoded.at).getTime())
@@ -795,4 +798,129 @@ describe('addComment', () => {
     const detail: any = await getTaskDetail({ taskId: 't1' }, dependencies(repository, { identityKey: 'user_a' }))
     expect(detail.detail.comments.map((c: any) => c.text)).toEqual(['第二条', '第一条'])
   })
+
+
+  // === PRD 007 U2：deleteTask 域函数 ===
+
+  describe('deleteTask（PRD 007 软删除）', () => {
+    const baseOpenTask = {
+      _id: 't1',
+      householdId: 'home_x',
+      type: 'to_handle',
+      title: 'X',
+      status: 'pending',
+      createdBy: 'user_a',
+      createdAt: '2026-08-14T09:00:00.000Z',
+      updatedAt: '2026-08-14T09:00:00.000Z',
+      comments: [],
+      editVersion: 0,
+    }
+
+    it('happy path：任一家庭成员删 pending → 写 deletedAt + taskOperation', async () => {
+      const repository = createRepository({
+        households: [singleHome('user_a', 'user_b')],
+        tasks: [structuredClone(baseOpenTask)],
+        users: [profileFor('user_b', '小美')],
+      })
+      const result = await deleteTask({ taskId: 't1', requestId: 'request_u2_p7x1a9', operationToken: 'operation_u2_p7x1a9' }, dependencies(repository, { identityKey: 'user_b' }))
+      expect(result.status).toBe('DELETED')
+      expect(result.taskId).toBe('t1')
+      expect(typeof result.deletedAt).toBe('string')
+      const taskAfter = repository._tasks.get('t1')
+      expect(taskAfter.deletedAt).toBeDefined()
+      expect(taskAfter.deletedBy).toBe('user_b')
+      // 写了一条 taskOperation，kind=delete
+      const opIds = [...repository._operations.keys()]
+      const deleteOp = [...repository._operations.values()].find((o) => o.taskId === 't1' && o.kind === 'delete')
+      expect(deleteOp).toBeDefined()
+      expect(deleteOp.actorKey).toBe('user_b')
+    })
+
+    it('happy path：删 claimed 也允许', async () => {
+      const repository = createRepository({
+        households: [singleHome('user_a', 'user_b')],
+        tasks: [{ ...structuredClone(baseOpenTask), status: 'claimed', assigneeKey: 'user_a' }],
+      })
+      const result = await deleteTask({ taskId: 't1', requestId: 'request_u2_p7x1a9', operationToken: 'operation_u2_p7x1a9' }, dependencies(repository, { identityKey: 'user_b' }))
+      expect(result.status).toBe('DELETED')
+    })
+
+    it('拒绝：completed（终态）→ TASK_TERMINAL', async () => {
+      const repository = createRepository({
+        households: [singleHome('user_a')],
+        tasks: [{ ...structuredClone(baseOpenTask), status: 'completed', terminalAt: '2026-08-15T10:00:00.000Z', terminalBy: 'user_a', terminalKind: 'completed' }],
+      })
+      await expect(deleteTask({ taskId: 't1', requestId: 'request_u2_p7x1a9', operationToken: 'operation_u2_p7x1a9' }, dependencies(repository, { identityKey: 'user_a' }))).rejects.toMatchObject({ code: 'TASK_TERMINAL' })
+    })
+
+    it('拒绝：abandoned（终态）→ TASK_TERMINAL', async () => {
+      const repository = createRepository({
+        households: [singleHome('user_a')],
+        tasks: [{ ...structuredClone(baseOpenTask), status: 'abandoned', terminalAt: '2026-08-15T10:00:00.000Z', terminalBy: 'user_a', terminalKind: 'abandoned' }],
+      })
+      await expect(deleteTask({ taskId: 't1', requestId: 'request_u2_p7x1a9', operationToken: 'operation_u2_p7x1a9' }, dependencies(repository, { identityKey: 'user_a' }))).rejects.toMatchObject({ code: 'TASK_TERMINAL' })
+    })
+
+    it('拒绝：非家庭成员 → TASK_FORBIDDEN', async () => {
+      const repository = createRepository({
+        households: [singleHome('user_a')],
+        tasks: [structuredClone(baseOpenTask)],
+      })
+      await expect(deleteTask({ taskId: 't1', requestId: 'request_u2_p7x1a9', operationToken: 'operation_u2_p7x1a9' }, dependencies(repository, { identityKey: 'user_outsider' }))).rejects.toMatchObject({ code: 'TASK_FORBIDDEN' })
+    })
+
+    it('拒绝：已软删 → TASK_NOT_FOUND', async () => {
+      const repository = createRepository({
+        households: [singleHome('user_a')],
+        tasks: [{ ...structuredClone(baseOpenTask), deletedAt: '2026-08-16T10:00:00.000Z', deletedBy: 'user_a' }],
+      })
+      await expect(deleteTask({ taskId: 't1', requestId: 'request_u2_p7x1a9', operationToken: 'operation_u2_p7x1a9' }, dependencies(repository, { identityKey: 'user_a' }))).rejects.toMatchObject({ code: 'TASK_NOT_FOUND' })
+    })
+
+    it('拒绝：任务不存在 → TASK_NOT_FOUND', async () => {
+      const repository = createRepository({
+        households: [singleHome('user_a')],
+        tasks: [],
+      })
+      await expect(deleteTask({ taskId: 'missing', requestId: 'request_u2_p7x1a9', operationToken: 'operation_u2_p7x1a9' }, dependencies(repository, { identityKey: 'user_a' }))).rejects.toMatchObject({ code: 'TASK_NOT_FOUND' })
+    })
+
+    it('幂等：同 operationToken 重复提交 → 返回上次结果（不重复写 op）', async () => {
+      const repository = createRepository({
+        households: [singleHome('user_a')],
+        tasks: [structuredClone(baseOpenTask)],
+      })
+      const r1 = await deleteTask({ taskId: 't1', requestId: 'request_u2_p7x1a9', operationToken: 'operation_u2_p7x1a9' }, dependencies(repository, { identityKey: 'user_a' }))
+      const r2 = await deleteTask({ taskId: 't1', requestId: 'request_u2_p7x1a9', operationToken: 'operation_u2_p7x1a9' }, dependencies(repository, { identityKey: 'user_a' }))
+      expect(r1.status).toBe('DELETED')
+      expect(r2.status).toBe('DELETED')
+      expect(r1.deletedAt).toBe(r2.deletedAt)
+      // op 数量 = 1
+      const deleteOps = [...repository._operations.values()].filter((o) => o.taskId === 't1' && o.kind === 'delete')
+      expect(deleteOps).toHaveLength(1)
+    })
+
+    it('listCurrentTasks 过滤已软删（deletedAt != null 不出现）', async () => {
+      const repository = createRepository({
+        households: [singleHome('user_a', 'user_b')],
+        tasks: [
+          { ...structuredClone(baseOpenTask), _id: 't_live', title: 'live' },
+          { ...structuredClone(baseOpenTask), _id: 't_gone', title: 'gone', deletedAt: '2026-08-16T10:00:00.000Z', deletedBy: 'user_a' },
+        ],
+      })
+      const result = await listCurrentTasks(dependencies(repository, { identityKey: 'user_a' }))
+      const ids = result.current.priority.concat(result.current.groups.low_stock, result.current.groups.to_handle, result.current.groups.expiring).map((t) => t.id)
+      expect(ids).toContain('t_live')
+      expect(ids).not.toContain('t_gone')
+    })
+
+    it('getTaskDetail 看到 deletedAt != null 返回 TASK_NOT_FOUND', async () => {
+      const repository = createRepository({
+        households: [singleHome('user_a')],
+        tasks: [{ ...structuredClone(baseOpenTask), deletedAt: '2026-08-16T10:00:00.000Z', deletedBy: 'user_a' }],
+      })
+      await expect(getTaskDetail({ taskId: 't1' }, dependencies(repository, { identityKey: 'user_a' }))).rejects.toMatchObject({ code: 'TASK_NOT_FOUND' })
+    })
+  })
 })
+

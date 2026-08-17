@@ -17,7 +17,7 @@ export type OpenTaskStatus = Extract<TaskStatus, 'pending' | 'claimed'>
 export type TerminalTaskStatus = Extract<TaskStatus, 'completed' | 'abandoned'>
 
 /** 事件类型，按时间倒序在详情页底部展示。 */
-export type TaskEventKind = 'create' | 'claim' | 'complete' | 'abandon' | 'edit'
+export type TaskEventKind = 'create' | 'claim' | 'complete' | 'abandon' | 'edit' | 'delete'
 
 /** 编辑事件可标记的字段名。assignee 在 PRD 005 范围外，本期不参与编辑。 */
 export type TaskEditField = 'name' | 'type' | 'dueDate' | 'note'
@@ -128,6 +128,7 @@ export type TaskResultStatus =
   | 'LISTED'
   | 'UPDATED'
   | 'COMMENTED'
+  | 'DELETED'
 
 export interface TaskResultBase {
   status: TaskResultStatus
@@ -188,8 +189,15 @@ export interface TaskCommentedResult extends TaskResultBase {
   detail: TaskDetail
 }
 
+/** 删除结果：仅返回被软删的任务 id + 删除时间。前端不需要返回 doc（已过滤）。 */
+export interface TaskDeletedResult extends TaskResultBase {
+  status: 'DELETED'
+  taskId: string
+  deletedAt: string
+}
+
 export interface TaskFailureResult extends TaskResultBase {
-  status: Exclude<TaskResultStatus, 'CREATED' | 'CLAIMED' | 'COMPLETED' | 'ABANDONED' | 'LOADED' | 'LISTED' | 'UPDATED' | 'COMMENTED'>
+  status: Exclude<TaskResultStatus, 'CREATED' | 'CLAIMED' | 'COMPLETED' | 'ABANDONED' | 'LOADED' | 'LISTED' | 'UPDATED' | 'COMMENTED' | 'DELETED'>
   errorMessage: string
 }
 
@@ -203,6 +211,7 @@ export type TaskResult =
   | TaskCompletedListResult
   | TaskUpdatedResult
   | TaskCommentedResult
+  | TaskDeletedResult
   | TaskFailureResult
 
 /** 新建请求：名称、类型、可选截止日期、可选备注。负责人和事件由服务端推导。 */
@@ -256,6 +265,13 @@ export interface UpdateTaskRequest {
 export interface AddCommentRequest {
   taskId: string
   text: string
+  requestId: string
+  operationToken: string
+}
+
+/** 删除请求：只对未终止事项生效；终态返回 TASK_TERMINAL。 */
+export interface DeleteTaskRequest {
+  taskId: string
   requestId: string
   operationToken: string
 }

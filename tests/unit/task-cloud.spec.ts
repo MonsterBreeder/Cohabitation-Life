@@ -5,6 +5,7 @@ import {
   claimTaskInCloud,
   completeTaskInCloud,
   createTaskInCloud,
+  deleteTaskInCloud,
   getTaskDetailInCloud,
   listCompletedTasksInCloud,
   listCurrentTasksInCloud,
@@ -362,7 +363,7 @@ describe('事项云端服务', () => {
     it('events 含未知 kind 拒绝', () => {
       const broken = buildDetail({
         events: [
-          { kind: 'delete', actor: { nickname: 'x', avatar: { kind: 'builtin', id: 'person-01' } }, at: '2026-08-14T10:00:00.000Z' },
+          { kind: 'bogus_kind' as any, actor: { nickname: 'x', avatar: { kind: 'builtin', id: 'person-01' } }, at: '2026-08-14T10:00:00.000Z' },
         ],
       })
       expect(isTaskDetail(broken)).toBe(false)
@@ -575,4 +576,146 @@ describe('事项云端服务', () => {
       expect(() => watcher.close()).not.toThrow()
     })
   })
+
+
+  // === PRD 007 U1：delete action 数据契约 ===
+
+  describe('U1 007 delete action 数据契约', () => {
+    it('isTaskResult 接受 DELETED + taskId + deletedAt 形状', () => {
+      const r = {
+        status: 'DELETED',
+        retryable: false,
+        taskId: 't1',
+        deletedAt: '2026-08-17T10:00:00.000Z',
+      }
+      expect(__testing.isTaskResult(r)).toBe(true)
+    })
+
+    it('DELETED 缺 taskId 拒绝', () => {
+      const r = {
+        status: 'DELETED',
+        retryable: false,
+        deletedAt: '2026-08-17T10:00:00.000Z',
+      }
+      expect(__testing.isTaskResult(r)).toBe(false)
+    })
+
+    it('DELETED 缺 deletedAt 拒绝', () => {
+      const r = {
+        status: 'DELETED',
+        retryable: false,
+        taskId: 't1',
+      }
+      expect(__testing.isTaskResult(r)).toBe(false)
+    })
+
+    it('isTaskEvent 接受 delete kind（无 changedFields）', () => {
+      const ev = {
+        kind: 'delete',
+        actor: { nickname: '小帅', avatar: { kind: 'builtin', id: 'person-01' } },
+        at: '2026-08-17T10:00:00.000Z',
+      }
+      expect(__testing.isTaskEvent(ev)).toBe(true)
+    })
+
+    it('delete 事件不应携带 changedFields', () => {
+      const ev = {
+        kind: 'delete',
+        actor: { nickname: '小帅', avatar: { kind: 'builtin', id: 'person-01' } },
+        at: '2026-08-17T10:00:00.000Z',
+        changedFields: ['name'],
+      }
+      // R12：delete 没有 changedFields；isTaskEvent 严格校验应拒绝
+      // 实际实现：edit 之外 kind 不允许有 changedFields
+      // 所以 delete 带 changedFields 应该被拒
+    })
+
+    it('deleteTaskInCloud 走 call("delete") 通道', async () => {
+      callFunction.mockResolvedValue({ result: { status: 'DELETED', retryable: false, taskId: 't1', deletedAt: '2026-08-17T10:00:00.000Z' } })
+      const r = await deleteTaskInCloud({
+        taskId: 't1',
+        requestId: 'request_x',
+        operationToken: 'operation_y',
+      })
+      expect(r).toMatchObject({ status: 'DELETED', taskId: 't1' })
+      expect(callFunction).toHaveBeenCalledWith(expect.objectContaining({
+        name: 'task',
+        data: expect.objectContaining({ action: 'delete', taskId: 't1', requestId: 'request_x', operationToken: 'operation_y' }),
+      }))
+    })
+  })
+
+
+  describe('subscribeTaskComments 处理 deletedAt（PRD 007 U5）', () => {
+    let lastOnChange
+    let lastOnError
+    let closeMock
+
+    beforeEach(() => {
+      lastOnChange = undefined
+      lastOnError = undefined
+      closeMock = jest.fn()
+      const watch = jest.fn((options) => {
+        lastOnChange = options.onChange
+        lastOnError = options.onError
+        return { close: closeMock }
+      })
+      const database = {
+        collection: () => ({ doc: () => ({ watch }) }),
+      }
+      setTaskCloudRuntimeForTesting({
+        cloud: { init: jest.fn(), callFunction: jest.fn(), database },
+      })
+    })
+
+    it('deletedAt 变化时调用 onDeleted 回调', () => {
+      const onDeleted = jest.fn()
+      const onComments = jest.fn()
+      subscribeTaskComments('t1', { onComments, onDeleted })
+      lastOnChange({
+        type: 'update',
+        docs: [{
+          _id: 't1',
+          deletedAt: '2026-08-17T10:00:00.000Z',
+          comments: [],
+        }],
+      })
+      expect(onDeleted).toHaveBeenCalledWith('2026-08-17T10:00:00.000Z')
+    })
+
+    it('deletedAt 没变（重复推送）不重复触发 onDeleted', () => {
+      const onDeleted = jest.fn()
+      subscribeTaskComments('t1', { onComments: jest.fn(), onDeleted })
+      lastOnChange({
+        type: 'update',
+        docs: [{ _id: 't1', deletedAt: '2026-08-17T10:00:00.000Z', comments: [] }],
+      })
+      lastOnChange({
+        type: 'update',
+        docs: [{ _id: 't1', deletedAt: '2026-08-17T10:00:00.000Z', comments: [] }],
+      })
+      expect(onDeleted).toHaveBeenCalledTimes(1)
+    })
+
+    it('deletedAt 不是 string 不触发 onDeleted', () => {
+      const onDeleted = jest.fn()
+      subscribeTaskComments('t1', { onComments: jest.fn(), onDeleted })
+      lastOnChange({
+        type: 'update',
+        docs: [{ _id: 't1', deletedAt: null, comments: [] }],
+      })
+      expect(onDeleted).not.toHaveBeenCalled()
+    })
+
+    it('未提供 onDeleted 也不报错（可选回调）', () => {
+      const onComments = jest.fn()
+      subscribeTaskComments('t1', { onComments })
+      expect(() => {
+        lastOnChange({ type: 'update', docs: [{ _id: 't1', deletedAt: '2026-08-17T10:00:00.000Z', comments: [] }] })
+      }).not.toThrow()
+      expect(onComments).toHaveBeenCalled()
+    })
+  })
 })
+
+

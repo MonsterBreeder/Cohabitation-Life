@@ -61,7 +61,7 @@ describe('describeActions', () => {
 
   it('detail 为 undefined：全部关闭', () => {
     const a = describeActions(undefined)
-    expect(a).toEqual({ claim: false, complete: false, abandon: false, edit: false })
+    expect(a).toEqual({ claim: false, complete: false, abandon: false, edit: false, delete: false })
   })
 })
 

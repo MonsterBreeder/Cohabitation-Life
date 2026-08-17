@@ -29,7 +29,9 @@
         <view class="task-detail-page__title-block">
           <text class="task-detail-page__title">{{ detail.title }}</text>
           <view class="task-detail-page__chips">
+            <!-- 终态下隐藏 type chip（避免"待处理"type 跟"已结束"语义冲突）；pending/claimed 才显示 -->
             <wd-tag
+              v-if="!detail.terminalKind"
               round
               plain
               type="primary"
@@ -127,6 +129,21 @@
         >
           放弃
         </wd-button>
+        <!-- 删除：仅 pending/claimed；终态不显示（R2）。紧邻"放弃"按钮 -->
+        <wd-button
+          v-if="availability.delete"
+          block
+          round
+          variant="plain"
+          type="danger"
+          size="large"
+          :loading="isDeleting"
+          :disabled="isAnyBusy"
+          data-testid="task-detail-delete"
+          @click="onDelete"
+        >
+          删除
+        </wd-button>
       </view>
 
       <!-- 事件流：wd-cell-group + 每个事件一行（左侧色点 + 描述 + 时间） -->
@@ -166,6 +183,7 @@ import { useTaskStore } from '../../../store/modules/task'
 import {
   describeAbandonConfirmMessage,
   describeActions,
+  describeDeleteConfirmMessage,
   describeDueLabel,
   describeEventLine,
   describeStatusLine,
@@ -173,17 +191,19 @@ import {
 import { todayIso } from '../add-task/add-task-view'
 // TASK_TYPES_DISPLAY 来自主包 task-shared：分包可引用主包，反向引用会在主包编译时丢失路径。
 import { TASK_TYPES_DISPLAY } from '../../../components/task/task-shared'
-import TaskComments from './components/TaskComments.vue'
+import TaskComments from '../components/TaskComments.vue'
 
 const taskStore = useTaskStore()
 const taskId = ref('')
 const loadError = ref('')
+const errorMessage = ref('')
 const isLoading = computed(() => taskStore.phase === 'checking')
 const isClaiming = computed(() => taskStore.phase === 'claiming')
 const isCompleting = computed(() => taskStore.phase === 'completing')
 const isAbandoning = computed(() => taskStore.phase === 'abandoning')
 const isEditing = computed(() => taskStore.phase === 'updating')
-const isAnyBusy = computed(() => isClaiming.value || isCompleting.value || isAbandoning.value || isEditing.value)
+const isDeleting = computed(() => taskStore.phase === 'deleting')
+const isAnyBusy = computed(() => isClaiming.value || isCompleting.value || isAbandoning.value || isEditing.value || isDeleting.value)
 const detail = computed(() => taskStore.detail)
 const availability = computed(() => describeActions(detail.value))
 const statusLine = computed(() => describeStatusLine(detail.value))
@@ -239,6 +259,25 @@ async function onAbandon(): Promise<void> {
   if (!confirmed.confirm) return
   await taskStore.abandon(taskId.value)
   uni.reLaunch({ url: '/pages/index/index' })
+}
+
+async function onDelete(): Promise<void> {
+  if (!taskId.value) return
+  // 二次确认（PRD 007 R3/R4）
+  const confirmed = await uni.showModal({
+    title: '删除这件事',
+    content: describeDeleteConfirmMessage(detail.value),
+    confirmText: '继续',
+    confirmColor: '#c5684d',
+  })
+  if (!confirmed.confirm) return
+  const ok = await taskStore.delete(taskId.value)
+  if (ok) {
+    // PRD 007 R23/R5：删除成功直接 reLaunch 回首页（不留历史栈）
+    uni.reLaunch({ url: '/pages/index/index' })
+  } else {
+    errorMessage.value = taskStore.errorMessage || '暂时无法删除，请稍后重试'
+  }
 }
 
 function formatTime(iso: string): string {

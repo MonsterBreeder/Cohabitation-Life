@@ -7,6 +7,7 @@ import type {
   CompletedTaskItem,
   CreateTaskRequest,
   CurrentTasks,
+  DeleteTaskRequest,
   ListCompletedRequest,
   TaskComment,
   TaskDetail,
@@ -32,6 +33,9 @@ interface TaskCloudRuntime {
           /** 微信云 db.watch：SSE 通道，返回 watcher；onChange 收到完整文档快照。 */
           watch(options: { onChange: (snapshot: WatchSnapshot) => void; onError?: (err: unknown) => void }): Watcher
         }
+      } & {
+        /** 备用签名：旧 SDK 可能在 collection 层级暴露 watch（防御写法） */
+        watch?(options: { onChange: (snapshot: WatchSnapshot) => void; onError?: (err: unknown) => void }): Watcher
       }
     }
   }
@@ -86,7 +90,7 @@ function initialize(): void {
 const TASK_TYPES_SET: ReadonlySet<string> = new Set(['low_stock', 'to_handle', 'expiring'])
 const TASK_STATUSES_OPEN_SET: ReadonlySet<string> = new Set(['pending', 'claimed'])
 const TASK_STATUSES_TERMINAL_SET: ReadonlySet<string> = new Set(['completed', 'abandoned'])
-const TASK_EVENT_KINDS_SET: ReadonlySet<string> = new Set(['create', 'claim', 'complete', 'abandon', 'edit'])
+const TASK_EVENT_KINDS_SET: ReadonlySet<string> = new Set(['create', 'claim', 'complete', 'abandon', 'edit', 'delete'])
 const TASK_EDIT_FIELDS_SET: ReadonlySet<string> = new Set(['name', 'type', 'dueDate', 'note'])
 
 /** 评论文本最长 200 字（PRD 006 R10），与 PRD 005 note 的 100 字区分。 */
@@ -267,6 +271,11 @@ function isTaskResult(value: unknown): value is TaskResult {
   if (r.status === 'COMMENTED') {
     return isTaskDetail((value as { detail?: unknown }).detail)
   }
+  // PRD 007：删除返回 { taskId, deletedAt }
+  if (r.status === 'DELETED') {
+    const v = value as { taskId?: unknown; deletedAt?: unknown }
+    return typeof v.taskId === 'string' && typeof v.deletedAt === 'string'
+  }
   if (isFailureStatus(r.status)) return typeof r.errorMessage === 'string'
   return false
 }
@@ -280,6 +289,7 @@ type TaskAction =
   | 'abandon'
   | 'update'
   | 'addComment'
+  | 'delete'
   | 'getDetail'
   | 'listCurrent'
   | 'listCompleted'
@@ -310,33 +320,49 @@ export const completeTaskInCloud = (input: CompleteTaskRequest) => call('complet
 export const abandonTaskInCloud = (input: AbandonTaskRequest) => call('abandon', input)
 export const updateTaskInCloud = (input: UpdateTaskRequest) => call('update', input)
 export const addCommentInCloud = (input: AddCommentRequest) => call('addComment', input)
+export const deleteTaskInCloud = (input: DeleteTaskRequest) => call('delete', input)
 export const getTaskDetailInCloud = (taskId: string) => call('getDetail', { taskId })
 export const listCurrentTasksInCloud = () => call('listCurrent', {})
 export const listCompletedTasksInCloud = (input: ListCompletedRequest) => call('listCompleted', input)
 
-// === 实时推送（PRD 006 U5：仅评论接 db.watch） ===
+// === 实时推送（PRD 006 U5 + PRD 007 U5：评论 + 删除都接 db.watch） ===
 // 微信云的 db.watch 走 SSE 通道，回调里拿到完整文档快照；
-// 我们只关心 comments 字段变化，其他字段（title/type/dueDate/note/status）
+// 我们只关心 comments 字段变化和 deletedAt 字段变化，其他字段（title/type/dueDate/note/status）
 // 不在这里合并，避免覆盖正在进行的编辑草稿。
 
 export interface TaskCommentsCallbacks {
   /** 当 watch 推送新评论时触发（已是合法 TaskComment 数组；空数组是初次 init）。 */
   onComments: (comments: TaskComment[]) => void
+  /** PRD 007：watch 推送 deletedAt 时触发，通知前端从 current / detail 移除。 */
+  onDeleted?: (deletedAt: string) => void
   /** watch 出错时触发（连接断开、权限问题等）。UI 不应弹 toast——静默回退到 onShow 重拉。 */
   onError?: (err: unknown) => void
 }
 
-/** 订阅指定事项的 comments 字段变化。返回 watcher；调用方负责在 unmount 时 close。 */
+/** 订阅指定事项的 comments + deletedAt 字段变化。返回 watcher；调用方负责在 unmount 时 close。 */
 export function subscribeTaskComments(taskId: string, callbacks: TaskCommentsCallbacks): Watcher {
   initialize()
   const db = cloudRuntime().database
-  if (!db) {
+  // 防御：测试云环境的 wx.cloud.database() 可能没有 .collection()（旧 SDK / 模拟器）
+  if (!db || typeof db.collection !== 'function') {
     callbacks.onError?.(new TaskCloudError('PLATFORM_UNSUPPORTED', '当前环境暂不支持云端实时数据'))
     return { close: () => undefined }
   }
-  return db.collection('tasks').doc(taskId).watch({
+  const collection = db.collection('tasks') as ReturnType<typeof db.collection> & { watch?: unknown }
+  if (typeof collection.doc !== 'function') {
+    callbacks.onError?.(new TaskCloudError('PLATFORM_UNSUPPORTED', '当前环境暂不支持 db.watch'))
+    return { close: () => undefined }
+  }
+  const docRef = collection.doc(taskId) as ReturnType<typeof collection.doc> & { watch?: unknown }
+  if (typeof docRef.watch !== 'function') {
+    callbacks.onError?.(new TaskCloudError('PLATFORM_UNSUPPORTED', '当前环境暂不支持 db.watch'))
+    return { close: () => undefined }
+  }
+  // 跟踪上一次推送的 deletedAt 状态，避免重复触发 onDeleted
+  let lastDeletedAt: string | null = null
+  return docRef.watch({
     onChange(snapshot) {
-      // R33：只读 docs[0].comments；其他字段变化忽略
+      // R33：只读 docs[0].comments + deletedAt；其他字段变化忽略
       if (!Array.isArray(snapshot?.docs) || snapshot.docs.length === 0) {
         callbacks.onComments([])
         return
@@ -346,17 +372,25 @@ export function subscribeTaskComments(taskId: string, callbacks: TaskCommentsCal
         callbacks.onComments([])
         return
       }
+      // 处理 deletedAt 变化（PRD 007 R17/R18）
+      const deletedAtRaw = (doc as { deletedAt?: unknown }).deletedAt
+      const deletedAt = typeof deletedAtRaw === 'string' ? deletedAtRaw : null
+      if (deletedAt && deletedAt !== lastDeletedAt) {
+        lastDeletedAt = deletedAt
+        callbacks.onDeleted?.(deletedAt)
+      }
+      // 处理 comments 变化（PRD 006）
       const commentsRaw = (doc as { comments?: unknown }).comments
-      if (!Array.isArray(commentsRaw)) {
+      if (Array.isArray(commentsRaw)) {
+        // R29：每条都过 isTaskComment 严格校验；不合法丢弃
+        const safe: TaskComment[] = []
+        for (const c of commentsRaw) {
+          if (isTaskComment(c)) safe.push(c)
+        }
+        callbacks.onComments(safe)
+      } else {
         callbacks.onComments([])
-        return
       }
-      // R29：每条都过 isTaskComment 严格校验；不合法丢弃
-      const safe: TaskComment[] = []
-      for (const c of commentsRaw) {
-        if (isTaskComment(c)) safe.push(c)
-      }
-      callbacks.onComments(safe)
     },
     onError(err) {
       // R30：连接断开静默回退，不弹错误

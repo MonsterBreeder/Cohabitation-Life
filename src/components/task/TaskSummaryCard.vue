@@ -59,6 +59,6 @@ const statusLabel = computed(() => {
 .task-summary-card__content { display: flex; flex: 1; flex-direction: column; gap: 6rpx; }
 .task-summary-card__title { color: $brand-color-text; font-size: 29rpx; font-weight: 600; line-height: 1.4; }
 .task-summary-card__meta { color: $brand-color-text-secondary; font-size: 23rpx; }
-.task-summary-card__priority { padding: 6rpx 14rpx; border-radius: 999rpx; background: #fff3e8; }
-.task-summary-card__priority-text { color: #a55d31; font-size: 21rpx; font-weight: 700; }
+.task-summary-card__priority { padding: 8rpx 18rpx; border-radius: 999rpx; background: #fff3e8; margin-left: 12rpx; flex-shrink: 0; }
+.task-summary-card__priority-text { color: #a55d31; font-size: 24rpx; font-weight: 700; }
 </style>
