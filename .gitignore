@@ -14,6 +14,10 @@ dist
 .compound-engineering/*.local.yaml
 .context/
 
+# 本地备份 / 一次性脚本（不入版本库）
+references/                  # 资源备份（如 brand-originals/）
+tmp/                         # 一次性 PowerShell / Node 脚本
+
 # Editor directories and files
 .idea
 *.suo

@@ -94,7 +94,7 @@ src/
 └── manifest.json
 cloudfunctions/                     # 4 个云函数源码
 docs/
-├── prd/                            # 5 份产品需求文档
+├── prd/                            # 7 份产品需求文档
 ├── plans/                          # 实施计划（按日期 + 模块名）
 └── brand/visual-standard.md        # 视觉规范
 tests/
@@ -153,6 +153,26 @@ tests/
 - **无产品级恢复 UI**：30 天软删仅供工程师运维恢复
 - **双账号真机验证 4 条新增路径**（19-22，详见 `cloudfunctions/README.md`）
 
+## 资源 / 体积优化
+
+2026-08-17 做了一次图片资源压缩，把主包从 **1.88 MB（已超 1.5 MB 警告线）** 降到 **601 KB**。
+
+| 资源 | 优化前 | 优化后 | 展示尺寸 |
+| --- | --- | --- | --- |
+| `src/static/brand/logo.png` | 1254×1254 / 958.6 KB | 256×256 / 62 KB | 124-152rpx |
+| `src/static/avatars/households/household-0{1,2,3}.png` | 512×512 / 81-89 KB × 3 | 192×192 / 26-32 KB × 3 | 116rpx |
+| `src/static/avatars/people/person-0{1,2,3,4}.png` | 512×512 / 70-84 KB × 4 | 192×192 / 21-22 KB × 4 | 116rpx |
+
+**结论**：`static/` 从 1.52 MB 降到 240 KB（-84%），主包远低于 1.5 MB 警告线（余量 933 KB）。256×256 的 logo 同时是 `LoginBrandHero` / `invite-status` / `completed-tasks` 三处展示的源图，也足以重新提交 WeChat 后台做 app icon（如果以后需要 1254×1254 原图作为高分辨率 app icon 源，从 `references/brand-originals/` 取回即可）。
+
+**重新压缩**：`tmp/compress-static.ps1`（PowerShell + .NET `System.Drawing`，无需任何额外依赖）会自动备份原图到 `references/brand-originals/` 并覆盖缩放。
+
+**约定**：
+
+- 新增图片资源前先评估**实际展示像素 × 2** 作为源图上限；超过 2× 像素视为浪费。
+- 头像类资源统一 192×192 起步，logo 类 256×256 起步。更高分辨率只在确实需要 Retina/印刷品时才做。
+- 任何 PNG/JPG 改动后跑一次 `npm run build:mp-weixin` 看 `dist/build/mp-weixin/static/` 大小，确保主包不超 1.2 MB。
+
 ## 验证
 
 ```powershell
@@ -180,4 +200,6 @@ npm run test:e2e        # 依赖微信开发者工具的 automator，会话不�
 - [x] 创建 / 加入 / 邀请家庭
 - [x] 共同事项的增删改查（不含删）
 - [x] 事项编辑 + 备注对话（评论实时推送）
+- [x] 事项删除（软删 + 30 天物理清理）
+- [x] 资源体积优化（主包 1.88 MB → 601 KB）
 - [ ] 下一个模块：见 `docs/prd/` 最新编号
