@@ -7,7 +7,7 @@ const PENDING_KEY = 'task.pending.operation'
 
 const PENDING_TTL_MS = 5 * 60 * 1000 // 5 分钟；超时自动清理
 
-export type PendingTaskKind = 'create' | 'claim' | 'complete' | 'abandon'
+export type PendingTaskKind = 'create' | 'claim' | 'complete' | 'abandon' | 'update' | 'addComment'
 
 export interface PendingTask {
   kind: PendingTaskKind

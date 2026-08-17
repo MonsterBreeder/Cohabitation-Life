@@ -98,7 +98,7 @@ docs/
 ├── plans/                          # 实施计划（按日期 + 模块名）
 └── brand/visual-standard.md        # 视觉规范
 tests/
-├── unit/                           # 27 套件 / 270 用例
+├── unit/                           # 28 套件 / 357 用例
 └── e2e/                            # 真机自动化（依赖微信开发者工具会话）
 ```
 
@@ -133,11 +133,21 @@ tests/
 - **超时恢复**：超时后先轻量查详情确认是否生效，已生效按成功处理
 - **双账号真机验证 10 条路径通过**（详见 `cloudfunctions/README.md` U5 段）
 
+### 5. 事项编辑 + 备注对话（PRD 006 / Plan 2026-08-16-001）
+- **编辑字段**：name / type / dueDate / note（不含 assignee）；`editVersion` 乐观锁防止并发覆盖
+- **任一成员都能编辑**，但**只能在 `pending` / `claimed` 状态**编辑（终态封口）
+- **多人评论**：1-200 字；存 `tasks.comments` 数组，**不可改不可删**；按 at 倒序；新评论实时推送（WeChat Cloud `db.watch`，SSE 通道）
+- **编辑不影响评论 watch**：合并逻辑只动 `detail.comments`，保留编辑中的草稿（避免编辑半路被 watch 覆盖）
+- **终态封口**：completed / abandoned 后编辑和评论都禁用
+- **空编辑兜底**：客户端提交但字段没变，云端不写 edit 事件（R5）
+- **幂等性**：编辑 / 评论各用独立的 `operationToken`；同 token 重复提交返回上次结果
+- **双账号真机验证 8 条新增路径**（11-18，详见 `cloudfunctions/README.md`）
+
 ## 验证
 
 ```powershell
 npm run type-check      # vue-tsc --noEmit，0 错
-npm run test:unit       # 27 套件 / 270 用例
+npm run test:unit       # 28 套件 / 357 用例
 npm run build:mp-weixin # 微信小程序构建
 npm run build:h5        # H5 构建
 npm run test:e2e        # 依赖微信开发者工具的 automator，会话不通则跳过
@@ -159,4 +169,5 @@ npm run test:e2e        # 依赖微信开发者工具的 automator，会话不�
 - [x] 品牌视觉
 - [x] 创建 / 加入 / 邀请家庭
 - [x] 共同事项的增删改查（不含删）
+- [x] 事项编辑 + 备注对话（评论实时推送）
 - [ ] 下一个模块：见 `docs/prd/` 最新编号

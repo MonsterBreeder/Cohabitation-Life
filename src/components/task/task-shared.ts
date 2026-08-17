@@ -11,7 +11,7 @@ export const TASK_TYPES_DISPLAY: { value: TaskType; label: string; description: 
   { value: 'expiring', label: '快到期', description: '房租、会员、滤芯等到期前提醒' },
 ]
 
-/** 事件行：X 在 Y 时 创建/认领/完成/放弃。 */
+/** 事件行：X 在 Y 时 创建/认领/完成/放弃。edit 事件的中文化在 task-detail-view 里。 */
 export function describeEventLine(event: TaskEvent): string {
   const who = event.actor.nickname || '成员'
   switch (event.kind) {
@@ -19,6 +19,7 @@ export function describeEventLine(event: TaskEvent): string {
     case 'claim': return `${who} 接手处理`
     case 'complete': return `${who} 完成了`
     case 'abandon': return `${who} 放弃了`
+    case 'edit': return `${who} 修改了字段`
   }
 }
 

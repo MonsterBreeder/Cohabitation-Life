@@ -72,8 +72,21 @@
 
       <text v-if="storeError" class="task-detail-page__error" data-testid="task-detail-error">{{ storeError }}</text>
 
-      <!-- 操作按钮：认领/完成 用 primary，放弃 用 warning plain -->
+      <!-- 操作按钮：编辑 + 认领/完成 + 放弃 -->
       <view class="task-detail-page__actions">
+        <wd-button
+          v-if="availability.edit"
+          block
+          round
+          variant="plain"
+          type="primary"
+          size="large"
+          :disabled="isAnyBusy"
+          data-testid="task-detail-edit"
+          @click="onEdit"
+        >
+          编辑事项
+        </wd-button>
         <wd-button
           v-if="availability.claim"
           block
@@ -134,13 +147,21 @@
           </wd-cell>
         </wd-cell-group>
       </view>
+
+      <!-- 备注对话：评论列表 + 输入框；终态封口（PRD 006 R8 / R9） -->
+      <TaskComments
+        v-if="detail.comments"
+        :task-id="detail.id"
+        :comments="detail.comments"
+        :disabled="Boolean(detail.terminalKind)"
+      />
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { onLoad, onShow } from '@dcloudio/uni-app'
+import { onLoad, onShow, onUnload } from '@dcloudio/uni-app'
 import { useTaskStore } from '../../../store/modules/task'
 import {
   describeAbandonConfirmMessage,
@@ -152,6 +173,7 @@ import {
 import { todayIso } from '../add-task/add-task-view'
 // TASK_TYPES_DISPLAY 来自主包 task-shared：分包可引用主包，反向引用会在主包编译时丢失路径。
 import { TASK_TYPES_DISPLAY } from '../../../components/task/task-shared'
+import TaskComments from './components/TaskComments.vue'
 
 const taskStore = useTaskStore()
 const taskId = ref('')
@@ -160,7 +182,8 @@ const isLoading = computed(() => taskStore.phase === 'checking')
 const isClaiming = computed(() => taskStore.phase === 'claiming')
 const isCompleting = computed(() => taskStore.phase === 'completing')
 const isAbandoning = computed(() => taskStore.phase === 'abandoning')
-const isAnyBusy = computed(() => isClaiming.value || isCompleting.value || isAbandoning.value)
+const isEditing = computed(() => taskStore.phase === 'updating')
+const isAnyBusy = computed(() => isClaiming.value || isCompleting.value || isAbandoning.value || isEditing.value)
 const detail = computed(() => taskStore.detail)
 const availability = computed(() => describeActions(detail.value))
 const statusLine = computed(() => describeStatusLine(detail.value))
@@ -189,6 +212,12 @@ async function reload(): Promise<void> {
 async function onClaim(): Promise<void> {
   if (!taskId.value) return
   await taskStore.claim(taskId.value)
+}
+
+function onEdit(): void {
+  if (!taskId.value) return
+  // 编辑页：mode=edit + taskId 查询参数；add-task 页会读取后预填
+  uni.navigateTo({ url: `/subpackages/task/add-task/index?mode=edit&taskId=${taskId.value}` })
 }
 
 async function onComplete(): Promise<void> {
@@ -226,13 +255,25 @@ function formatTime(iso: string): string {
 onLoad((options) => {
   const id = (options as { taskId?: string })?.taskId || ''
   taskId.value = id
-  if (id) void load(id)
+  if (id) {
+    void load(id).then(() => {
+      // 详情加载完后再订阅实时评论推送
+      if (id === taskId.value && taskStore.detail) {
+        taskStore.subscribeComments(id)
+      }
+    })
+  }
 })
 
 onShow(() => {
   if (taskId.value && !detail.value && !isLoading.value) {
     void load(taskId.value)
   }
+})
+
+onUnload(() => {
+  // 页面卸载：关闭实时推送（避免泄漏）
+  taskStore.unsubscribeComments()
 })
 </script>
 
@@ -283,6 +324,7 @@ onShow(() => {
 .task-detail-page__event-dot--claim { background: #43c89a; }
 .task-detail-page__event-dot--complete { background: #267a5a; }
 .task-detail-page__event-dot--abandon { background: #E78A7B; }
+.task-detail-page__event-dot--edit { background: #E8B647; }
 .task-detail-page__event-text { color: $brand-color-text; font-size: 26rpx; line-height: 1.4; }
 .task-detail-page__event-time { color: $brand-color-text-secondary; font-size: 22rpx; flex-shrink: 0; }
 </style>

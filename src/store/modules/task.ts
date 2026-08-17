@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import {
   abandonTaskInCloud,
+  addCommentInCloud,
   claimTaskInCloud,
   completeTaskInCloud,
   createTaskInCloud,
@@ -9,18 +10,24 @@ import {
   listCurrentTasksInCloud,
   setTaskCloudRuntimeForTesting,
   setTaskCloudEnvironmentForTesting,
+  subscribeTaskComments,
   TaskCloudError,
+  updateTaskInCloud,
 } from '../../services/task-cloud'
 import type {
   AbandonTaskRequest,
+  AddCommentRequest,
   ClaimTaskRequest,
   CompleteTaskRequest,
   CompletedTaskItem,
   CreateTaskRequest,
   CurrentTasks,
+  TaskComment,
   TaskDetail,
+  TaskEvent,
   TaskResult,
   TaskSummary,
+  UpdateTaskRequest,
 } from '../../types/task'
 import {
   clearPendingTask,
@@ -39,13 +46,15 @@ import store from '..'
 // 4) 超时后先做轻量查询再决定显示结果
 // 5) authoritativeRevision 机制防 race（家庭归属变更时旧结果不覆盖新结果）
 
-type TaskPhase = 'checking' | 'editable' | 'creating' | 'claiming' | 'completing' | 'abandoning' | 'loaded' | 'failed'
+type TaskPhase = 'checking' | 'editable' | 'creating' | 'claiming' | 'completing' | 'abandoning' | 'updating' | 'commenting' | 'loaded' | 'failed'
 
 interface TaskCloudClient {
   create(input: CreateTaskRequest): Promise<TaskResult>
   claim(input: ClaimTaskRequest): Promise<TaskResult>
   complete(input: CompleteTaskRequest): Promise<TaskResult>
   abandon(input: AbandonTaskRequest): Promise<TaskResult>
+  update(input: UpdateTaskRequest): Promise<TaskResult>
+  addComment(input: AddCommentRequest): Promise<TaskResult>
   getDetail(taskId: string): Promise<TaskResult>
   listCurrent(): Promise<TaskResult>
   listCompleted(input: { limit: number; cursor?: string }): Promise<TaskResult>
@@ -56,6 +65,8 @@ const defaultCloudClient: TaskCloudClient = {
   claim: claimTaskInCloud,
   complete: completeTaskInCloud,
   abandon: abandonTaskInCloud,
+  update: updateTaskInCloud,
+  addComment: addCommentInCloud,
   getDetail: getTaskDetailInCloud,
   listCurrent: listCurrentTasksInCloud,
   listCompleted: listCompletedTasksInCloud,
@@ -68,10 +79,15 @@ let createInFlight: Promise<unknown> | undefined
 let claimInFlight: Promise<unknown> | undefined
 let completeInFlight: Promise<unknown> | undefined
 let abandonInFlight: Promise<unknown> | undefined
+let updateInFlight: Promise<unknown> | undefined
+let addCommentInFlight: Promise<unknown> | undefined
 let loadCurrentInFlight: Promise<unknown> | undefined
 let loadDetailInFlight: Promise<unknown> | undefined
 let loadCompletedInFlight: Promise<unknown> | undefined
 let authoritativeRevision = 0
+// 实时推送：当前活跃的评论 watcher；切换/卸载时 close
+interface CommentWatcher { close(): void }
+let activeCommentWatcher: CommentWatcher | undefined
 
 /** 生成符合 16-128 字符的 CREDENTIAL_PATTERN 要求的 requestId / operationToken。 */
 function credential(prefix: string): string {
@@ -126,6 +142,8 @@ export const useTaskStore = defineStore('task', {
       this.pending = undefined
       this.errorMessage = undefined
       this.phase = 'editable'
+      // 切换家庭时也关掉评论推送（避免继续接收旧家庭的消息）
+      this.unsubscribeComments()
       authoritativeRevision += 1
       this.authoritativeRevision = authoritativeRevision
     },
@@ -443,16 +461,16 @@ export const useTaskStore = defineStore('task', {
         next[idx] = task
         return next
       }
-      // 优先按 overdue/today 决定放入 priority 还是 groups
+      // 优先按 overdue/today 决定放入 priority 还是 groups；
+      // 任何分支都要先从其他分组清掉这条 task（防止 type 改了之后旧分组还残留）
+      current.groups.low_stock = current.groups.low_stock.filter((t) => t.id !== task.id)
+      current.groups.to_handle = current.groups.to_handle.filter((t) => t.id !== task.id)
+      current.groups.expiring = current.groups.expiring.filter((t) => t.id !== task.id)
+      current.priority = current.priority.filter((t) => t.id !== task.id)
       if (task.isOverdueOrToday) {
         current.priority = replace(current.priority)
-        // 同步从 groups 移除
-        current.groups.low_stock = current.groups.low_stock.filter((t) => t.id !== task.id)
-        current.groups.to_handle = current.groups.to_handle.filter((t) => t.id !== task.id)
-        current.groups.expiring = current.groups.expiring.filter((t) => t.id !== task.id)
       } else {
         current.groups[task.type] = replace(current.groups[task.type])
-        current.priority = current.priority.filter((t) => t.id !== task.id)
       }
     },
 
@@ -468,6 +486,167 @@ export const useTaskStore = defineStore('task', {
       void terminalAt
     },
 
+    /** 编辑事项（name/type/dueDate/note）。editVersion 必须与详情页当前值匹配；不匹配时云端返回 TASK_DUPLICATE_OPERATION。 */
+    async update(taskId: string, draft: { name?: string; type?: 'low_stock' | 'to_handle' | 'expiring'; dueDate?: string | null; note?: string | null }, editVersion: number): Promise<boolean> {
+      if (updateInFlight) return false
+      const requestId = credential('request')
+      const operationToken = credential('operation')
+      this.pending = { kind: 'update', taskId, requestId, operationToken, startedAt: Date.now() }
+      writePendingTask(this.pending)
+      this.phase = 'updating'
+      this.errorMessage = undefined
+
+      updateInFlight = (async () => {
+        try {
+          const result = await cloudClient.update({
+            taskId,
+            name: draft.name,
+            type: draft.type,
+            dueDate: draft.dueDate,
+            note: draft.note,
+            editVersion,
+            requestId,
+            operationToken,
+          })
+          if (result.status === 'UPDATED' && 'task' in result) {
+            this.applyEdited(result.task, result.events, result.editVersion)
+            // 编辑成功可能改变了 type/title/dueDate，同步 current 列表
+            this.applyCreatedOrClaimed(result.task)
+            clearPendingTask()
+            this.pending = undefined
+            this.phase = 'loaded'
+            return true
+          }
+          this.phase = 'failed'
+          this.errorMessage = humaniseError(result)
+          return false
+        } catch (error: unknown) {
+          if (error instanceof TaskCloudError && error.code === 'TIMEOUT') {
+            return this.recoverAfterTimeout('update', taskId)
+          }
+          this.phase = 'failed'
+          this.errorMessage = '暂时无法保存编辑，请稍后重试'
+          return false
+        } finally {
+          updateInFlight = undefined
+        }
+      })()
+      return (await updateInFlight) === true
+    },
+
+    /** 添加评论。 */
+    async addComment(taskId: string, text: string): Promise<boolean> {
+      if (addCommentInFlight) return false
+      const requestId = credential('request')
+      const operationToken = credential('operation')
+      this.pending = { kind: 'addComment', taskId, requestId, operationToken, startedAt: Date.now() }
+      writePendingTask(this.pending)
+      this.phase = 'commenting'
+      this.errorMessage = undefined
+
+      addCommentInFlight = (async () => {
+        try {
+          const result = await cloudClient.addComment({ taskId, text, requestId, operationToken })
+          if (result.status === 'COMMENTED' && 'detail' in result && result.detail) {
+            // 评论走 watch 也会回来，但这里直接用云端结果保证一致性（避免评论显示延迟）
+            this.applyCommented(result.detail)
+            clearPendingTask()
+            this.pending = undefined
+            this.phase = 'loaded'
+            return true
+          }
+          this.phase = 'failed'
+          this.errorMessage = humaniseError(result)
+          return false
+        } catch (error: unknown) {
+          if (error instanceof TaskCloudError && error.code === 'TIMEOUT') {
+            // 评论超时：重查详情；云端幂等，重复提交不会重复落库
+            return this.recoverAfterTimeout('addComment', taskId)
+          }
+          this.phase = 'failed'
+          this.errorMessage = '暂时无法发送评论，请稍后重试'
+          return false
+        } finally {
+          addCommentInFlight = undefined
+        }
+      })()
+      return (await addCommentInFlight) === true
+    },
+
+    /** 把编辑结果合并到 detail 与 current。summary 字段用云端最新值；events 整体替换；editVersion 用云端返回值。 */
+    applyEdited(task: TaskSummary, events: TaskEvent[], editVersion: number): void {
+      const detail = this.detail
+      if (detail && detail.id === task.id) {
+        this.detail = {
+          ...detail,
+          id: task.id,
+          type: task.type,
+          title: task.title,
+          dueDate: task.dueDate,
+          isOverdueOrToday: task.isOverdueOrToday,
+          assignee: task.assignee,
+          status: task.status,
+          events,
+          editVersion,
+        }
+      }
+    },
+
+    /** 把 addComment 后的完整 detail 替换到 store。仅在云端响应里用；watch 回调走自己的合并（不覆盖编辑/草稿）。 */
+    applyCommented(detail: TaskDetail): void {
+      this.detail = detail
+      this.detailTaskId = detail.id
+    },
+
+    /** watch 回调用：把新评论合并进 detail，不覆盖其他字段（保留编辑草稿、in-progress 状态）。 */
+    applyCommentedFromWatch(newComments: TaskComment[]): void {
+      const detail = this.detail
+      if (!detail) return
+      const existingIds = new Set(detail.comments.map((c) => c.id))
+      const merged = [...detail.comments]
+      for (const c of newComments) {
+        if (!existingIds.has(c.id)) merged.push(c)
+      }
+      // at 倒序，at 相同时保留后插入在前
+      merged.sort((a, b) => {
+        if (a.at < b.at) return 1
+        if (a.at > b.at) return -1
+        return 0
+      })
+      this.detail = { ...detail, comments: merged }
+    },
+
+    /**
+     * 订阅指定事项的评论实时推送（WeChat Cloud db.watch）。
+     * 同一 taskId 多次调用会关闭前一个 watcher；切换 taskId 也会先 close。
+     * 静默失败：连接断开、平台不支持、权限问题都不弹 toast，由 onShow 重拉兜底。
+     */
+    subscribeComments(taskId: string): void {
+      // 切换或重订阅：先 close 旧的
+      if (activeCommentWatcher) {
+        try { activeCommentWatcher.close() } catch { /* noop */ }
+        activeCommentWatcher = undefined
+      }
+      const watcher = subscribeTaskComments(taskId, {
+        onComments: (newComments) => {
+          // R28：只合并评论，不覆盖 detail 其他字段（保留正在编辑的标题/截止日/类型）
+          this.applyCommentedFromWatch(newComments)
+        },
+        onError() {
+          // R30：连接断开静默回退到 onShow 拉取
+        },
+      })
+      activeCommentWatcher = watcher
+    },
+
+    /** 关闭评论实时推送。详情页 onUnload 调用。 */
+    unsubscribeComments(): void {
+      if (activeCommentWatcher) {
+        try { activeCommentWatcher.close() } catch { /* noop */ }
+        activeCommentWatcher = undefined
+      }
+    },
+
     /** 启动恢复：检查 pending 凭证是否还在有效期内。 */
     async restorePending(): Promise<void> {
       const pending = readPendingTask()
@@ -476,7 +655,9 @@ export const useTaskStore = defineStore('task', {
       this.phase = pending.kind === 'create' ? 'creating'
         : pending.kind === 'claim' ? 'claiming'
         : pending.kind === 'complete' ? 'completing'
-        : 'abandoning'
+        : pending.kind === 'abandon' ? 'abandoning'
+        : pending.kind === 'update' ? 'updating'
+        : 'commenting'
       this.errorMessage = '上次操作仍在确认中'
     },
   },
@@ -493,10 +674,16 @@ export function resetTaskStoreForTesting(): void {
   claimInFlight = undefined
   completeInFlight = undefined
   abandonInFlight = undefined
+  updateInFlight = undefined
+  addCommentInFlight = undefined
   loadCurrentInFlight = undefined
   loadDetailInFlight = undefined
   loadCompletedInFlight = undefined
   authoritativeRevision = 0
+  if (activeCommentWatcher) {
+    try { activeCommentWatcher.close() } catch { /* noop */ }
+    activeCommentWatcher = undefined
+  }
   cloudClient = defaultCloudClient
 }
 export function setTaskStoreCloudClientForTesting(client: TaskCloudClient): void {

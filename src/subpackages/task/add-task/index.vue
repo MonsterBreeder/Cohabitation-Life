@@ -12,15 +12,15 @@
 
     <view v-if="!isReady" class="add-task-page__state" data-testid="add-task-loading">
       <wd-loading color="#267A5A" size="44rpx" />
-      <text class="add-task-page__state-title">正在准备添加页</text>
+      <text class="add-task-page__state-title">{{ isEditMode ? '正在准备编辑页' : '正在准备添加页' }}</text>
     </view>
 
     <view v-else class="add-task-page__content" data-testid="add-task-form">
       <!-- 标题区：纯排版，不属于组件 -->
       <view class="add-task-page__heading">
-        <text class="add-task-page__eyebrow">记一件事</text>
-        <text class="add-task-page__title">先记下来，我们一起处理</text>
-        <text class="add-task-page__subtitle">先写名称和类型，其他都能之后再补。</text>
+        <text class="add-task-page__eyebrow">{{ isEditMode ? '改一改' : '记一件事' }}</text>
+        <text class="add-task-page__title">{{ isEditMode ? '更新一下当前内容' : '先记下来，我们一起处理' }}</text>
+        <text class="add-task-page__subtitle">{{ isEditMode ? '名称、类型、截止、备注都能改；其他字段保留。' : '先写名称和类型，其他都能之后再补。' }}</text>
       </view>
 
       <!-- 类型选择：3 列带色带卡片。
@@ -145,9 +145,9 @@
           data-testid="add-task-submit"
           @click="submit"
         >
-          记下这件事
+          {{ isEditMode ? '保存修改' : '记下这件事' }}
         </wd-button>
-        <text class="add-task-page__hint">对方下次打开或刷新就能看到。</text>
+        <text class="add-task-page__hint">{{ isEditMode ? '对方下次打开或刷新就能看到最新内容。' : '对方下次打开或刷新就能看到。' }}</text>
       </view>
     </view>
   </view>
@@ -174,8 +174,14 @@ const taskStore = useTaskStore()
 const typeOptions = TASK_TYPES_DISPLAY
 const today = todayIso()
 
+type PageMode = 'create' | 'edit'
+
 const isReady = ref(false)
-const isBusy = computed(() => taskStore.phase === 'creating')
+const mode = ref<PageMode>('create')
+const editTaskId = ref('')
+const editVersion = ref(0)
+const isEditMode = computed(() => mode.value === 'edit')
+const isBusy = computed(() => isEditMode.value ? taskStore.phase === 'updating' : taskStore.phase === 'creating')
 const errorMessage = ref('')
 
 const draft = shallowRef<AddTaskDraft>({
@@ -217,6 +223,22 @@ async function submit(): Promise<void> {
   if (!canSubmit.value || isBusy.value) return
   if (!draft.value.type) return
   errorMessage.value = ''
+  if (mode.value === 'edit' && editTaskId.value) {
+    // 编辑：带 editVersion CAS
+    const ok = await taskStore.update(editTaskId.value, {
+      name: draft.value.title,
+      type: draft.value.type,
+      dueDate: draft.value.dueDate || null,
+      note: draft.value.note || null,
+    }, editVersion.value)
+    if (ok) {
+      uni.navigateBack({ delta: 1 })
+    } else {
+      errorMessage.value = taskStore.errorMessage || '暂时无法保存，请稍后重试'
+    }
+    return
+  }
+  // 新建
   const ok = await taskStore.create({
     title: draft.value.title,
     type: draft.value.type,
@@ -230,17 +252,37 @@ async function submit(): Promise<void> {
   }
 }
 
-onLoad(() => {
-  // 刷新页面后恢复未提交的草稿（操作凭证仍在 TTL 内）
-  const pending = readPendingTask()
-  if (pending?.kind === 'create' && pending.draft) {
-    titleInput.value = pending.draft.title
-    noteInput.value = pending.draft.note || ''
-    draft.value = {
-      title: pending.draft.title,
-      type: pending.draft.type,
-      dueDate: pending.draft.dueDate,
-      note: pending.draft.note || '',
+onLoad(async (options) => {
+  const params = (options as { mode?: string; taskId?: string }) || {}
+  if (params.mode === 'edit' && params.taskId) {
+    mode.value = 'edit'
+    editTaskId.value = params.taskId
+    // 先把详情拉回来预填表单（PRD 006 U4：编辑页必须 prefill）
+    await taskStore.loadDetail(params.taskId)
+    const detail = taskStore.detail
+    if (detail) {
+      titleInput.value = detail.title
+      noteInput.value = detail.note || ''
+      draft.value = {
+        title: detail.title,
+        type: detail.type,
+        dueDate: detail.dueDate,
+        note: detail.note || '',
+      }
+      editVersion.value = detail.editVersion
+    }
+  } else {
+    // 刷新页面后恢复未提交的草稿（操作凭证仍在 TTL 内）
+    const pending = readPendingTask()
+    if (pending?.kind === 'create' && pending.draft) {
+      titleInput.value = pending.draft.title
+      noteInput.value = pending.draft.note || ''
+      draft.value = {
+        title: pending.draft.title,
+        type: pending.draft.type,
+        dueDate: pending.draft.dueDate,
+        note: pending.draft.note || '',
+      }
     }
   }
   isReady.value = true

@@ -1,4 +1,4 @@
-declare function require(path: string): any
+﻿declare function require(path: string): any
 
 const {
   createTask,
@@ -8,6 +8,8 @@ const {
   completeTask,
   abandonTask,
   listCompletedTasks,
+  updateTask,
+  addComment,
   computeIsOverdueOrToday,
   TaskDomainError,
 } = require('../../cloudfunctions/task/task-domain')
@@ -77,6 +79,9 @@ function createRepository(initial: { tasks?: any[]; operations?: any[]; househol
           },
           createOperation: async (record: any) => { opDraft.set(record._id, structuredClone(record)) },
           createCreationLock: async (record: any) => { lockDraft.set(record._id, structuredClone(record)) },
+          // PRD 006: 事务内读 events（供 updateTask 返回最新 events 流用）
+          findOperationsByTaskId: async (taskId: string) =>
+            [...opDraft.values()].filter((o) => o.taskId === taskId).sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime()),
         }
         const result = await work(transaction)
         tasks.clear(); taskDraft.forEach((v, k) => tasks.set(k, v))
@@ -507,5 +512,287 @@ describe('task cloud function entry shape', () => {
     // 禁止出现 `module.exports = exports.main` —— 那种写法会覆盖整个导出对象，
     // 让云函数加载时找不到 `handler.main`，状态码 443，错误 "handler not found"。
     expect(source).not.toMatch(/module\.exports\s*=\s*exports\.main/)
+  })
+})
+
+// === PRD 006：updateTask 域函数 ===
+
+describe('updateTask', () => {
+  const baseTask = {
+    _id: 't1',
+    householdId: 'home_x',
+    type: 'to_handle',
+    title: '原名',
+    dueDate: '2026-08-20',
+    note: '原备注',
+    status: 'pending',
+    createdBy: 'user_a',
+    createdAt: '2026-08-14T09:00:00.000Z',
+    updatedAt: '2026-08-14T09:00:00.000Z',
+    comments: [],
+    editVersion: 0,
+  }
+
+  it('happy path: 改 name / type / dueDate / note 全部生效，editVersion +1', async () => {
+    const repository = createRepository({
+      households: [{ _id: 'home_x', memberKeys: ['user_a', 'user_b'] }],
+      tasks: [structuredClone(baseTask)],
+      users: [
+        { _id: 'user_a', nickname: '小帅', avatar: { kind: 'builtin', id: 'person-01' } },
+      ],
+    })
+    const result = await updateTask({
+      taskId: 't1',
+      name: '买 5L 装洗衣液',
+      type: 'low_stock',
+      dueDate: '2026-08-16',
+      note: '替换装优先',
+      editVersion: 0,
+      requestId: 'request_aaaaaaaa01',
+      operationToken: 'operation_aaaaaa01',
+    }, dependencies(repository, { identityKey: 'user_a' }))
+
+    expect(result.status).toBe('UPDATED')
+    expect(result.editVersion).toBe(1)
+    expect(result.task).toMatchObject({
+      id: 't1',
+      title: '买 5L 装洗衣液',
+      type: 'low_stock',
+      dueDate: '2026-08-16',
+    })
+    expect(result.events.map((e: any) => e.kind)).toEqual(['edit'])
+    const editEvent = result.events.find((e: any) => e.kind === 'edit')
+    expect(editEvent.changedFields).toEqual(expect.arrayContaining(['name', 'type', 'dueDate', 'note']))
+  })
+
+  it('editVersion 不匹配 → TASK_DUPLICATE_OPERATION', async () => {
+    const repository = createRepository({
+      households: [{ _id: 'home_x', memberKeys: ['user_a'] }],
+      tasks: [structuredClone({ ...baseTask, editVersion: 3 })],
+    })
+    await expect(updateTask({
+      taskId: 't1',
+      name: 'x',
+      editVersion: 0,
+      requestId: 'request_aaaaaaaa02',
+      operationToken: 'operation_aaaaaa02',
+    }, dependencies(repository, { identityKey: 'user_a' }))).rejects.toMatchObject({ code: 'TASK_DUPLICATE_OPERATION' })
+  })
+
+  it('终态下编辑 → TASK_TERMINAL', async () => {
+    const repository = createRepository({
+      households: [{ _id: 'home_x', memberKeys: ['user_a'] }],
+      tasks: [structuredClone({ ...baseTask, status: 'completed', terminalAt: '2026-08-15T10:00:00.000Z' })],
+    })
+    await expect(updateTask({
+      taskId: 't1',
+      name: 'x',
+      editVersion: 0,
+      requestId: 'request_aaaaaaaa03',
+      operationToken: 'operation_aaaaaa03',
+    }, dependencies(repository, { identityKey: 'user_a' }))).rejects.toMatchObject({ code: 'TASK_TERMINAL' })
+  })
+
+  it('非家庭成员 → TASK_FORBIDDEN', async () => {
+    const repository = createRepository({
+      households: [{ _id: 'home_x', memberKeys: ['user_a'] }],
+      tasks: [structuredClone(baseTask)],
+    })
+    await expect(updateTask({
+      taskId: 't1',
+      name: 'x',
+      editVersion: 0,
+      requestId: 'request_aaaaaaaa04',
+      operationToken: 'operation_aaaaaa04',
+    }, dependencies(repository, { identityKey: 'user_outsider' }))).rejects.toMatchObject({ code: 'TASK_FORBIDDEN' })
+  })
+
+  it('空 changedFields 不写 edit 事件（R5 兜底）', async () => {
+    const repository = createRepository({
+      households: [{ _id: 'home_x', memberKeys: ['user_a'] }],
+      tasks: [structuredClone(baseTask)],
+    })
+    const result = await updateTask({
+      taskId: 't1',
+      name: '原名',
+      editVersion: 0,
+      requestId: 'request_aaaaaaaa05',
+      operationToken: 'operation_aaaaaa05',
+    }, dependencies(repository, { identityKey: 'user_a' }))
+    expect(result.editVersion).toBe(0)
+    expect(result.events.filter((e: any) => e.kind === 'edit')).toHaveLength(0)
+  })
+
+  it('同 operationToken 重复提交幂等（不再产生新事件）', async () => {
+    const repository = createRepository({
+      households: [{ _id: 'home_x', memberKeys: ['user_a'] }],
+      tasks: [structuredClone(baseTask)],
+    })
+    const input = {
+      taskId: 't1',
+      name: '新名',
+      editVersion: 0,
+      requestId: 'request_aaaaaaaa06',
+      operationToken: 'operation_aaaaaa06',
+    }
+    const r1: any = await updateTask(input, dependencies(repository, { identityKey: 'user_a' }))
+    expect(r1.editVersion).toBe(1)
+    const r2: any = await updateTask(input, dependencies(repository, { identityKey: 'user_a' }))
+    expect(r2.editVersion).toBe(1)
+    expect(r2.events.filter((e: any) => e.kind === 'edit')).toHaveLength(1)
+  })
+
+  it('编辑 type 不会清空 assignee 等其他字段', async () => {
+    const repository = createRepository({
+      households: [{ _id: 'home_x', memberKeys: ['user_a', 'user_b'] }],
+      tasks: [structuredClone({ ...baseTask, status: 'claimed', assigneeKey: 'user_b' })],
+      users: [
+        { _id: 'user_b', nickname: '小美', avatar: { kind: 'builtin', id: 'person-02' } },
+      ],
+    })
+    const result = await updateTask({
+      taskId: 't1',
+      type: 'low_stock',
+      editVersion: 0,
+      requestId: 'request_aaaaaaaa07',
+      operationToken: 'operation_aaaaaa07',
+    }, dependencies(repository, { identityKey: 'user_a' }))
+    expect(result.task.type).toBe('low_stock')
+    expect(result.task.status).toBe('claimed')
+    expect(result.task.assignee).toMatchObject({ nickname: '小美' })
+  })
+
+  it('dueDate 设为 null 清除截止日期', async () => {
+    const repository = createRepository({
+      households: [{ _id: 'home_x', memberKeys: ['user_a'] }],
+      tasks: [structuredClone(baseTask)],
+    })
+    const result = await updateTask({
+      taskId: 't1',
+      dueDate: null,
+      editVersion: 0,
+      requestId: 'request_aaaaaaaa08',
+      operationToken: 'operation_aaaaaa08',
+    }, dependencies(repository, { identityKey: 'user_a' }))
+    expect(result.task.dueDate).toBeUndefined()
+  })
+})
+
+// === PRD 006：addComment 域函数 ===
+
+describe('addComment', () => {
+  const baseTask = {
+    _id: 't1',
+    householdId: 'home_x',
+    type: 'to_handle',
+    title: 'X',
+    status: 'pending',
+    createdBy: 'user_a',
+    createdAt: '2026-08-14T09:00:00.000Z',
+    updatedAt: '2026-08-14T09:00:00.000Z',
+    comments: [],
+    editVersion: 0,
+  }
+
+  it('happy path: 评论落到 comments 数组，detail 返回最新', async () => {
+    const repository = createRepository({
+      households: [{ _id: 'home_x', memberKeys: ['user_a', 'user_b'] }],
+      tasks: [structuredClone(baseTask)],
+      users: [
+        { _id: 'user_a', nickname: '小帅', avatar: { kind: 'builtin', id: 'person-01' } },
+      ],
+    })
+    const result: any = await addComment({
+      taskId: 't1',
+      text: '好的，我下班顺路买',
+      requestId: 'request_bbbbbbbb01',
+      operationToken: 'operation_bbbbbb01',
+    }, dependencies(repository, { identityKey: 'user_a' }))
+    expect(result.status).toBe('COMMENTED')
+    expect(result.detail.comments).toHaveLength(1)
+    expect(result.detail.comments[0]).toMatchObject({
+      text: '好的，我下班顺路买',
+      actor: { nickname: '小帅' },
+    })
+    expect(typeof result.detail.comments[0].id).toBe('string')
+  })
+
+  it('终态下加评论 → TASK_TERMINAL', async () => {
+    const repository = createRepository({
+      households: [{ _id: 'home_x', memberKeys: ['user_a'] }],
+      tasks: [structuredClone({ ...baseTask, status: 'completed', terminalAt: '2026-08-15T10:00:00.000Z' })],
+    })
+    await expect(addComment({
+      taskId: 't1',
+      text: '好的',
+      requestId: 'request_bbbbbbbb02',
+      operationToken: 'operation_bbbbbb02',
+    }, dependencies(repository, { identityKey: 'user_a' }))).rejects.toMatchObject({ code: 'TASK_TERMINAL' })
+  })
+
+  it('非家庭成员 → TASK_FORBIDDEN', async () => {
+    const repository = createRepository({
+      households: [{ _id: 'home_x', memberKeys: ['user_a'] }],
+      tasks: [structuredClone(baseTask)],
+    })
+    await expect(addComment({
+      taskId: 't1',
+      text: '好的',
+      requestId: 'request_bbbbbbbb03',
+      operationToken: 'operation_bbbbbb03',
+    }, dependencies(repository, { identityKey: 'user_outsider' }))).rejects.toMatchObject({ code: 'TASK_FORBIDDEN' })
+  })
+
+  it('text 超过 200 字拒绝', async () => {
+    const repository = createRepository({
+      households: [{ _id: 'home_x', memberKeys: ['user_a'] }],
+      tasks: [structuredClone(baseTask)],
+    })
+    const long = '一'.repeat(201)
+    await expect(addComment({
+      taskId: 't1',
+      text: long,
+      requestId: 'request_bbbbbbbb04',
+      operationToken: 'operation_bbbbbb04',
+    }, dependencies(repository, { identityKey: 'user_a' }))).rejects.toMatchObject({ code: 'TASK_INVALID_REQUEST' })
+  })
+
+  it('text 为空 / 纯空白拒绝', async () => {
+    const repository = createRepository({
+      households: [{ _id: 'home_x', memberKeys: ['user_a'] }],
+      tasks: [structuredClone(baseTask)],
+    })
+    await expect(addComment({ taskId: 't1', text: '', requestId: 'request_bbbbbbbb05', operationToken: 'operation_bbbbbb05' }, dependencies(repository, { identityKey: 'user_a' }))).rejects.toMatchObject({ code: 'TASK_INVALID_REQUEST' })
+    await expect(addComment({ taskId: 't1', text: '   ', requestId: 'request_bbbbbbbb06', operationToken: 'operation_bbbbbb06' }, dependencies(repository, { identityKey: 'user_a' }))).rejects.toMatchObject({ code: 'TASK_INVALID_REQUEST' })
+  })
+
+  it('同 operationToken 重复提交幂等（评论数不增长）', async () => {
+    const repository = createRepository({
+      households: [{ _id: 'home_x', memberKeys: ['user_a'] }],
+      tasks: [structuredClone(baseTask)],
+      users: [
+        { _id: 'user_a', nickname: '小帅', avatar: { kind: 'builtin', id: 'person-01' } },
+      ],
+    })
+    const input = { taskId: 't1', text: '好的', requestId: 'request_bbbbbbbb07', operationToken: 'operation_bbbbbb07' }
+    const r1: any = await addComment(input, dependencies(repository, { identityKey: 'user_a' }))
+    const r2: any = await addComment(input, dependencies(repository, { identityKey: 'user_a' }))
+    expect(r1.detail.comments).toHaveLength(1)
+    expect(r2.detail.comments).toHaveLength(1)
+  })
+
+  it('多条评论按 at 倒序', async () => {
+    const repository = createRepository({
+      households: [{ _id: 'home_x', memberKeys: ['user_a', 'user_b'] }],
+      tasks: [structuredClone(baseTask)],
+      users: [
+        { _id: 'user_a', nickname: '小帅', avatar: { kind: 'builtin', id: 'person-01' } },
+        { _id: 'user_b', nickname: '小美', avatar: { kind: 'builtin', id: 'person-02' } },
+      ],
+    })
+    await addComment({ taskId: 't1', text: '第一条', requestId: 'request_bbbbbbbb08', operationToken: 'operation_bbbbbb08' }, dependencies(repository, { identityKey: 'user_a' }))
+    await addComment({ taskId: 't1', text: '第二条', requestId: 'request_bbbbbbbb09', operationToken: 'operation_bbbbbb09' }, dependencies(repository, { identityKey: 'user_b' }))
+    const detail: any = await getTaskDetail({ taskId: 't1' }, dependencies(repository, { identityKey: 'user_a' }))
+    expect(detail.detail.comments.map((c: any) => c.text)).toEqual(['第二条', '第一条'])
   })
 })

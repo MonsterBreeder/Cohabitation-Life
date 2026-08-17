@@ -1,16 +1,20 @@
 import { cloudEnvironmentId, hasCloudEnvironment } from '../config/cloud'
 import type {
   AbandonTaskRequest,
+  AddCommentRequest,
   ClaimTaskRequest,
   CompleteTaskRequest,
   CompletedTaskItem,
   CreateTaskRequest,
   CurrentTasks,
   ListCompletedRequest,
+  TaskComment,
   TaskDetail,
+  TaskEditField,
   TaskResult,
   TaskSummary,
   TaskType,
+  UpdateTaskRequest,
 } from '../types/task'
 
 // 任务模块的云端客户端：
@@ -22,7 +26,26 @@ interface TaskCloudRuntime {
   cloud?: {
     init(options: { env: string }): void
     callFunction(options: { name: string; data: Record<string, unknown> }): Promise<{ result: unknown }>
+    database?: {
+      collection(name: string): {
+        doc(id: string): {
+          /** 微信云 db.watch：SSE 通道，返回 watcher；onChange 收到完整文档快照。 */
+          watch(options: { onChange: (snapshot: WatchSnapshot) => void; onError?: (err: unknown) => void }): Watcher
+        }
+      }
+    }
   }
+}
+
+/** 微信云 watch 回调的 snapshot 形态：type 是 init/update，docs 是完整文档数组。 */
+interface WatchSnapshot {
+  type: 'init' | 'update'
+  docs: unknown[]
+}
+
+/** watcher.close() 关闭订阅。 */
+interface Watcher {
+  close(): void
 }
 
 let initialized = false
@@ -63,7 +86,11 @@ function initialize(): void {
 const TASK_TYPES_SET: ReadonlySet<string> = new Set(['low_stock', 'to_handle', 'expiring'])
 const TASK_STATUSES_OPEN_SET: ReadonlySet<string> = new Set(['pending', 'claimed'])
 const TASK_STATUSES_TERMINAL_SET: ReadonlySet<string> = new Set(['completed', 'abandoned'])
-const TASK_EVENT_KINDS_SET: ReadonlySet<string> = new Set(['create', 'claim', 'complete', 'abandon'])
+const TASK_EVENT_KINDS_SET: ReadonlySet<string> = new Set(['create', 'claim', 'complete', 'abandon', 'edit'])
+const TASK_EDIT_FIELDS_SET: ReadonlySet<string> = new Set(['name', 'type', 'dueDate', 'note'])
+
+/** 评论文本最长 200 字（PRD 006 R10），与 PRD 005 note 的 100 字区分。 */
+export const TASK_COMMENT_MAX_LENGTH = 200
 
 function isBuiltinPersonAvatarId(value: unknown): value is string {
   // 接受默认中性头像 'person-neutral' 和数字编号 'person-01'..'person-99'。
@@ -84,11 +111,32 @@ function isAssigneeDisplay(value: unknown): boolean {
 
 function isTaskEvent(value: unknown): boolean {
   if (!value || typeof value !== 'object') return false
-  const e = value as { kind?: unknown; actor?: unknown; at?: unknown }
-  return typeof e.kind === 'string'
-    && TASK_EVENT_KINDS_SET.has(e.kind)
-    && isAssigneeDisplay(e.actor)
-    && typeof e.at === 'string'
+  const e = value as { kind?: unknown; actor?: unknown; at?: unknown; changedFields?: unknown }
+  if (typeof e.kind !== 'string' || !TASK_EVENT_KINDS_SET.has(e.kind)) return false
+  if (!isAssigneeDisplay(e.actor)) return false
+  if (typeof e.at !== 'string') return false
+  // edit 事件必须有 changedFields 数组（可以为空数组表示"空操作不展示"，R5 兜底）
+  if (e.kind === 'edit') {
+    if (!Array.isArray(e.changedFields)) return false
+    if (!e.changedFields.every((f) => typeof f === 'string' && TASK_EDIT_FIELDS_SET.has(f))) return false
+  } else {
+    // 非 edit 事件不应携带 changedFields
+    if (e.changedFields !== undefined) return false
+  }
+  return true
+}
+
+function isTaskComment(value: unknown): value is TaskComment {
+  if (!value || typeof value !== 'object') return false
+  if (!hasNoInternalKeys(value)) return false
+  const c = value as { id?: unknown; actor?: unknown; text?: unknown; at?: unknown }
+  return typeof c.id === 'string'
+    && isAssigneeDisplay(c.actor)
+    && typeof c.text === 'string'
+    && c.text.length >= 1
+    && c.text.length <= TASK_COMMENT_MAX_LENGTH
+    && c.text.trim().length >= 1
+    && typeof c.at === 'string'
 }
 
 // 已知内部键：禁止出现在任何前端可识别的响应里。
@@ -128,6 +176,7 @@ function isTaskDetail(value: unknown): value is TaskDetail {
     assignee?: unknown; status?: unknown;
     note?: unknown; events?: unknown;
     terminalAt?: unknown; terminalActor?: unknown; terminalKind?: unknown;
+    comments?: unknown; editVersion?: unknown;
   }
   if (typeof d.id !== 'string') return false
   if (typeof d.type !== 'string' || !TASK_TYPES_SET.has(d.type)) return false
@@ -137,6 +186,9 @@ function isTaskDetail(value: unknown): value is TaskDetail {
   if (d.assignee !== undefined && !isAssigneeDisplay(d.assignee)) return false
   if (d.note !== undefined && typeof d.note !== 'string') return false
   if (!Array.isArray(d.events) || !d.events.every(isTaskEvent)) return false
+  // PRD 006：详情必含 comments 数组（空时为 []）和 editVersion 数字
+  if (!Array.isArray(d.comments) || !d.comments.every(isTaskComment)) return false
+  if (typeof d.editVersion !== 'number' || !Number.isInteger(d.editVersion) || d.editVersion < 0) return false
   if (typeof d.status !== 'string') return false
   // 待处理 / 已认领：必须有负责人字段(可选)但不能带终止字段
   if (d.status === 'pending' || d.status === 'claimed') return true
@@ -204,6 +256,17 @@ function isTaskResult(value: unknown): value is TaskResult {
     }
     return false
   }
+  // PRD 006：编辑返回 { task, events, editVersion }
+  if (r.status === 'UPDATED') {
+    const v = value as { task?: unknown; events?: unknown; editVersion?: unknown }
+    return isTaskSummary(v.task)
+      && Array.isArray(v.events) && v.events.every(isTaskEvent)
+      && typeof v.editVersion === 'number' && Number.isInteger(v.editVersion) && v.editVersion >= 0
+  }
+  // PRD 006：评论返回 { detail }（含最新 comments 数组与 editVersion）
+  if (r.status === 'COMMENTED') {
+    return isTaskDetail((value as { detail?: unknown }).detail)
+  }
   if (isFailureStatus(r.status)) return typeof r.errorMessage === 'string'
   return false
 }
@@ -215,6 +278,8 @@ type TaskAction =
   | 'claim'
   | 'complete'
   | 'abandon'
+  | 'update'
+  | 'addComment'
   | 'getDetail'
   | 'listCurrent'
   | 'listCompleted'
@@ -243,9 +308,62 @@ export const createTaskInCloud = (input: CreateTaskRequest) => call('create', in
 export const claimTaskInCloud = (input: ClaimTaskRequest) => call('claim', input)
 export const completeTaskInCloud = (input: CompleteTaskRequest) => call('complete', input)
 export const abandonTaskInCloud = (input: AbandonTaskRequest) => call('abandon', input)
+export const updateTaskInCloud = (input: UpdateTaskRequest) => call('update', input)
+export const addCommentInCloud = (input: AddCommentRequest) => call('addComment', input)
 export const getTaskDetailInCloud = (taskId: string) => call('getDetail', { taskId })
 export const listCurrentTasksInCloud = () => call('listCurrent', {})
 export const listCompletedTasksInCloud = (input: ListCompletedRequest) => call('listCompleted', input)
+
+// === 实时推送（PRD 006 U5：仅评论接 db.watch） ===
+// 微信云的 db.watch 走 SSE 通道，回调里拿到完整文档快照；
+// 我们只关心 comments 字段变化，其他字段（title/type/dueDate/note/status）
+// 不在这里合并，避免覆盖正在进行的编辑草稿。
+
+export interface TaskCommentsCallbacks {
+  /** 当 watch 推送新评论时触发（已是合法 TaskComment 数组；空数组是初次 init）。 */
+  onComments: (comments: TaskComment[]) => void
+  /** watch 出错时触发（连接断开、权限问题等）。UI 不应弹 toast——静默回退到 onShow 重拉。 */
+  onError?: (err: unknown) => void
+}
+
+/** 订阅指定事项的 comments 字段变化。返回 watcher；调用方负责在 unmount 时 close。 */
+export function subscribeTaskComments(taskId: string, callbacks: TaskCommentsCallbacks): Watcher {
+  initialize()
+  const db = cloudRuntime().database
+  if (!db) {
+    callbacks.onError?.(new TaskCloudError('PLATFORM_UNSUPPORTED', '当前环境暂不支持云端实时数据'))
+    return { close: () => undefined }
+  }
+  return db.collection('tasks').doc(taskId).watch({
+    onChange(snapshot) {
+      // R33：只读 docs[0].comments；其他字段变化忽略
+      if (!Array.isArray(snapshot?.docs) || snapshot.docs.length === 0) {
+        callbacks.onComments([])
+        return
+      }
+      const doc = snapshot.docs[0]
+      if (!doc || typeof doc !== 'object') {
+        callbacks.onComments([])
+        return
+      }
+      const commentsRaw = (doc as { comments?: unknown }).comments
+      if (!Array.isArray(commentsRaw)) {
+        callbacks.onComments([])
+        return
+      }
+      // R29：每条都过 isTaskComment 严格校验；不合法丢弃
+      const safe: TaskComment[] = []
+      for (const c of commentsRaw) {
+        if (isTaskComment(c)) safe.push(c)
+      }
+      callbacks.onComments(safe)
+    },
+    onError(err) {
+      // R30：连接断开静默回退，不弹错误
+      callbacks.onError?.(err)
+    },
+  })
+}
 
 // === 测试钩子 ===
 
@@ -268,4 +386,6 @@ export const __testing = {
   isTaskResult,
   isAssigneeDisplay,
   isTaskEvent,
+  isTaskComment,
+  TASK_COMMENT_MAX_LENGTH,
 }

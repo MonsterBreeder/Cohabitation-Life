@@ -1,6 +1,7 @@
 import {
   __testing,
   abandonTaskInCloud,
+  addCommentInCloud,
   claimTaskInCloud,
   completeTaskInCloud,
   createTaskInCloud,
@@ -11,7 +12,9 @@ import {
   setTaskCloudEnvironmentForTesting,
   setTaskCloudRuntimeForTesting,
   setTaskCloudTimeoutForTesting,
+  subscribeTaskComments,
   TaskCloudError,
+  updateTaskInCloud,
 } from '../../src/services/task-cloud'
 import type { TaskDetail, TaskSummary } from '../../src/types/task'
 
@@ -40,6 +43,9 @@ describe('事项云端服务', () => {
     events: [
       { kind: 'create', actor: { nickname: '小帅', avatar: { kind: 'builtin', id: 'person-01' } }, at: '2026-08-14T10:00:00.000Z' },
     ],
+    // PRD 006：详情必含 comments 数组（空时为 []）和 editVersion 数字
+    comments: [],
+    editVersion: 0,
     ...overrides,
   })
 
@@ -106,6 +112,69 @@ describe('事项云端服务', () => {
     await expect(abandonTaskInCloud({ taskId: 'task_a1b2c3', requestId: 'r1', operationToken: 'o1' })).resolves.toMatchObject({
       status: 'ABANDONED',
     })
+  })
+
+  it('编辑返回最新 summary + 事件流 + editVersion', async () => {
+    callFunction.mockResolvedValue({
+      result: {
+        status: 'UPDATED',
+        retryable: false,
+        task: buildSummary({ title: '买 5L 装洗衣液' }),
+        events: [
+          { kind: 'edit', actor: { nickname: '小帅', avatar: { kind: 'builtin', id: 'person-01' } }, at: '2026-08-16T10:00:00.000Z', changedFields: ['name', 'type'] },
+        ],
+        editVersion: 1,
+      },
+    })
+
+    await expect(updateTaskInCloud({
+      taskId: 'task_a1b2c3',
+      title: '买 5L 装洗衣液',
+      type: 'low_stock',
+      editVersion: 0,
+      requestId: 'r1',
+      operationToken: 'o1',
+    })).resolves.toMatchObject({
+      status: 'UPDATED',
+      task: expect.objectContaining({ title: '买 5L 装洗衣液' }),
+      editVersion: 1,
+      events: expect.arrayContaining([expect.objectContaining({ kind: 'edit', changedFields: ['name', 'type'] })]),
+    })
+
+    expect(callFunction).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'task',
+      data: expect.objectContaining({ action: 'update', editVersion: 0 }),
+    }))
+  })
+
+  it('评论返回最新 detail（含 comments 数组与 editVersion）', async () => {
+    callFunction.mockResolvedValue({
+      result: {
+        status: 'COMMENTED',
+        retryable: false,
+        detail: buildDetail({
+          comments: [
+            { id: 'c1', actor: { nickname: '小帅', avatar: { kind: 'builtin', id: 'person-01' } }, text: '好的', at: '2026-08-16T10:00:00.000Z' },
+          ],
+          editVersion: 0,
+        }),
+      },
+    })
+
+    await expect(addCommentInCloud({
+      taskId: 'task_a1b2c3',
+      text: '好的',
+      requestId: 'r1',
+      operationToken: 'o1',
+    })).resolves.toMatchObject({
+      status: 'COMMENTED',
+      detail: expect.objectContaining({ comments: expect.any(Array), editVersion: 0 }),
+    })
+
+    expect(callFunction).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'task',
+      data: expect.objectContaining({ action: 'addComment', text: '好的' }),
+    }))
   })
 
   it('详情页返回完整 detail，含 events 数组', async () => {
@@ -297,6 +366,213 @@ describe('事项云端服务', () => {
         ],
       })
       expect(isTaskDetail(broken)).toBe(false)
+    })
+
+    it('缺 comments 数组拒绝', () => {
+      const { comments: _drop, ...rest } = buildDetail()
+      expect(isTaskDetail(rest)).toBe(false)
+    })
+
+    it('comments 含非法 comment 拒绝', () => {
+      const broken = buildDetail({
+        comments: [{ id: 'c1', actor: { nickname: '小帅', avatar: { kind: 'builtin', id: 'person-01' } }, text: '', at: '2026-08-16T10:00:00.000Z' }],
+      })
+      expect(isTaskDetail(broken)).toBe(false)
+    })
+
+    it('缺 editVersion 拒绝', () => {
+      const { editVersion: _drop, ...rest } = buildDetail()
+      expect(isTaskDetail(rest)).toBe(false)
+    })
+
+    it('editVersion 非整数拒绝', () => {
+      expect(isTaskDetail({ ...buildDetail(), editVersion: 1.5 })).toBe(false)
+      expect(isTaskDetail({ ...buildDetail(), editVersion: -1 })).toBe(false)
+    })
+  })
+
+  describe('isTaskComment 严格校验', () => {
+    const { isTaskComment, TASK_COMMENT_MAX_LENGTH } = __testing
+
+    const baseComment = {
+      id: 'c1',
+      actor: { nickname: '小帅', avatar: { kind: 'builtin', id: 'person-01' } },
+      text: '好的',
+      at: '2026-08-16T10:00:00.000Z',
+    }
+
+    it('合法 comment 通过', () => {
+      expect(isTaskComment(baseComment)).toBe(true)
+    })
+
+    it('缺 id 拒绝', () => {
+      const { id: _drop, ...rest } = baseComment
+      expect(isTaskComment(rest)).toBe(false)
+    })
+
+    it('text 为空拒绝', () => {
+      expect(isTaskComment({ ...baseComment, text: '' })).toBe(false)
+    })
+
+    it('text 仅空白拒绝', () => {
+      expect(isTaskComment({ ...baseComment, text: '   ' })).toBe(false)
+    })
+
+    it(`text 超过 ${TASK_COMMENT_MAX_LENGTH} 字符拒绝`, () => {
+      const longText = '一'.repeat(TASK_COMMENT_MAX_LENGTH + 1)
+      expect(isTaskComment({ ...baseComment, text: longText })).toBe(false)
+    })
+
+    it(`text 正好 ${TASK_COMMENT_MAX_LENGTH} 字符通过`, () => {
+      const exactText = '一'.repeat(TASK_COMMENT_MAX_LENGTH)
+      expect(isTaskComment({ ...baseComment, text: exactText })).toBe(true)
+    })
+
+    it('携带内部键（householdId / _id）拒绝', () => {
+      expect(isTaskComment({ ...baseComment, householdId: 'hh_internal' })).toBe(false)
+      expect(isTaskComment({ ...baseComment, _id: 'task_internal' })).toBe(false)
+    })
+  })
+
+  describe('isTaskEvent 严格校验（edit 事件）', () => {
+    const { isTaskEvent } = __testing
+
+    it('edit 事件必须带 changedFields 数组', () => {
+      const baseEdit = {
+        kind: 'edit' as const,
+        actor: { nickname: '小帅', avatar: { kind: 'builtin', id: 'person-01' } },
+        at: '2026-08-16T10:00:00.000Z',
+        changedFields: ['name' as const, 'type' as const],
+      }
+      expect(isTaskEvent(baseEdit)).toBe(true)
+    })
+
+    it('edit 事件可以空 changedFields（R5 兜底：不展示）', () => {
+      const emptyEdit = {
+        kind: 'edit' as const,
+        actor: { nickname: '小帅', avatar: { kind: 'builtin', id: 'person-01' } },
+        at: '2026-08-16T10:00:00.000Z',
+        changedFields: [],
+      }
+      expect(isTaskEvent(emptyEdit)).toBe(true)
+    })
+
+    it('edit 事件 changedFields 含未知字段名拒绝', () => {
+      const brokenEdit = {
+        kind: 'edit' as const,
+        actor: { nickname: '小帅', avatar: { kind: 'builtin', id: 'person-01' } },
+        at: '2026-08-16T10:00:00.000Z',
+        changedFields: ['name', 'assignee'], // assignee 不在 edit 字段集
+      }
+      expect(isTaskEvent(brokenEdit)).toBe(false)
+    })
+
+    it('非 edit 事件携带 changedFields 拒绝', () => {
+      const broken = {
+        kind: 'create' as const,
+        actor: { nickname: '小帅', avatar: { kind: 'builtin', id: 'person-01' } },
+        at: '2026-08-16T10:00:00.000Z',
+        changedFields: ['name'],
+      }
+      expect(isTaskEvent(broken)).toBe(false)
+    })
+  })
+
+
+  // === PRD 006 U5：subscribeTaskComments 实时推送 ===
+
+  describe('subscribeTaskComments（PRD 006 U5 实时推送）', () => {
+    let lastOnChange
+    let lastOnError
+    let closeMock
+
+    beforeEach(() => {
+      lastOnChange = undefined
+      lastOnError = undefined
+      closeMock = jest.fn()
+      const watch = jest.fn((options) => {
+        lastOnChange = options.onChange
+        lastOnError = options.onError
+        return { close: closeMock }
+      })
+      const database = {
+        collection: () => ({ doc: () => ({ watch }) }),
+      }
+      setTaskCloudRuntimeForTesting({
+        cloud: { init: jest.fn(), callFunction: jest.fn(), database },
+      })
+    })
+
+    it('订阅时调用 db.collection(...).doc(id).watch(...)', () => {
+      const watcher = subscribeTaskComments('t1', { onComments: jest.fn() })
+      expect(watcher).toBeDefined()
+      expect(typeof lastOnChange).toBe('function')
+    })
+
+    it('onChange 收到合法评论时调用 onComments 回调（仅读 comments 字段）', () => {
+      const onComments = jest.fn()
+      subscribeTaskComments('t1', { onComments })
+      lastOnChange({
+        type: 'update',
+        docs: [{
+          _id: 't1',
+          title: 'new title',
+          comments: [
+            { id: 'c1', actor: { nickname: '小帅', avatar: { kind: 'builtin', id: 'person-01' } }, text: '好的', at: '2026-08-16T10:00:00.000Z' },
+            { id: 'c2', actor: { nickname: '小美', avatar: { kind: 'builtin', id: 'person-02' } }, text: '收到', at: '2026-08-16T11:00:00.000Z' },
+          ],
+        }],
+      })
+      expect(onComments).toHaveBeenCalledTimes(1)
+      expect(onComments.mock.calls[0][0]).toHaveLength(2)
+      expect(onComments.mock.calls[0][0][0]).toMatchObject({ id: 'c1', text: '好的' })
+    })
+
+    it('comments 含非法项时丢弃（严格校验）', () => {
+      const onComments = jest.fn()
+      subscribeTaskComments('t1', { onComments })
+      lastOnChange({
+        type: 'update',
+        docs: [{
+          comments: [
+            { id: 'c1', actor: { nickname: '小帅', avatar: { kind: 'builtin', id: 'person-01' } }, text: '好的', at: '2026-08-16T10:00:00.000Z' },
+            { id: 'c2', actor: { nickname: '小帅', avatar: { kind: 'builtin', id: 'person-01' } }, text: '', at: '2026-08-16T10:00:00.000Z' },
+            { id: 'c3', actor: { nickname: '小帅', avatar: { kind: 'builtin', id: 'person-01' } }, text: 'good', at: '2026-08-16T10:00:00.000Z', householdId: 'h1' },
+          ],
+        }],
+      })
+      expect(onComments.mock.calls[0][0]).toHaveLength(1)
+    })
+
+    it('comments 不是数组时回调空数组（R33）', () => {
+      const onComments = jest.fn()
+      subscribeTaskComments('t1', { onComments })
+      lastOnChange({ type: 'update', docs: [{ _id: 't1', title: 'no comments' }] })
+      expect(onComments).toHaveBeenCalledWith([])
+    })
+
+    it('docs 为空时回调空数组', () => {
+      const onComments = jest.fn()
+      subscribeTaskComments('t1', { onComments })
+      lastOnChange({ type: 'init', docs: [] })
+      expect(onComments).toHaveBeenCalledWith([])
+    })
+
+    it('onError 触发时不抛错（静默回退 R30）', () => {
+      const onError = jest.fn()
+      expect(() => {
+        subscribeTaskComments('t1', { onComments: jest.fn(), onError })
+        lastOnError(new Error('connection lost'))
+      }).not.toThrow()
+      expect(onError).toHaveBeenCalled()
+    })
+
+    it('平台不支持（无 database）时不抛错，返回 noop watcher', () => {
+      setTaskCloudRuntimeForTesting({ cloud: { init: jest.fn(), callFunction: jest.fn() } })
+      const onError = jest.fn()
+      const watcher = subscribeTaskComments('t1', { onComments: jest.fn(), onError })
+      expect(onError).toHaveBeenCalled()
+      expect(() => watcher.close()).not.toThrow()
     })
   })
 })

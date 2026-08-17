@@ -9,6 +9,8 @@ const {
   completeTask,
   abandonTask,
   listCompletedTasks,
+  updateTask,
+  addComment,
   TaskDomainError,
 } = require('./task-domain')
 
@@ -97,6 +99,11 @@ function createRepository() {
           createTask: (record) => transaction.collection('tasks').doc(record._id).set({ data: withoutDocumentId(record) }),
           updateTask: (id, data) => transaction.collection('tasks').doc(id).update({ data }),
           createOperation: (record) => transaction.collection('taskOperations').doc(record._id).set({ data: withoutDocumentId(record) }),
+          // PRD 006：事务内可读 events（用于 updateTask 返回 events）
+          findOperationsByTaskId: async (taskId) => {
+            const result = await transaction.collection('taskOperations').where({ taskId }).limit(50).get()
+            return result.data.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
+          },
         }
         return work(tx)
       })
@@ -146,6 +153,9 @@ exports.main = async (event) => {
     if (action === 'complete') return await completeTask(event, dependencies)
     if (action === 'abandon') return await abandonTask(event, dependencies)
     if (action === 'listCompleted') return await listCompletedTasks(event, dependencies)
+    // PRD 006
+    if (action === 'update') return await updateTask(event, dependencies)
+    if (action === 'addComment') return await addComment(event, dependencies)
     throw new TaskDomainError('TASK_INVALID_REQUEST')
   } catch (error) {
     if (error instanceof TaskDomainError) {

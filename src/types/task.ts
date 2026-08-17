@@ -17,13 +17,36 @@ export type OpenTaskStatus = Extract<TaskStatus, 'pending' | 'claimed'>
 export type TerminalTaskStatus = Extract<TaskStatus, 'completed' | 'abandoned'>
 
 /** 事件类型，按时间倒序在详情页底部展示。 */
-export type TaskEventKind = 'create' | 'claim' | 'complete' | 'abandon'
+export type TaskEventKind = 'create' | 'claim' | 'complete' | 'abandon' | 'edit'
+
+/** 编辑事件可标记的字段名。assignee 在 PRD 005 范围外，本期不参与编辑。 */
+export type TaskEditField = 'name' | 'type' | 'dueDate' | 'note'
 
 /** 负责人展示昵称，pending 时为 undefined。 */
 export interface AssigneeDisplay {
   nickname: string
   avatar: { kind: 'builtin'; id: string }
 }
+
+/** TaskEvent 的公共基础字段，被各 kind 复用。 */
+interface TaskEventBase {
+  actor: AssigneeDisplay
+  at: string
+}
+
+/** 状态转移类事件（create / claim / complete / abandon）：仅 kind + base。 */
+interface TaskStateEvent extends TaskEventBase {
+  kind: 'create' | 'claim' | 'complete' | 'abandon'
+}
+
+/** 编辑事件：kind='edit' + changedFields。 */
+export interface TaskEditEvent extends TaskEventBase {
+  kind: 'edit'
+  changedFields: TaskEditField[]
+}
+
+/** 详情页事件：状态转移事件 + 编辑事件的有限联合。 */
+export type TaskEvent = TaskStateEvent | TaskEditEvent
 
 /** 首页列表条目：名称、类型、截止日期、负责人昵称、状态。不含家庭或事项内部编号。 */
 export interface TaskSummary {
@@ -39,16 +62,31 @@ export interface TaskSummary {
   status: OpenTaskStatus
 }
 
-/** 详情页：summary + 备注 + 操作记录。events 按时间倒序（最新在前）。 */
+/** 单条评论。不可改不可删（PRD 006）。 */
+export interface TaskComment {
+  /** 云端生成的字符串 id，用于 watch 合并时去重。 */
+  id: string
+  actor: AssigneeDisplay
+  /** 1-200 字符，受控文案校验。 */
+  text: string
+  /** 服务端时间，ISO 字符串。 */
+  at: string
+}
+
+/** 详情页：summary + 备注 + 操作记录 + 评论。events 按时间倒序（最新在前）。 */
 export interface TaskDetail extends TaskSummary {
   note?: string
-  /** 创建/认领/完成/放弃的事件流；终止态事件在末尾。 */
+  /** 创建/认领/完成/放弃/编辑的事件流；终止态事件在末尾。 */
   events: TaskEvent[]
   /** 终止时间和动作人；未终止时为 undefined。 */
   terminalAt?: string
   terminalActor?: AssigneeDisplay
   /** 'completed' 或 'abandoned'；未终止时为 undefined。 */
   terminalKind?: TerminalTaskStatus
+  /** 评论数组；按 at 倒序。空时是 []，不是 undefined。 */
+  comments: TaskComment[]
+  /** 乐观锁：每次 updateTask 成功 +1；云端做 CAS 校验。 */
+  editVersion: number
 }
 
 /** 已完成/已放弃列表条目；用于"我们的家→已完成"分页。 */
@@ -75,7 +113,21 @@ export interface CurrentTasks {
 }
 
 /** 通用操作结果：有限状态联合，UI 根据 status 收敛。 */
-export type TaskResultStatus = 'TASK_INVALID_REQUEST' | 'TASK_NOT_FOUND' | 'TASK_FORBIDDEN' | 'TASK_TERMINAL' | 'TASK_DUPLICATE_OPERATION' | 'TASK_TEMPORARY_FAILURE' | 'CREATED' | 'CLAIMED' | 'COMPLETED' | 'ABANDONED' | 'LOADED' | 'LISTED'
+export type TaskResultStatus =
+  | 'TASK_INVALID_REQUEST'
+  | 'TASK_NOT_FOUND'
+  | 'TASK_FORBIDDEN'
+  | 'TASK_TERMINAL'
+  | 'TASK_DUPLICATE_OPERATION'
+  | 'TASK_TEMPORARY_FAILURE'
+  | 'CREATED'
+  | 'CLAIMED'
+  | 'COMPLETED'
+  | 'ABANDONED'
+  | 'LOADED'
+  | 'LISTED'
+  | 'UPDATED'
+  | 'COMMENTED'
 
 export interface TaskResultBase {
   status: TaskResultStatus
@@ -120,8 +172,24 @@ export interface TaskCompletedListResult extends TaskResultBase {
   nextCursor?: string
 }
 
+/** 编辑字段结果：返回最新 summary + editVersion + 事件流（可能含新的 edit 事件）。 */
+export interface TaskUpdatedResult extends TaskResultBase {
+  status: 'UPDATED'
+  task: TaskSummary
+  /** 编辑后的事件流；UPDATED 时通常是 events 数组的完整新版本。 */
+  events: TaskEvent[]
+  /** 编辑后新的 editVersion，前端缓存用于下次 update 的 CAS。 */
+  editVersion: number
+}
+
+/** 评论结果：返回最新 detail（含 comments 数组与 editVersion）。 */
+export interface TaskCommentedResult extends TaskResultBase {
+  status: 'COMMENTED'
+  detail: TaskDetail
+}
+
 export interface TaskFailureResult extends TaskResultBase {
-  status: Exclude<TaskResultStatus, 'CREATED' | 'CLAIMED' | 'COMPLETED' | 'ABANDONED' | 'LOADED' | 'LISTED'>
+  status: Exclude<TaskResultStatus, 'CREATED' | 'CLAIMED' | 'COMPLETED' | 'ABANDONED' | 'LOADED' | 'LISTED' | 'UPDATED' | 'COMMENTED'>
   errorMessage: string
 }
 
@@ -133,6 +201,8 @@ export type TaskResult =
   | TaskLoadedResult
   | TaskListedResult
   | TaskCompletedListResult
+  | TaskUpdatedResult
+  | TaskCommentedResult
   | TaskFailureResult
 
 /** 新建请求：名称、类型、可选截止日期、可选备注。负责人和事件由服务端推导。 */
@@ -168,9 +238,24 @@ export interface ListCompletedRequest {
   cursor?: string
 }
 
-/** 详情页事件：动作人昵称 + 动作 + 时间；不含 actorKey 内部键。 */
-export interface TaskEvent {
-  kind: TaskEventKind
-  actor: AssigneeDisplay
-  at: string
+/** 编辑请求：name / type / dueDate / note 至少 1 项；editVersion 用于 CAS。 */
+export interface UpdateTaskRequest {
+  taskId: string
+  name?: string
+  type?: TaskType
+  dueDate?: string | null
+  /** 备注允许空字符串 / null 表示清除。 */
+  note?: string | null
+  /** 当前 editVersion（来自详情或上次更新响应）；云端校验不匹配时返回 TASK_DUPLICATE_OPERATION。 */
+  editVersion: number
+  requestId: string
+  operationToken: string
+}
+
+/** 评论请求：text 1-200 字符。 */
+export interface AddCommentRequest {
+  taskId: string
+  text: string
+  requestId: string
+  operationToken: string
 }
