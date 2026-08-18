@@ -9,7 +9,7 @@
     </view>
 
     <view v-else-if="loadError" class="page-state" data-testid="home-error">
-      <wd-icon name="warning" size="76rpx" color="#ff8f79" />
+      <wd-icon name="close" size="76rpx" color="#ff8f79" />
       <text class="page-state__title">家庭资料暂时走丢了</text>
       <text class="page-state__copy">{{ loadError }}</text>
       <wd-button type="primary" :loading="isLoading" @click="loadHome">重新加载</wd-button>
@@ -30,7 +30,7 @@
 
       <!-- 单人家庭：保留邀请入口，事项区显示邀请占位 -->
       <view v-if="household.memberCount === 1" class="home-empty">
-        <wd-icon name="calendar" size="68rpx" color="#43c89a" />
+        <wd-icon name="calendar-line" size="68rpx" color="#43c89a" />
         <text class="home-empty__title">等邀请完成后，我们就从第一件小事开始。</text>
         <text class="home-empty__copy">先和另一半一起加入这个家，再开始记下第一件事。</text>
       </view>
@@ -44,7 +44,7 @@
             @press="onPressTask"
           />
           <view v-else class="home-empty" data-testid="home-tasks-empty">
-            <wd-icon name="notes" size="68rpx" color="#43c89a" />
+            <wd-icon name="tags" size="68rpx" color="#43c89a" />
             <text class="home-empty__title">先记下一件事</text>
             <text class="home-empty__copy">生活里的小事记下来，才不会从聊天里溜走。</text>
           </view>

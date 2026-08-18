@@ -1,6 +1,48 @@
 const crypto = require('crypto')
 const { validateDisplayText } = require('./display-text')
 const { validateAvatarReference } = require('./avatar-media')
+// PRD 008：创建家庭时一次性初始化 8 个固定类目。
+// 这里在 household 内部直接实现 initCategories（不再 require('../ledger/ledger-domain')），
+// 因为 household 云函数部署时只打包自身目录，跨目录引用在云开发运行时会 443 失败。
+// 类目数组与 ledger/preset-categories.js 保持一致；初始化逻辑与 ledger/ledger-domain.js initCategories 等价。
+// 幂等：已存在则跳过；失败不影响家庭创建成功。
+const PRESET_CATEGORIES = Object.freeze([
+  Object.freeze({ key: 'dining',     name: '餐饮', iconKey: 'fork-spoon',    colorKey: 'amber',  sortOrder: 0 }),
+  Object.freeze({ key: 'transport',  name: '交通', iconKey: 'car',           colorKey: 'blue',   sortOrder: 1 }),
+  Object.freeze({ key: 'home',       name: '居家', iconKey: 'house',         colorKey: 'mint',   sortOrder: 2 }),
+  Object.freeze({ key: 'entertain',  name: '娱乐', iconKey: 'gamepad',       colorKey: 'coral',  sortOrder: 3 }),
+  Object.freeze({ key: 'medical',    name: '医疗', iconKey: 'first-aid',     colorKey: 'red',    sortOrder: 4 }),
+  Object.freeze({ key: 'clothing',   name: '服饰', iconKey: 'shopping-bag',  colorKey: 'purple', sortOrder: 5 }),
+  Object.freeze({ key: 'education',  name: '教育', iconKey: 'book',           colorKey: 'teal',   sortOrder: 6 }),
+  Object.freeze({ key: 'other',      name: '其他', iconKey: 'tag',            colorKey: 'gray',   sortOrder: 7 }),
+])
+
+function categoryId() {
+  return `cat_${crypto.randomBytes(12).toString('hex')}`
+}
+
+/** 给一个新创建的家庭写入 8 个固定类目。幂等：已存在则跳过。 */
+async function initHouseholdCategories(householdId, dependencies) {
+  if (!householdId || typeof householdId !== 'string') return
+  const repo = dependencies.repository
+  const existing = await repo.findCategoriesByHousehold(householdId)
+  if (existing && existing.length > 0) return
+  const now = dependencies.now().toISOString()
+  for (const preset of PRESET_CATEGORIES) {
+    await repo.addCategory({
+      _id: categoryId(),
+      householdId,
+      key: preset.key,
+      name: preset.name,
+      iconKey: preset.iconKey,
+      colorKey: preset.colorKey,
+      isCustom: false,
+      sortOrder: preset.sortOrder,
+      isHiddenBy: [],
+      createdAt: now,
+    })
+  }
+}
 
 const DEFAULT_HOUSEHOLD_NAME = '我们的小家'
 const DEFAULT_PROFILE_NAME = '小伙伴'
@@ -125,6 +167,16 @@ async function createHousehold(input, dependencies) {
       createdAt,
     })
     return toResult(household, identityKey, true)
+  }).then(async (result) => {
+    // PRD 008：创建家庭后初始化 8 个固定类目。放在事务外（addCategory 是独立 add 操作），
+    // 即使类目初始化失败也不影响家庭创建成功（用户进 ledger 模块时由 ledger 端 initCategories 兜底）。
+    try {
+      const newHouseholdId = result && result.household && result.household.id
+      if (newHouseholdId) await initHouseholdCategories(newHouseholdId, dependencies)
+    } catch (error) {
+      console.error('initHouseholdCategories after createHousehold failed', error && error.message)
+    }
+    return result
   })
 }
 

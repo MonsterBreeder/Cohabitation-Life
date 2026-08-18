@@ -6,6 +6,9 @@ const { prepareAvatar, checkAvatar, getAvatarUrl, AvatarMediaError } = require('
 const { checkImage, checkText } = require('./content-safety')
 const { swapHouseholdAvatar, swapProfileAvatar } = require('./avatar-swap')
 const { createInvitation, previewInvitation, joinInvitation, removeOtherMember } = require('./invitation-domain')
+// PRD 008：household 云函数独立实现 8 个固定类目的初始化（不 require('../ledger/ledger-domain')，
+// 因为 household 部署时只打包自身目录，跨目录引用会在云开发运行时 443 失败）。
+// repository 通过 findCategoriesByHousehold + addCategory 写入 ledgerCategories 集合。
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
@@ -61,6 +64,13 @@ function createRepository() {
     getUser: (id) => getDocument(db.collection('users'), id),
     updateHousehold: (id, data) => db.collection('households').doc(id).update({ data }),
     updateUser: (id, data) => db.collection('users').doc(id).update({ data }),
+    // PRD 008：household 云函数独立初始化 8 个固定类目时用的 repository 适配。
+    // 直接读写 ledgerCategories 集合；权限由"所有用户不可读写"规则保证，household 云函数本身有管理员权限。
+    async findCategoriesByHousehold(householdId) {
+      const result = await db.collection('ledgerCategories').where({ householdId }).limit(50).get()
+      return result.data
+    },
+    addCategory: (data) => db.collection('ledgerCategories').add({ data: withoutDocumentId(data) }),
     runTransaction(work) {
       return db.runTransaction(async (transaction) => work({
         getCreationLock: (id) => getDocument(transaction.collection('householdCreationLocks'), id),
