@@ -35,6 +35,33 @@
 - Logo 使用 `src/static/brand/logo.png`，视觉规范以 `docs/brand/visual-standard.md` 为准。
 - 页面要包含加载、失败、空状态和重复点击保护，不能只做正常状态。
 
+## 全站交互规范
+
+### Loading 状态
+
+全站 loading 收敛到单一模式，禁止混用：
+
+- **组件**：必须用 Wot UI `wd-loading`。**不要**用 `wd-skeleton`（早期 home / profile 用过骨架屏，跟全站转圈风格不一致，已统一为转圈）。
+- **文案格式**：`正在加载 [模块][对象]`，模块前缀化：
+  - 账本相关 → 正在加载账本 / 账目详情 / 记账页 / 账本类目 / 账本统计
+  - 事项相关 → 正在加载事项详情 / 添加事项 / 编辑事项 / 历史事项
+  - 家庭相关 → 正在加载创建家庭 / 个人资料 / 家庭资料 / 加入家庭 / 邀请详情
+  - 公共 → 正在加载首页 / 我的 / 正在确认登录状态
+- **特例保留**：`subpackages/household/crop-avatar` 用"正在检查图片"——动作非加载语义，强行统一会丢精度
+- **省略号"…"**：仅用于进行中状态（如分页"正在加载更早的事项…"），初始加载用句号结尾
+- **加新页面时**直接套用"正在加载 + 模块前缀 + 对象"，不要新造文案
+
+### 同一组件在不同位置行为必须一致
+
+- `HomeSummaryCard` 在 `pages/index` 和 `pages/profile` 都跳 `subpackages/household/edit-household/index`（编辑家庭资料）
+- 同一组件在不同页面行为不同会破坏用户预期；如有差异需求，改组件加 `press-target` 之类的 prop，而不是各调用方分别实现
+
+### 底部 tab icon 选型
+
+- 3 个 tab 全部用 Wot UI iconfont（线稿风）：`home` / `book`（账本）/ `user`
+- Wot UI 有些 iconfont 名字（`wallet` / `notes` 等）虽然在 CSS 里定义但 iconfont 文件没字形，不能用；选**语义最贴的替代**（账本用 `book`，账本 = 记账本）
+- 加新 tab 时如果 iconfont 字符不显示，换备选而不是兜底 emoji（emoji 跟线稿风冲突）
+
 ## 数据与安全
 
 - 用户身份、家庭归属和邀请有效性由微信云端确认，前端传来的用户编号或家庭编号不能作为可信依据。
