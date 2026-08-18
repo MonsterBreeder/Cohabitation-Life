@@ -1,0 +1,9 @@
+{
+  "name": "cleanup-deleted-ledger-entries",
+  "version": "1.0.0",
+  "description": "每日 03:00 清理 30 天前软删的家庭账目（PRD 008）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

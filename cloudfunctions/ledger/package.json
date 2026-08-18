@@ -1,0 +1,9 @@
+{
+  "name": "ledger",
+  "version": "1.0.0",
+  "description": "家庭共同流水账云函数（PRD 008）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}
