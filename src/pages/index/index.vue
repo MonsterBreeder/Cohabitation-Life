@@ -28,44 +28,37 @@
         :member-count="household.memberCount"
       />
 
-      <!-- 单人家庭：保留邀请入口，事项区显示邀请占位 -->
-      <view v-if="household.memberCount === 1" class="home-empty">
-        <wd-icon name="calendar-line" size="68rpx" color="#43c89a" />
-        <text class="home-empty__title">等邀请完成后，我们就从第一件小事开始。</text>
-        <text class="home-empty__copy">先和另一半一起加入这个家，再开始记下第一件事。</text>
+      <!-- 事项区：单成员 / 双成员家庭都用同一套——只是单成员没有 "完成记录" 链接。
+           不再把单成员锁在外面"等邀请另一半"——一个人也能记下自己的事。 -->
+      <view v-if="taskCurrent" class="home-tasks">
+        <TaskList
+          v-if="hasAnyOpenTask"
+          :current="taskCurrent"
+          @press="onPressTask"
+        />
+        <view v-else class="home-empty" data-testid="home-tasks-empty">
+          <wd-icon name="tags" size="68rpx" color="#43c89a" />
+          <text class="home-empty__title">先记下一件事</text>
+          <text class="home-empty__copy">生活里的小事记下来，才不会从聊天里溜走。</text>
+        </view>
       </view>
-
-      <!-- 双人家庭：事项区分组 + 空状态 + 快速添加 -->
-      <template v-else>
-        <view v-if="taskCurrent" class="home-tasks">
-          <TaskList
-            v-if="hasAnyOpenTask"
-            :current="taskCurrent"
-            @press="onPressTask"
-          />
-          <view v-else class="home-empty" data-testid="home-tasks-empty">
-            <wd-icon name="tags" size="68rpx" color="#43c89a" />
-            <text class="home-empty__title">先记下一件事</text>
-            <text class="home-empty__copy">生活里的小事记下来，才不会从聊天里溜走。</text>
-          </view>
+      <view v-if="homeError" class="home-error" data-testid="home-tasks-error">{{ homeError }}</view>
+      <view v-if="hasCompletedLink" class="home-completed-link" data-testid="home-completed-link" @click="goCompleted">
+        <view class="home-completed-link__icon">
+          <wd-icon name="history" size="40rpx" color="#267A5A" />
         </view>
-        <view v-if="homeError" class="home-error" data-testid="home-tasks-error">{{ homeError }}</view>
-        <view v-if="hasCompletedLink" class="home-completed-link" data-testid="home-completed-link" @click="goCompleted">
-          <view class="home-completed-link__icon">
-            <wd-icon name="history" size="40rpx" color="#267A5A" />
-          </view>
-          <view class="home-completed-link__text">
-            <text class="home-completed-link__title">看看我们做完的事</text>
-            <text class="home-completed-link__copy">已完成和已放弃会一直留着</text>
-          </view>
-          <text class="home-completed-link__arrow">›</text>
+        <view class="home-completed-link__text">
+          <text class="home-completed-link__title">{{ completedLinkTitle }}</text>
+          <text class="home-completed-link__copy">已完成和已放弃会一直留着</text>
         </view>
-      </template>
+        <text class="home-completed-link__arrow">›</text>
+      </view>
     </view>
 
-    <!-- 悬浮"快速添加"按钮：仅在有家庭时显示；用 Wot UI 的 wd-fab 组件，避开 tab bar -->
+    <!-- 悬浮"快速添加"按钮：有家庭时一直显示（单成员也允许加自己的事）。
+         用 Wot UI 的 wd-fab 组件，避开 tab bar。 -->
     <wd-fab
-      v-if="household && household.memberCount === 2"
+      v-if="household"
       type="primary"
       position="right-bottom"
       :expandable="false"
@@ -119,7 +112,12 @@ const hasAnyOpenTask = computed(() => {
     || c.groups.expiring.length > 0
 })
 
-const hasCompletedLink = computed(() => household.value?.memberCount === 2)
+// 历史记录入口：有家庭时一直显示（单成员也能看自己做完的事），文案根据成员数变
+// "看看我们做完的事"（双成员）/ "看看我做完的事"（单成员）。
+const hasCompletedLink = computed(() => Boolean(household.value))
+const completedLinkTitle = computed(() =>
+  household.value?.memberCount === 2 ? '看看我们做完的事' : '看看我做完的事',
+)
 
 /** 使用重新进入页面清空错误页面历史，避免返回到失效身份状态。 */
 function relaunch(url: string): void {

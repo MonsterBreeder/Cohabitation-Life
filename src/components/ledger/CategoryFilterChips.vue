@@ -1,24 +1,22 @@
 <!--
-  类目筛选 chips：多选，横向滚动。
+  类目筛选 chips：多选，自动换行（8 个预设类目 + 自定义类目可能要 8-15 个，横向滚动会卡右侧溢出）。
   颜色从类目的 colorKey 映射到具体 hex。
 -->
 <template>
-  <scroll-view class="category-filter" scroll-x>
-    <view class="category-filter__inner">
-      <view
-        v-for="cat in categories"
-        :key="cat.id"
-        class="category-filter__chip"
-        :class="{ 'category-filter__chip--active': selectedIds.includes(cat.id) }"
-        :data-testid="`category-filter-${cat.id}`"
-        :style="{ '--chip-color': cat.colorHex }"
-        @click="onToggle(cat.id)"
-      >
-        <view class="category-filter__dot" :style="{ background: cat.colorHex }" />
-        <text class="category-filter__label">{{ cat.name }}</text>
-      </view>
+  <view class="category-filter">
+    <view
+      v-for="cat in categories"
+      :key="cat.id"
+      class="category-filter__chip"
+      :class="{ 'category-filter__chip--active': selectedIds.includes(cat.id) }"
+      :data-testid="`category-filter-${cat.id}`"
+      :style="{ '--chip-color': cat.colorHex }"
+      @click="onToggle(cat.id)"
+    >
+      <view class="category-filter__dot" :style="{ background: cat.colorHex }" />
+      <text class="category-filter__label">{{ cat.name }}</text>
     </view>
-  </scroll-view>
+  </view>
 </template>
 
 <script setup lang="ts">
@@ -41,13 +39,11 @@ function onToggle(id: string): void {
 
 <style lang="scss" scoped>
 .category-filter {
-  white-space: nowrap;
-  width: 100%;
-}
-.category-filter__inner {
-  display: inline-flex;
+  display: flex;
+  flex-wrap: wrap;
   gap: 12rpx;
   padding: 4rpx 0;
+  width: 100%;
 }
 .category-filter__chip {
   display: inline-flex;
@@ -58,6 +54,7 @@ function onToggle(id: string): void {
   border-radius: 999rpx;
   background: $brand-color-surface;
   transition: all .15s ease;
+  flex-shrink: 0;
 }
 .category-filter__chip--active {
   border-color: var(--chip-color, $brand-color-primary);

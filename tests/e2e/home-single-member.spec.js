@@ -4,19 +4,20 @@ const canRunAutomator = typeof program !== 'undefined'
 const e2eTest = canRunAutomator ? test : test.skip
 
 describe('家庭首页', () => {
-  e2eTest('单人家庭展示真实家庭与本人资料,且不暴露后置功能', async () => {
+  e2eTest('单人家庭展示真实家庭与本人资料,且允许使用记事功能', async () => {
     const page = await program.reLaunch('/pages/index/index')
     await page.waitFor(500)
 
     const home = await page.$('[data-testid="home-single-member"]')
     const household = await page.$('[data-testid="household-profile"]')
+    const quickAdd = await page.$('[data-testid="home-quick-add"]')
     const text = await home.text()
 
     expect(home).toBeTruthy()
     expect(household).toBeTruthy()
-    expect(text).toContain('这个家暂时只有你一人')
-    // 邀请与事项在本阶段不应出现：单元 5 范围外
-    expect(text).not.toContain('快速添加')
+    // 单人状态现在也允许使用记事功能：必须显示"快速添加"按钮 + 事项区空状态
+    expect(quickAdd).toBeTruthy()
+    expect(text).toContain('先记下一件事')
     // 单人状态不预先展示第二位成员的昵称或头像
     expect(text).not.toMatch(/(第二位|另一位)/)
   })
@@ -31,7 +32,7 @@ describe('家庭首页', () => {
     expect(home).toBeTruthy()
     expect(text).not.toContain('这个家暂时只有你一人')
     // 事项模块未上线前,不应提前展示任何事项演示数据
-    expect(text).not.toMatch(/(快速添加|快没了|待处理|快到期)/)
+    expect(text).not.toMatch(/(快没了|待处理|快到期)/)
   })
 
   e2eTest('首页在加载与失败时都展示明确状态,且不展示伪造数据', async () => {

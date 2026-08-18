@@ -10,12 +10,8 @@
     @change="handleChange"
   >
     <wd-tabbar-item name="home" title="首页" icon="home" />
-    <!-- 账本 tab：用 emoji 📒 直接渲染（不依赖 Wot UI 的 iconfont 字体） -->
-    <wd-tabbar-item name="ledger" title="账本">
-      <template #icon>
-        <text class="app-tabbar__emoji" :class="active === 'ledger' ? 'is-active' : 'is-inactive'">📒</text>
-      </template>
-    </wd-tabbar-item>
+    <!-- 账本 tab：用 Wot UI 的 'book' 图标（线稿风，与 home / mine 风格一致） -->
+    <wd-tabbar-item name="ledger" title="账本" icon="book" />
     <wd-tabbar-item name="mine" title="我的" icon="user" />
   </wd-tabbar>
 </template>
@@ -43,13 +39,8 @@ function handleChange(event: { value: TabName }): void {
 </script>
 
 <style lang="scss" scoped>
-/* 底部导航使用圆角悬浮样式，与卡片和暖色背景保持同一视觉语言。 */
-/* emoji 图标：跟着 active 状态切色（绿色激活 / 灰色未激活），与 Wot UI 的 wd-icon 行为一致。 */
-.app-tabbar__emoji {
-  display: inline-block;
-  font-size: 40rpx;
-  line-height: 1;
-}
-.app-tabbar__emoji.is-active { color: #267a5a; }
-.app-tabbar__emoji.is-inactive { color: #74847d; }
+/* 底部导航使用圆角悬浮样式，与卡片和暖色背景保持同一视觉语言。
+   颜色 / 圆角等由 Wot UI 的 wd-tabbar / wd-tabbar-item 自身控制，这里不放具体数值。 */
+/* 占位规则：保证 Vue 编译器输出 AppTabBar.wxss（不能完全空否则 Wot UI 内部 require 会找不到文件） */
+.app-tabbar__placeholder { display: none; }
 </style>
