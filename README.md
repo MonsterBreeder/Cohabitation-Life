@@ -16,7 +16,7 @@
 | 状态 | Pinia 2.1 | 每个业务域一个 store，对象式 + 单飞保护 + 超时恢复 |
 | 样式 | SCSS + 品牌变量 | `src/uni.scss` 集中维护 `$brand-color-*`、`$brand-radius-*` |
 | 后端 | 微信云开发（云函数 + 云数据库） | 4 个云函数，见下表 |
-| 工具链 | Vite 5 + vue-tsc + Jest 29 | TS 严格模式、单元测试 27 套件 / 270 用例 |
+| 工具链 | Vite 5 + vue-tsc + Jest 29 | TS 严格模式、单元测试 40 套件 / 576 用例 |
 
 ## 本地运行
 
@@ -46,7 +46,10 @@
 | `resolve-login` | 1 | 首次登录创建 user / 已登录返回 profile |
 | `household` | 13 | 家庭 CRUD、邀请、加入、个人资料、头像、成员管理 |
 | `task` | 7 | 事项的创建、认领、完成、放弃、详情、首页列表、已完成分页 |
+| `ledger` | 11 | 账目的记、查、改、删、恢复、列表、详情、类目 CRUD、统计 |
 | `cleanup-avatar-media` | 1 | 清理被替换/删除的临时头像文件 |
+| `cleanup-deleted-tasks` | 0 | 每日 03:00 清理 30 天前软删的事项 |
+| `cleanup-deleted-ledger-entries` | 0 | 每日 03:00 清理 30 天前软删的账目 |
 
 每个云函数都遵循同样的边界：
 
@@ -153,6 +156,24 @@ tests/
 - **无产品级恢复 UI**：30 天软删仅供工程师运维恢复
 - **双账号真机验证 4 条新增路径**（19-22，详见 `cloudfunctions/README.md`）
 
+### 7. 家庭共同流水账（PRD 008 / Plan 2026-08-17-002 + UI Plan 008-ledger-ui-design）
+- **单一共同模式**：家庭级别只一种模式，"各自"只是按成员筛选的视图（不像 PRD 005 那样有完整/简化两套）
+- **不计算 AA / 不计算谁欠谁**：纯流水账，不是 AA 记账软件
+- **完全独立于"事项"模块**：不引用 `taskId`，不联动
+- **整数分金额**（`amountCents`）：数据库存分，显示 ÷100 加 ¥
+- **类目家庭级共享**：8 个固定（餐饮/交通/居家/娱乐/医疗/服饰/教育/其他）+ 用户可自定义（添加 / 改名 / 隐藏 / 删除）
+- **双方都能记 / 改 / 删自己记的账**：编辑 / 删除绑定 `payer.memberKey === selfMemberKey`
+- **双方都能看全部 + 新成员看到历史**（家庭共同账本的核心语义）
+- **支持支出 / 收入两种类型**（无转账独立类型）
+- **按成员 / 月份 / 类目筛选**：筛选全部由云端 `listEntries` 完成，前端只做二次过滤
+- **凭证图云存储**（`receipts/{householdId}/{entryId}.jpg`）：30 天物理删除账目时连带删
+- **软删除 + 30 天清理**（`cleanup-deleted-ledger-entries`）：30 天内任何成员都能恢复
+- **纯 inline SVG 饼图 + 纯 CSS 柱状图**（不引第三方图表库）
+- **8 个类目图标直接用 Wot UI 内置 SVG**（`fork-spoon` / `car` / `house` / `gamepad` / `first-aid` / `shopping-bag` / `book` / `tag`）— 不创建 PNG 资源，节省 60KB
+- **底部 tab 入口**（账本作为第二个 tab：首页 / 账本 / 我的；Wot UI `wd-tabbar` 实现，icon `wallet`）
+- **不在 PRD 008 范围**：AA / 分摊 / 结算 / 已转 / 转账独立类型 / 预算 / 定期账 / OCR / 多币种 / 多人家庭（>2 成员）/ 与事项联动 / 私密账目 / 乐观锁 / Webhook / 推送 / 导出 / 搜索 / 年报
+- **双账号真机验证 15 条路径**（19-33，详见 `cloudfunctions/README.md`）
+
 ## 资源 / 体积优化
 
 2026-08-17 做了一次图片资源压缩，把主包从 **1.88 MB（已超 1.5 MB 警告线）** 降到 **601 KB**。
@@ -177,7 +198,7 @@ tests/
 
 ```powershell
 npm run type-check      # vue-tsc --noEmit，0 错
-npm run test:unit       # 28 套件 / 386 用例
+npm run test:unit       # 40 套件 / 576 用例
 npm run build:mp-weixin # 微信小程序构建
 npm run build:h5        # H5 构建
 npm run test:e2e        # 依赖微信开发者工具的 automator，会话不通则跳过
@@ -202,4 +223,5 @@ npm run test:e2e        # 依赖微信开发者工具的 automator，会话不�
 - [x] 事项编辑 + 备注对话（评论实时推送）
 - [x] 事项删除（软删 + 30 天物理清理）
 - [x] 资源体积优化（主包 1.88 MB → 601 KB）
+- [x] 家庭共同流水账（PRD 008）
 - [ ] 下一个模块：见 `docs/prd/` 最新编号
