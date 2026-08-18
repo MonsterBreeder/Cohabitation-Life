@@ -16,7 +16,7 @@
 | 状态 | Pinia 2.1 | 每个业务域一个 store，对象式 + 单飞保护 + 超时恢复 |
 | 样式 | SCSS + 品牌变量 | `src/uni.scss` 集中维护 `$brand-color-*`、`$brand-radius-*` |
 | 后端 | 微信云开发（云函数 + 云数据库） | 4 个云函数，见下表 |
-| 工具链 | Vite 5 + vue-tsc + Jest 29 | TS 严格模式、单元测试 40 套件 / 576 用例 |
+| 工具链 | Vite 5 + vue-tsc + Jest 29 | TS 严格模式、单元测试 40 套件 / 588 用例 |
 
 ## 本地运行
 
@@ -101,7 +101,7 @@ docs/
 ├── plans/                          # 实施计划（按日期 + 模块名）
 └── brand/visual-standard.md        # 视觉规范
 tests/
-├── unit/                           # 28 套件 / 386 用例
+├── unit/                           # 40 套件 / 588 用例
 └── e2e/                            # 真机自动化（依赖微信开发者工具会话）
 ```
 
@@ -127,7 +127,7 @@ tests/
 - 成员管理：查看 / 移除
 - 双账号真机验证通过
 
-### 4. 共同事项（PRD 005 / Plan 2026-08-14-003）⭐ 当前焦点
+### 4. 共同事项（PRD 005 / Plan 2026-08-14-003）
 - **状态机**：`pending → claimed → (completed | abandoned)`，终止态不可重开
 - **任何成员都能完成/放弃**（避免"等认领人"死锁），但放弃需二次确认
 - **首页分组**：今天 + 逾期置顶 + 三个类型分组；类型色带左侧识别
@@ -170,9 +170,35 @@ tests/
 - **软删除 + 30 天清理**（`cleanup-deleted-ledger-entries`）：30 天内任何成员都能恢复
 - **纯 inline SVG 饼图 + 纯 CSS 柱状图**（不引第三方图表库）
 - **8 个类目图标直接用 Wot UI 内置 SVG**（`fork-spoon` / `car` / `house` / `gamepad` / `first-aid` / `shopping-bag` / `book` / `tag`）— 不创建 PNG 资源，节省 60KB
-- **底部 tab 入口**（账本作为第二个 tab：首页 / 账本 / 我的；Wot UI `wd-tabbar` 实现，icon `wallet`）
+- **底部 tab 入口**（账本作为第二个 tab：首页 / 账本 / 我的；Wot UI `wd-tabbar` 实现，icon `book` 线稿风——Wot UI 的 `wallet` iconfont 字形缺失，用语义最贴的 `book` 替代）
 - **不在 PRD 008 范围**：AA / 分摊 / 结算 / 已转 / 转账独立类型 / 预算 / 定期账 / OCR / 多币种 / 多人家庭（>2 成员）/ 与事项联动 / 私密账目 / 乐观锁 / Webhook / 推送 / 导出 / 搜索 / 年报
 - **双账号真机验证 15 条路径**（19-33，详见 `cloudfunctions/README.md`）
+
+## 全站交互规范
+
+### Loading 状态
+
+2026-08-18 把全站 loading 收敛到单一模式：
+
+- **统一组件**：Wot UI `wd-loading`（不混用 `wd-skeleton`——之前 home / profile 用骨架屏、其他用转圈，不一致；现已全部转圈）
+- **统一文案**："正在加载 [模块][对象]" 模块前缀化：
+  - 账本相关 → 正在加载账本 / 账目详情 / 记账页 / 账本类目 / 账本统计
+  - 事项相关 → 正在加载事项详情 / 添加事项 / 编辑事项 / 历史事项
+  - 家庭相关 → 正在加载创建家庭 / 个人资料 / 家庭资料 / 加入家庭 / 邀请详情
+  - 公共 → 正在加载首页 / 我的 / 正在确认登录状态
+- **特例保留**：crop-avatar 用"正在检查图片"（动作非加载语义，强行统一会丢精度）
+- **省略号**："…"仅用于进行中（如分页"正在加载更早的事项…"），初始加载用句号结尾
+- **加新页面**时直接用同样模式（"正在加载 + 模块前缀 + 对象"），不要新造文案
+
+### 家庭卡片点击行为
+
+- `HomeSummaryCard` 组件在 home 页和 profile 页**点击行为一致**：都跳 `subpackages/household/edit-household/index`（编辑家庭资料）
+- 这是个一致性约束——同一组件在不同位置应该行为相同；如有差异需求，改组件加 `press-target` prop 而不是各调用方分别实现
+
+### 底部 tab icon
+
+- 3 个 tab 全部用 Wot UI iconfont（线稿风）：home / `book`（账本）/ `user`
+- Wot UI 有些 iconfont 名字（`wallet` / `notes` 等）虽然在 CSS 里定义但 iconfont 文件没字形，不能用；改用语义最贴的替代（账本用 `book`）
 
 ## 资源 / 体积优化
 
@@ -198,7 +224,7 @@ tests/
 
 ```powershell
 npm run type-check      # vue-tsc --noEmit，0 错
-npm run test:unit       # 40 套件 / 576 用例
+npm run test:unit       # 40 套件 / 588 用例
 npm run build:mp-weixin # 微信小程序构建
 npm run build:h5        # H5 构建
 npm run test:e2e        # 依赖微信开发者工具的 automator，会话不通则跳过
@@ -224,4 +250,5 @@ npm run test:e2e        # 依赖微信开发者工具的 automator，会话不�
 - [x] 事项删除（软删 + 30 天物理清理）
 - [x] 资源体积优化（主包 1.88 MB → 601 KB）
 - [x] 家庭共同流水账（PRD 008）
+- [x] 全站 loading 统一：去掉骨架屏 + 文案规范化（"正在加载 [模块][对象]"）
 - [ ] 下一个模块：见 `docs/prd/` 最新编号
