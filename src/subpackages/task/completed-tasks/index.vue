@@ -19,7 +19,7 @@
 
     <view v-if="!isReady" class="completed-page__state" data-testid="completed-loading">
       <wd-loading color="#267A5A" size="44rpx" />
-      <text class="completed-page__state-title">正在加载历史</text>
+      <text class="completed-page__state-title">正在加载历史事项</text>
     </view>
 
     <view v-else-if="storeError && items.length === 0" class="completed-page__state" data-testid="completed-error">
@@ -90,7 +90,7 @@
       <wd-loadmore
         v-if="hasMore"
         state="loading"
-        loading-text="正在拉取更早的记录…"
+        loading-text="正在加载更早的事项…"
         :loading-props="{ color: '#43c89a' }"
         custom-class="completed-page__more"
         data-testid="completed-load-more"

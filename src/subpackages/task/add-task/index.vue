@@ -12,7 +12,7 @@
 
     <view v-if="!isReady" class="add-task-page__state" data-testid="add-task-loading">
       <wd-loading color="#267A5A" size="44rpx" />
-      <text class="add-task-page__state-title">{{ isEditMode ? '正在准备编辑页' : '正在准备添加页' }}</text>
+      <text class="add-task-page__state-title">{{ isEditMode ? '正在加载编辑事项' : '正在加载添加事项' }}</text>
     </view>
 
     <view v-else class="add-task-page__content" data-testid="add-task-form">

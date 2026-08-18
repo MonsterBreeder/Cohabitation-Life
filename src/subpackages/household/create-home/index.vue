@@ -4,7 +4,7 @@
 
     <view v-if="isCheckingEligibility" class="create-home-page__state" data-testid="create-home-checking">
       <wd-loading color="#267A5A" size="44rpx" />
-      <text class="create-home-page__state-title">正在确认家庭状态</text>
+      <text class="create-home-page__state-title">正在加载创建家庭</text>
       <text class="create-home-page__state-copy">确认完成后就可以创建你们的小家。</text>
     </view>
 
@@ -17,7 +17,7 @@
 
     <view v-else-if="isConfirming" class="create-home-page__state" data-testid="create-home-confirming">
       <wd-loading color="#267A5A" size="44rpx" />
-      <text class="create-home-page__state-title">正在确认创建结果</text>
+      <text class="create-home-page__state-title">正在加载确认结果</text>
       <text class="create-home-page__state-copy">刚才的创建可能已经成功，请不要重复创建。</text>
       <wd-button block round :loading="isConfirmingRequest" :disabled="isConfirmingRequest" @click="confirmAgain">重新确认</wd-button>
       <wd-button block round variant="plain" :disabled="isConfirmingRequest" @click="tryLater">稍后再试</wd-button>

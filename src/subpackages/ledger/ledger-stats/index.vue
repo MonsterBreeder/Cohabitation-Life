@@ -13,7 +13,7 @@
 
     <view v-else-if="isLoading" class="ledger-stats__state" data-testid="ledger-stats-loading">
       <wd-loading color="#267A5A" size="40rpx" />
-      <text class="ledger-stats__state-title">正在读统计</text>
+      <text class="ledger-stats__state-title">正在加载账本统计</text>
     </view>
 
     <view v-else-if="loadError" class="ledger-stats__state" data-testid="ledger-stats-error">

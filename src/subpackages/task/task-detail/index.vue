@@ -12,7 +12,7 @@
 
     <view v-if="!detail && !loadError" class="task-detail-page__state" data-testid="task-detail-loading">
       <wd-loading color="#267A5A" size="44rpx" />
-      <text class="task-detail-page__state-title">正在读取事项</text>
+      <text class="task-detail-page__state-title">正在加载事项详情</text>
     </view>
 
     <view v-else-if="loadError" class="task-detail-page__state" data-testid="task-detail-error">

@@ -17,7 +17,7 @@
 
     <view v-else-if="isLoading && entries.length === 0" class="ledger-home__state" data-testid="ledger-home-loading">
       <wd-loading color="#267A5A" size="40rpx" />
-      <text class="ledger-home__state-title">正在读账本</text>
+      <text class="ledger-home__state-title">正在加载账本</text>
     </view>
 
     <view v-else-if="loadError" class="ledger-home__state" data-testid="ledger-home-error">

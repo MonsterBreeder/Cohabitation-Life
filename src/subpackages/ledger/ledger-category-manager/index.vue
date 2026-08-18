@@ -8,7 +8,7 @@
 
     <view v-if="isLoading && categories.length === 0" class="category-manager__state" data-testid="category-manager-loading">
       <wd-loading color="#267A5A" size="40rpx" />
-      <text class="category-manager__state-title">正在加载类目</text>
+      <text class="category-manager__state-title">正在加载账本类目</text>
     </view>
 
     <view v-else-if="loadError" class="category-manager__state" data-testid="category-manager-error">

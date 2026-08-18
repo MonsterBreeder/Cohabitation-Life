@@ -20,7 +20,7 @@
 
     <view v-else-if="!isReady" class="ledger-add-page__state" data-testid="ledger-add-loading">
       <wd-loading color="#267A5A" size="40rpx" />
-      <text class="ledger-add-page__state-title">正在准备</text>
+      <text class="ledger-add-page__state-title">正在加载记账页</text>
     </view>
 
     <view v-else class="ledger-add-page__content" data-testid="ledger-add-form">

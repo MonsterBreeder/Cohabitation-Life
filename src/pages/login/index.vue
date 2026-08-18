@@ -9,7 +9,7 @@
     <view v-if="isCheckingSession" class="login-page__recovery" data-testid="login-recovery-loading">
       <LoginBrandHero compact />
       <wd-loading color="#267A5A" size="40rpx" />
-      <text class="login-page__recovery-label">正在确认登录状态…</text>
+      <text class="login-page__recovery-label">正在确认登录状态</text>
     </view>
 
     <view v-else class="login-page__content">

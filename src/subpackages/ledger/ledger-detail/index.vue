@@ -14,7 +14,7 @@
 
     <view v-else-if="!detail && !loadError" class="ledger-detail-page__state" data-testid="ledger-detail-loading">
       <wd-loading color="#267A5A" size="40rpx" />
-      <text class="ledger-detail-page__state-title">正在读取</text>
+      <text class="ledger-detail-page__state-title">正在加载账目详情</text>
     </view>
 
     <view v-else-if="loadError" class="ledger-detail-page__state" data-testid="ledger-detail-error">

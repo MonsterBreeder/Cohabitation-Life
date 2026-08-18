@@ -1,7 +1,9 @@
 <template>
   <view class="profile-page">
-    <view v-if="isLoading" class="profile-loading">
-      <wd-skeleton :row-col="[[{ type: 'circle', size: '72px', marginRight: '16px' }, { width: '62%', height: '72px' }]]" animation="gradient" />
+    <!-- 加载态：转圈 + 标准文案（与全站 loading 风格统一；方案 2 全站统一为转圈） -->
+    <view v-if="isLoading" class="page-state" data-testid="profile-loading">
+      <wd-loading color="#267A5A" size="40rpx" />
+      <text class="page-state__title">正在加载我的</text>
     </view>
 
     <view v-else-if="household && profile" class="profile-content">
@@ -98,7 +100,10 @@ onShow(() => { void loadProfile() })
 <style lang="scss" scoped>
 /* 我的页承载个人、家庭和成员设置，首页不再出现管理入口。 */
 .profile-page { min-height: 100vh; padding: 48rpx 32rpx 32rpx; box-sizing: border-box; background: $brand-color-background; }
-.profile-loading { padding-top: 84rpx; }
+/* 加载 / 错误 / 空 通用态：与 pages/index/index.vue 的 .page-state 保持同一视觉语言
+   （方案 2 全站 loading 统一为"转圈 + 文案"） */
+.page-state { display: flex; min-height: 70vh; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.page-state__title { margin-top: 24rpx; color: $brand-color-text; font-size: 32rpx; font-weight: 700; }
 .profile-content { display: flex; flex-direction: column; padding-bottom: 32rpx; }
 .profile-heading { display: flex; flex-direction: column; margin-bottom: 34rpx; }
 .profile-heading__eyebrow { color: $brand-color-primary; font-size: 23rpx; font-weight: 700; letter-spacing: 4rpx; }

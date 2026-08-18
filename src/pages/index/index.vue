@@ -2,10 +2,10 @@
   <view class="page">
     <wd-toast />
 
-    <!-- 骨架保留两张资料卡的真实结构，但不展示伪造名称或头像。 -->
-    <view v-if="isLoading" class="home-skeleton" data-testid="home-loading">
-      <wd-skeleton :row-col="householdSkeleton" animation="gradient" />
-      <wd-skeleton :row-col="memberSkeleton" animation="gradient" />
+    <!-- 加载态：转圈 + 标准文案（与全站 loading 风格统一；方案 2 全站统一为转圈） -->
+    <view v-if="isLoading" class="page-state" data-testid="home-loading">
+      <wd-loading color="#267A5A" size="40rpx" />
+      <text class="page-state__title">正在加载首页</text>
     </view>
 
     <view v-else-if="loadError" class="page-state" data-testid="home-error">
@@ -26,6 +26,7 @@
         :name="household.name"
         :avatar-src="household.avatar.kind === 'builtin' ? householdAvatarSource(household.avatar.id) : householdAvatarUrl"
         :member-count="household.memberCount"
+        @press="openHouseholdEditor"
       />
 
       <!-- 事项区：单成员 / 双成员家庭都用同一套——只是单成员没有 "完成记录" 链接。
@@ -94,9 +95,6 @@ const { hasCompletedLogin, errorMessage: authError } = storeToRefs(authStore)
 const { phase, household, profile, errorMessage: householdError } = storeToRefs(householdStore)
 const { current: taskCurrent, errorMessage: taskError } = storeToRefs(taskStore)
 
-// 两组骨架分别对应家庭卡和成员卡，重试时复用同一布局。
-const householdSkeleton = [[{ type: 'circle', size: '72px', marginRight: '16px' }, { width: '65%', height: '72px' }]]
-const memberSkeleton = [[{ type: 'circle', size: '52px', marginRight: '14px' }, { width: '58%', height: '52px' }]]
 const isLoading = computed(() => phase.value === 'checking')
 const loadError = computed(() => authError.value || householdError.value)
 const homeError = computed(() => taskError.value || '')
@@ -140,6 +138,12 @@ function goCompleted(): void {
   uni.navigateTo({ url: '/subpackages/task/completed-tasks/index' })
 }
 
+/** 点击首页的家庭资料卡：跳到编辑家庭资料页（改家庭名 / 头像）。
+ *  与 profile 页 HomeSummaryCard 行为保持一致——同一组件，同一交互。 */
+function openHouseholdEditor(): void {
+  uni.navigateTo({ url: '/subpackages/household/edit-household/index' })
+}
+
 /** 登录确认和家庭查询串行执行，旧资料在查询开始时立即清空。 */
 async function loadHome(): Promise<void> {
   if (resolveHomeLoadDestination(hasCompletedLogin.value) === 'login') {
@@ -173,7 +177,6 @@ onShow(() => {
 
 <style lang="scss" scoped>
 .page { min-height: 100vh; padding: 48rpx 32rpx 160rpx; box-sizing: border-box; background: $brand-color-background; }
-.home-skeleton { display: flex; flex-direction: column; gap: 52rpx; padding-top: 180rpx; }
 .page-state { display: flex; min-height: calc(100vh - 128rpx); flex-direction: column; align-items: center; justify-content: center; text-align: center; }
 .page-state__title { margin-top: 28rpx; color: $brand-color-text; font-size: 34rpx; font-weight: 700; }
 .page-state__copy { max-width: 520rpx; margin: 16rpx 0 36rpx; color: $brand-color-text-secondary; font-size: 26rpx; line-height: 1.65; }

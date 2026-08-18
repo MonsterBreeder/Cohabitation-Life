@@ -1,6 +1,6 @@
 <template>
   <view class="page">
-    <view v-if="loading" class="state"><wd-loading /><text>正在读取个人资料</text></view>
+    <view v-if="loading" class="state"><wd-loading /><text>正在加载个人资料</text></view>
     <view v-else-if="!profile" class="state"><text>{{ errorMessage || '暂时无法读取个人资料' }}</text></view>
     <view v-else class="editor" data-testid="edit-profile-page">
       <view class="hero"><text class="hero__title">选择你在家里的样子</text><text class="hero__copy">这里的选择只是昵称和形象，不会记录性别。</text></view>

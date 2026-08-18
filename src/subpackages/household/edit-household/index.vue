@@ -1,6 +1,6 @@
 <template>
   <view class="page">
-    <view v-if="loading" class="state"><wd-loading /><text>正在读取家庭资料</text></view>
+    <view v-if="loading" class="state"><wd-loading /><text>正在加载家庭资料</text></view>
     <view v-else-if="!household" class="state"><text>{{ errorMessage || '暂时无法读取家庭资料' }}</text><wd-button @click="load">重试</wd-button></view>
     <view v-else class="editor" data-testid="edit-household-page">
       <view class="hero"><text class="hero__title">把小家打扮成喜欢的样子</text><text class="hero__copy">修改只会在保存成功后生效。</text></view>

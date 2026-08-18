@@ -28,7 +28,7 @@
         <view v-else-if="panelState === 'preparing'" class="invite-status">
           <wd-icon name="loading" size="32rpx" color="#267a5a" />
           <view class="invite-status__content">
-            <text class="invite-status__title">正在准备邀请</text>
+            <text class="invite-status__title">正在准备邀请详情</text>
             <text class="invite-status__copy">通常只需几秒，超过 12 秒会自动停止并允许重新尝试。</text>
           </view>
         </view>

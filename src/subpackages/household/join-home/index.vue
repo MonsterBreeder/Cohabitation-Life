@@ -8,7 +8,7 @@
         <text class="join-card__inviter-status">待接收</text>
       </view>
       <text v-if="preview" class="join-card__description">{{ preview.household.name }} 正在等你一起使用。加入后会有 {{ preview.household.memberCount + 1 }} 位成员。</text>
-      <text v-else class="join-card__description">正在确认这份邀请的信息。</text>
+      <text v-else class="join-card__description">正在加载加入家庭。</text>
       <view v-if="mode === 'transfer'" class="join-card__warning">
         <text class="join-card__warning-title">你的原家庭会被替换</text>
         <text class="join-card__warning-copy">你仍会保留自己的昵称和头像；目前没有共同事项需要迁移。</text>
