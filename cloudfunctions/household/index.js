@@ -1,4 +1,6 @@
 const cloud = require('wx-server-sdk')
+const cloudbase = require('@cloudbase/node-sdk')
+const cloudbaseStorage = require('@cloudbase/node-sdk/lib/storage')
 const crypto = require('crypto')
 const { createHousehold, confirmHousehold, getCurrentHousehold, updateHousehold, updateProfile, HouseholdDomainError } = require('./household-domain')
 const { withoutDocumentId } = require('./repository-data')
@@ -12,6 +14,15 @@ const { createInvitation, previewInvitation, joinInvitation, removeOtherMember }
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
+let cloudbaseApp
+
+async function resolveCloudFileID(cloudPath) {
+  if (!cloudbaseApp) cloudbaseApp = cloudbase.init({ env: process.env.TCB_ENV || process.env.SCF_NAMESPACE })
+  const metadata = await cloudbaseStorage.getUploadMetadata(cloudbaseApp, { cloudPath })
+  const fileID = metadata && metadata.data && metadata.data.fileId
+  if (typeof fileID !== 'string') throw new Error('cloud storage file id unavailable')
+  return fileID
+}
 
 function createIdentityKey(appId, openId) {
   return `user_${crypto.createHash('sha256').update(`${appId}:${openId}`).digest('hex')}`
@@ -35,6 +46,13 @@ function createRepository() {
     create: (record) => avatarCollection.doc(record._id).set({ data: withoutDocumentId(record) }),
     update: (id, data) => avatarCollection.doc(id).update({ data }),
     markReplaced: (id, replacedAt) => avatarCollection.doc(id).update({ data: { state: 'replaced', replacedAt, expiresAt: replacedAt } }),
+    findReusablePending: async (ownerKey) => {
+      const result = await avatarCollection.where({ ownerKey, state: 'prepared' }).limit(20).get()
+      const currentTime = Date.now()
+      return result.data
+        .filter((item) => (item.stagingPath || item.secret) && new Date(item.expiresAt).getTime() > currentTime)
+        .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())[0] || null
+    },
     reserveSlot: (ownerKey, purpose, createdAt, expiresAt) => db.runTransaction(async (transaction) => {
       for (let slot = 0; slot < 3; slot += 1) {
         const slotId = `slot_${crypto.createHash('sha256').update(`${ownerKey}:${slot}`).digest('hex')}`
@@ -119,12 +137,12 @@ function avatarDependencies(identityKey, openId, repository) {
         return result.data.length > 0
       },
       countRecent: async (ownerKey, since) => (await db.collection('avatarMedia').where({ ownerKey, createdAt: db.command.gte(since) }).count()).total,
-      countPending: async (ownerKey) => (await db.collection('avatarMedia').where({ ownerKey, state: db.command.in(['prepared']) }).count()).total,
     },
     storage: {
       download: (fileID) => cloud.downloadFile({ fileID }),
       upload: (cloudPath, fileContent) => cloud.uploadFile({ cloudPath, fileContent }),
       remove: (fileList) => cloud.deleteFile({ fileList }),
+      resolveFileID: resolveCloudFileID,
       tempUrl: (fileList) => cloud.getTempFileURL({ fileList }),
     },
     checkImage: (buffer, currentOpenId, contentType) => checkImage(buffer, currentOpenId, cloud.openapi, contentType),

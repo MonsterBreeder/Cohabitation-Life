@@ -19,8 +19,8 @@ async function action(name: string, data: Record<string, unknown>) {
 export async function uploadAvatar(filePath: string, purpose: CustomAvatarPurpose): Promise<CustomAvatar> {
   const prepared = await action('prepareAvatar', { purpose })
   if (prepared?.status !== 'UPLOAD_READY') throw new Error('暂时无法准备头像上传')
-  await cloudApi().uploadFile({ cloudPath: prepared.cloudPath, filePath })
-  const checked = await action('checkAvatar', { resourceId: prepared.resourceId })
+  const uploaded = await cloudApi().uploadFile({ cloudPath: prepared.cloudPath, filePath })
+  const checked = await action('checkAvatar', { resourceId: prepared.resourceId, fileID: uploaded.fileID })
   if (checked?.status !== 'APPROVED') throw new Error(checked?.status === 'REJECTED' ? '这张图片未通过安全检查' : '图片检查暂时不可用')
   return { kind: 'custom', resourceId: prepared.resourceId, digest: checked.digest }
 }

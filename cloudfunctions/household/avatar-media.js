@@ -14,8 +14,14 @@ function detectImageType(buffer) {
 
 async function prepareAvatar(input, deps) {
   if (!PURPOSES.has(input && input.purpose)) throw new AvatarMediaError('INVALID_REQUEST')
+  // 优先复用尚未完成的上传，避免检查失败后反复占用新的名额。
+  const reusable = await deps.repository.findReusablePending(deps.identityKey)
+  if (reusable) {
+    const cloudPath = reusable.stagingPath || `avatar-staging/${deps.ownerHash}/${reusable.secret}/${reusable._id}.png`
+    await deps.repository.update(reusable._id, { purpose: input.purpose, stagingPath: cloudPath })
+    return { status: 'UPLOAD_READY', retryable: false, resourceId: reusable._id, cloudPath }
+  }
   if (await deps.repository.countRecent(deps.identityKey, deps.since()) >= 12) throw new AvatarMediaError('RATE_LIMITED', true)
-  if (await deps.repository.countPending(deps.identityKey) >= 3) throw new AvatarMediaError('RESOURCE_LIMIT', true)
   const reservation = await deps.repository.reserveSlot(deps.identityKey, input.purpose, deps.now(), deps.expiry())
   if (!reservation) throw new AvatarMediaError('RESOURCE_LIMIT', true)
   const resourceId = reservation.resourceId
@@ -30,7 +36,9 @@ async function checkAvatar(input, deps) {
   if (!record || record.ownerKey !== deps.identityKey) throw new AvatarMediaError('MEDIA_NOT_FOUND')
   if (record.state === 'approved') return { status: 'APPROVED', retryable: false, resourceId: record._id, digest: record.digest }
   if (record.state === 'rejected') return { status: 'REJECTED', retryable: false }
-  const downloaded = await deps.storage.download(record.stagingPath)
+  const fileID = input && input.fileID
+  if (typeof fileID !== 'string' || !fileID.startsWith('cloud://') || !fileID.endsWith(`/${record.stagingPath}`)) throw new AvatarMediaError('INVALID_MEDIA')
+  const downloaded = await deps.storage.download(fileID)
   const buffer = downloaded.fileContent
   if (!Buffer.isBuffer(buffer) || buffer.length === 0 || buffer.length > MAX_BYTES) throw new AvatarMediaError('INVALID_MEDIA')
   const imageType = detectImageType(buffer)
@@ -39,8 +47,10 @@ async function checkAvatar(input, deps) {
   if (verdict !== 'approved') { await deps.repository.update(record._id, { state: 'rejected', reviewedAt: deps.now() }); return { status: 'REJECTED', retryable: false } }
   const contentDigest = digest(buffer)
   const formalPath = `avatar-private/${deps.ownerHash}/${crypto.randomBytes(24).toString('hex')}/${record._id}-${contentDigest}.${imageType.extension}`
-  await deps.storage.upload(formalPath, buffer)
-  await deps.repository.update(record._id, { state: 'approved', formalPath, digest: contentDigest, reviewedAt: deps.now(), stagingPath: null })
+  const uploaded = await deps.storage.upload(formalPath, buffer)
+  const formalFileID = uploaded && uploaded.fileID
+  if (typeof formalFileID !== 'string' || !formalFileID.startsWith('cloud://') || !formalFileID.endsWith(`/${formalPath}`)) throw new AvatarMediaError('TEMPORARY_FAILURE', true)
+  await deps.repository.update(record._id, { state: 'approved', formalPath, formalFileID, digest: contentDigest, reviewedAt: deps.now(), stagingPath: null })
   await deps.storage.remove([record.stagingPath])
   return { status: 'APPROVED', retryable: false, resourceId: record._id, digest: contentDigest }
 }
@@ -61,7 +71,14 @@ async function getAvatarUrl(input, deps) {
   const ownProfile = await deps.repository.getUser(deps.identityKey)
   const referenced = home.avatar?.resourceId === record._id || ownProfile?.avatar?.resourceId === record._id || await deps.repository.isMemberProfileAvatar(home.memberKeys || [], record._id)
   if (!referenced) throw new AvatarMediaError('MEDIA_FORBIDDEN')
-  const result = await deps.storage.tempUrl([record.formalPath])
+  let formalFileID = record.formalFileID
+  // 旧记录只保存了相对路径，首次读取时补齐完整文件地址，用户无需重新上传。
+  if (typeof formalFileID !== 'string' || !formalFileID.startsWith('cloud://') || !formalFileID.endsWith(`/${record.formalPath}`)) {
+    formalFileID = await deps.storage.resolveFileID(record.formalPath)
+    if (typeof formalFileID !== 'string' || !formalFileID.startsWith('cloud://') || !formalFileID.endsWith(`/${record.formalPath}`)) throw new AvatarMediaError('TEMPORARY_FAILURE', true)
+    await deps.repository.update(record._id, { formalFileID })
+  }
+  const result = await deps.storage.tempUrl([formalFileID])
   const item = result.fileList && result.fileList[0]
   if (!item || !item.tempFileURL) throw new AvatarMediaError('TEMPORARY_FAILURE', true)
   return { status: 'URL_READY', retryable: false, url: item.tempFileURL }
