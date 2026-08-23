@@ -1,16 +1,16 @@
 <template>
-  <view class="page">
-    <view v-if="loading" class="state"><wd-loading /><text>正在加载家庭资料</text></view>
-    <view v-else-if="!household" class="state"><text>{{ errorMessage || '暂时无法读取家庭资料' }}</text><wd-button @click="load">重试</wd-button></view>
-    <view v-else class="editor" data-testid="edit-household-page">
-      <view class="hero"><text class="hero__title">把小家打扮成喜欢的样子</text><text class="hero__copy">修改只会在保存成功后生效。</text></view>
-      <view class="panel">
-        <text class="section-title">家庭头像</text>
+  <view class="edit-household-page">
+    <view v-if="loading" class="edit-household-page__state"><wd-loading /><text>正在加载家庭资料</text></view>
+    <view v-else-if="!household" class="edit-household-page__state"><text>{{ errorMessage || '暂时无法读取家庭资料' }}</text><wd-button @click="load">重试</wd-button></view>
+    <view v-else class="edit-household-page__editor" data-testid="edit-household-page">
+      <view class="edit-household-page__hero"><text class="edit-household-page__hero-title">把小家打扮成喜欢的样子</text><text class="edit-household-page__hero-copy">修改只会在保存成功后生效。</text></view>
+      <view class="edit-household-page__panel">
+        <text class="edit-household-page__section-title">家庭头像</text>
         <HouseholdAvatarPicker :current-id="customAvatar ? undefined : avatarId" :custom-preview="customPreview" @select="selectBuiltinAvatar" @select-custom="selectCustomAvatar" />
-        <view v-if="customPreview" class="custom-preview"><wd-avatar :src="customPreview" size="108rpx" /><text>已通过检查的自定义头像</text></view>
-        <text class="section-title section-title--spaced">家庭名称</text>
+        <view v-if="customPreview" class="edit-household-page__custom-preview"><wd-avatar :src="customPreview" size="108rpx" /><text>已通过检查的自定义头像</text></view>
+        <text class="edit-household-page__section-title edit-household-page__section-title--spaced">家庭名称</text>
         <wd-input v-model="name" placeholder="例如：我们的小家" clearable />
-        <text v-if="nameError" class="error">{{ nameError }}</text>
+        <text v-if="nameError" class="edit-household-page__error">{{ nameError }}</text>
       </view>
       <wd-button block type="primary" :loading="saving" :disabled="saving || !!nameError || !changed" @click="save">保存修改</wd-button>
       <wd-button block plain :disabled="saving" @click="cancel">取消</wd-button>
@@ -96,15 +96,69 @@ onShow(() => { void load() })
 </script>
 
 <style lang="scss" scoped>
-.page { min-height: 100vh; padding: 40rpx 32rpx 70rpx; box-sizing: border-box; background: $brand-color-background; }
-.state { display: flex; min-height: 70vh; flex-direction: column; align-items: center; justify-content: center; gap: 28rpx; color: $brand-color-text-secondary; }
-.editor { display: flex; flex-direction: column; gap: 24rpx; }
-.hero { display: flex; flex-direction: column; gap: 12rpx; padding: 18rpx 4rpx; }
-.hero__title { color: $brand-color-text; font-size: 40rpx; font-weight: 700; }
-.hero__copy { color: $brand-color-text-secondary; font-size: 25rpx; }
-.panel { margin-bottom: 12rpx; padding: 30rpx; border-radius: $brand-radius-card; background: #fff; }
-.section-title { display: block; margin-bottom: 22rpx; color: $brand-color-text; font-size: 28rpx; font-weight: 700; }
-.section-title--spaced { margin-top: 38rpx; }
-.error { display: block; margin-top: 12rpx; color: #d95c4f; font-size: 23rpx; }
-.custom-preview { display: flex; align-items: center; gap: 18rpx; margin: 16rpx 0; color: $brand-color-text-secondary; font-size: 23rpx; }
+.edit-household-page {
+  min-height: 100vh;
+  padding: 40rpx 32rpx 70rpx;
+  box-sizing: border-box;
+  background: $brand-color-background;
+  &__state {
+    display: flex;
+    min-height: 70vh;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 28rpx;
+    color: $brand-color-text-secondary;
+  }
+  &__editor {
+    display: flex;
+    flex-direction: column;
+    gap: 24rpx;
+  }
+  &__hero {
+    display: flex;
+    flex-direction: column;
+    gap: 12rpx;
+    padding: 18rpx 4rpx;
+  }
+  &__hero-title {
+    color: $brand-color-text;
+    font-size: 40rpx;
+    font-weight: 700;
+  }
+  &__hero-copy {
+    color: $brand-color-text-secondary;
+    font-size: 25rpx;
+  }
+  &__panel {
+    margin-bottom: 12rpx;
+    padding: 30rpx;
+    border-radius: $brand-radius-card;
+    background: #fff;
+  }
+  &__section-title {
+    display: block;
+    margin-bottom: 22rpx;
+    color: $brand-color-text;
+    font-size: 28rpx;
+    font-weight: 700;
+  }
+  &__section-title--spaced {
+    margin-top: 38rpx;
+  }
+  &__error {
+    display: block;
+    margin-top: 12rpx;
+    color: #d95c4f;
+    font-size: 23rpx;
+  }
+  &__custom-preview {
+    display: flex;
+    align-items: center;
+    gap: 18rpx;
+    margin: 16rpx 0;
+    color: $brand-color-text-secondary;
+    font-size: 23rpx;
+  }
+}
 </style>

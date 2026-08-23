@@ -74,16 +74,96 @@ function selectCustomAvatar(): void {
 </script>
 
 <style lang="scss" scoped>
-.avatar-picker { padding: 32rpx; border: 2rpx solid $brand-color-border; border-radius: $brand-radius-card; background: $brand-color-surface; }
-.avatar-picker__title { display: block; color: $brand-color-text; font-size: 29rpx; font-weight: 700; }
-.avatar-picker__hint { display: block; margin-top: 10rpx; color: $brand-color-text-secondary; font-size: 23rpx; }
-.avatar-picker__options { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14rpx; margin-top: 28rpx; }
-.avatar-picker__option { display: flex; min-width: 0; flex-direction: column; align-items: center; padding: 20rpx 8rpx 18rpx; border: 3rpx solid transparent; border-radius: 22rpx; background: #f7fbf8; line-height: 1; }
-.avatar-picker__option--selected { border-color: $brand-color-primary; background: rgba($brand-color-primary, .08); }
-.avatar-picker__option--disabled { opacity: .6; }
-.avatar-picker__image-wrap { position: relative; }
-.avatar-picker__custom-placeholder { display: flex; width: 116rpx; height: 116rpx; align-items: center; justify-content: center; border: 2rpx dashed rgba($brand-color-primary, .65); border-radius: 50%; background: rgba($brand-color-primary, .06); }
-.avatar-picker__check { position: absolute; right: -4rpx; bottom: -2rpx; display: flex; width: 34rpx; height: 34rpx; align-items: center; justify-content: center; border: 4rpx solid #fff; border-radius: 50%; background: $brand-color-action; }
-.avatar-picker__label { display: block; max-width: 100%; margin-top: 18rpx; overflow: hidden; color: $brand-color-text; font-size: 23rpx; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
-@media (max-width: 360px) { .avatar-picker { padding: 26rpx 20rpx; } .avatar-picker__options { gap: 8rpx; } .avatar-picker__option { padding-right: 4rpx; padding-left: 4rpx; } }
+.avatar-picker {
+  padding: 32rpx;
+  border: 2rpx solid $brand-color-border;
+  border-radius: $brand-radius-card;
+  background: $brand-color-surface;
+  &__title {
+    display: block;
+    color: $brand-color-text;
+    font-size: 29rpx;
+    font-weight: 700;
+  }
+  &__hint {
+    display: block;
+    margin-top: 10rpx;
+    color: $brand-color-text-secondary;
+    font-size: 23rpx;
+  }
+  &__options {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14rpx;
+    margin-top: 28rpx;
+  }
+  &__option {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    align-items: center;
+    padding: 20rpx 8rpx 18rpx;
+    border: 3rpx solid transparent;
+    border-radius: 22rpx;
+    background: #f7fbf8;
+    line-height: 1;
+  }
+  &__option--selected {
+    border-color: $brand-color-primary;
+    background: rgba($brand-color-primary, .08);
+  }
+  &__option--disabled {
+    opacity: .6;
+  }
+  &__image-wrap {
+    position: relative;
+  }
+  &__custom-placeholder {
+    display: flex;
+    width: 116rpx;
+    height: 116rpx;
+    align-items: center;
+    justify-content: center;
+    border: 2rpx dashed rgba($brand-color-primary, .65);
+    border-radius: 50%;
+    background: rgba($brand-color-primary, .06);
+  }
+  &__check {
+    position: absolute;
+    right: -4rpx;
+    bottom: -2rpx;
+    display: flex;
+    width: 34rpx;
+    height: 34rpx;
+    align-items: center;
+    justify-content: center;
+    border: 4rpx solid #fff;
+    border-radius: 50%;
+    background: $brand-color-action;
+  }
+  &__label {
+    display: block;
+    max-width: 100%;
+    margin-top: 18rpx;
+    overflow: hidden;
+    color: $brand-color-text;
+    font-size: 23rpx;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 360px) {
+    padding: 26rpx 20rpx;
+
+    &__options {
+      gap: 8rpx;
+    }
+
+    &__option {
+      padding-right: 4rpx;
+      padding-left: 4rpx;
+    }
+  }
+}
 </style>

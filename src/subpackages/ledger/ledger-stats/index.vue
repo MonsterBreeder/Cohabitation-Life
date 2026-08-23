@@ -79,8 +79,8 @@
 import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import StatsPieChart from '../../../components/ledger/StatsPieChart.vue'
-import StatsBarChart from '../../../components/ledger/StatsBarChart.vue'
+import StatsPieChart from './components/StatsPieChart.vue'
+import StatsBarChart from './components/StatsBarChart.vue'
 import { useHouseholdStore } from '../../../store/modules/household'
 import { useLedgerStore } from '../../../store/modules/ledger'
 import { formatLedgerMonth } from '../../../utils/format'
@@ -159,36 +159,127 @@ watch(
   padding: 32rpx 32rpx 200rpx;
   box-sizing: border-box;
   background: $brand-color-background;
+  &__state {
+    display: flex;
+    min-height: 60vh;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+  &__state-title {
+    margin-top: 24rpx;
+    color: $brand-color-text;
+    font-size: 32rpx;
+    font-weight: 700;
+  }
+  &__state-copy {
+    max-width: 480rpx;
+    margin: 12rpx 0 32rpx;
+    color: $brand-color-text-secondary;
+    font-size: 25rpx;
+    line-height: 1.6;
+  }
+  &__content {
+    display: flex;
+    flex-direction: column;
+    gap: 24rpx;
+  }
+  &__overview {
+    display: flex;
+    flex-direction: column;
+    gap: 18rpx;
+    padding: 28rpx 28rpx 24rpx;
+    border-radius: $brand-radius-card;
+    background: $brand-color-surface;
+    box-shadow: 0 2rpx 16rpx rgba(38, 122, 90, 0.04);
+  }
+  &__month-label {
+    color: $brand-color-text-secondary;
+    font-size: 24rpx;
+    font-weight: 500;
+    letter-spacing: 2rpx;
+  }
+  &__numbers {
+    display: flex;
+    justify-content: space-between;
+  }
+  &__number-block {
+    display: flex;
+    flex-direction: column;
+    gap: 6rpx;
+  }
+  &__number-label {
+    color: $brand-color-text-secondary;
+    font-size: 22rpx;
+  }
+  &__number-value {
+    color: $brand-color-text;
+    font-size: 34rpx;
+    font-weight: 700;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+  }
+  &__number-value--expense {
+    color: $brand-color-accent;
+  }
+  &__number-value--income {
+    color: $brand-color-primary;
+  }
+  &__month-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  &__month-btn {
+    min-width: 110rpx;
+  }
+  &__month-current {
+    color: $brand-color-text;
+    font-size: 28rpx;
+    font-weight: 600;
+  }
+  &__panel {
+    display: flex;
+    flex-direction: column;
+    gap: 18rpx;
+    padding: 24rpx 24rpx;
+    border-radius: $brand-radius-card;
+    background: $brand-color-surface;
+  }
+  &__panel-title {
+    color: $brand-color-text;
+    font-size: 28rpx;
+    font-weight: 700;
+  }
+  &__legend {
+    display: flex;
+    flex-direction: column;
+    gap: 12rpx;
+    margin-top: 8rpx;
+  }
+  &__legend-item {
+    display: flex;
+    align-items: center;
+    gap: 14rpx;
+  }
+  &__legend-dot {
+    width: 16rpx;
+    height: 16rpx;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  &__legend-name {
+    flex: 1;
+    color: $brand-color-text;
+    font-size: 26rpx;
+    font-weight: 500;
+  }
+  &__legend-percent {
+    color: $brand-color-text-secondary;
+    font-size: 24rpx;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
 }
-.ledger-stats__state { display: flex; min-height: 60vh; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
-.ledger-stats__state-title { margin-top: 24rpx; color: $brand-color-text; font-size: 32rpx; font-weight: 700; }
-.ledger-stats__state-copy { max-width: 480rpx; margin: 12rpx 0 32rpx; color: $brand-color-text-secondary; font-size: 25rpx; line-height: 1.6; }
-.ledger-stats__content { display: flex; flex-direction: column; gap: 24rpx; }
-
-.ledger-stats__overview {
-  display: flex; flex-direction: column; gap: 18rpx;
-  padding: 28rpx 28rpx 24rpx;
-  border-radius: $brand-radius-card;
-  background: $brand-color-surface;
-  box-shadow: 0 2rpx 16rpx rgba(38, 122, 90, 0.04);
-}
-.ledger-stats__month-label { color: $brand-color-text-secondary; font-size: 24rpx; font-weight: 500; letter-spacing: 2rpx; }
-.ledger-stats__numbers { display: flex; justify-content: space-between; }
-.ledger-stats__number-block { display: flex; flex-direction: column; gap: 6rpx; }
-.ledger-stats__number-label { color: $brand-color-text-secondary; font-size: 22rpx; }
-.ledger-stats__number-value { color: $brand-color-text; font-size: 34rpx; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; }
-.ledger-stats__number-value--expense { color: $brand-color-accent; }
-.ledger-stats__number-value--income { color: $brand-color-primary; }
-.ledger-stats__month-row { display: flex; align-items: center; justify-content: space-between; }
-.ledger-stats__month-btn { min-width: 110rpx; }
-.ledger-stats__month-current { color: $brand-color-text; font-size: 28rpx; font-weight: 600; }
-
-.ledger-stats__panel { display: flex; flex-direction: column; gap: 18rpx; padding: 24rpx 24rpx; border-radius: $brand-radius-card; background: $brand-color-surface; }
-.ledger-stats__panel-title { color: $brand-color-text; font-size: 28rpx; font-weight: 700; }
-
-.ledger-stats__legend { display: flex; flex-direction: column; gap: 12rpx; margin-top: 8rpx; }
-.ledger-stats__legend-item { display: flex; align-items: center; gap: 14rpx; }
-.ledger-stats__legend-dot { width: 16rpx; height: 16rpx; border-radius: 50%; flex-shrink: 0; }
-.ledger-stats__legend-name { flex: 1; color: $brand-color-text; font-size: 26rpx; font-weight: 500; }
-.ledger-stats__legend-percent { color: $brand-color-text-secondary; font-size: 24rpx; font-weight: 600; font-variant-numeric: tabular-nums; }
 </style>

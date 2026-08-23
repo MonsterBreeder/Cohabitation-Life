@@ -1,4 +1,4 @@
-import { generateReceiptTempId, uploadReceipt } from '../../src/components/ledger/ledger-cloud-uploader'
+import { generateReceiptTempId, uploadReceipt } from '../../src/subpackages/ledger/ledger-add/components/ledger-cloud-uploader'
 
 describe('uploadReceipt', () => {
   it('rejects when wx.cloud is unavailable', async () => {

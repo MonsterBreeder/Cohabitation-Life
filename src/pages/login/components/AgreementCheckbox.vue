@@ -34,8 +34,21 @@ function handleChange(event: CheckboxChangeEvent): void {
 </script>
 
 <style lang="scss" scoped>
-/* 协议行保证足够的触摸高度和清晰的辅助文字。 */
-.agreement-checkbox { width: 100%; min-height: 52rpx; padding: 8rpx 0; box-sizing: border-box; }
-:deep(.agreement-checkbox__control) { align-items: flex-start; }
-:deep(.agreement-checkbox__text) { color: $brand-color-text-secondary; font-size: 24rpx; line-height: 1.65; }
+.agreement-checkbox {
+  /* 协议行保证足够的触摸高度和清晰的辅助文字。 */
+  width: 100%;
+  min-height: 52rpx;
+  padding: 8rpx 0;
+  box-sizing: border-box;
+
+  :deep(.agreement-checkbox__control) {
+    align-items: flex-start;
+  }
+
+  :deep(.agreement-checkbox__text) {
+    color: $brand-color-text-secondary;
+    font-size: 24rpx;
+    line-height: 1.65;
+  }
+}
 </style>

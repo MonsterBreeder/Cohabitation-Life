@@ -38,28 +38,28 @@ function onSelect(value: PayerFilter): void {
 .member-filter {
   display: flex;
   gap: 16rpx;
-}
-.member-filter__chip {
-  display: flex;
-  align-items: center;
-  padding: 12rpx 24rpx;
-  border: 2rpx solid $brand-color-border;
-  border-radius: 999rpx;
-  background: $brand-color-surface;
-  transition: all .15s ease;
-}
-.member-filter__chip--active {
-  border-color: $brand-color-primary;
-  background: #effbf5;
-}
-.member-filter__label {
-  color: $brand-color-text;
-  font-size: 26rpx;
-  font-weight: 500;
-  line-height: 1.2;
-}
-.member-filter__chip--active .member-filter__label {
-  color: $brand-color-action;
-  font-weight: 600;
+  &__chip {
+    display: flex;
+    align-items: center;
+    padding: 12rpx 24rpx;
+    border: 2rpx solid $brand-color-border;
+    border-radius: 999rpx;
+    background: $brand-color-surface;
+    transition: all .15s ease;
+  }
+  &__chip--active {
+    border-color: $brand-color-primary;
+    background: #effbf5;
+  }
+  &__label {
+    color: $brand-color-text;
+    font-size: 26rpx;
+    font-weight: 500;
+    line-height: 1.2;
+  }
+  &__chip--active &__label {
+    color: $brand-color-action;
+    font-weight: 600;
+  }
 }
 </style>

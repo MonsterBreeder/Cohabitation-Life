@@ -142,29 +142,142 @@ onShareAppMessage(() => {
 </script>
 
 <style lang="scss" scoped>
-/* 成员操作集中在一张卡片中：单人可邀请，双人仅保留移除确认。 */
-.management-page { min-height: 100vh; padding: 48rpx 32rpx; box-sizing: border-box; background: $brand-color-background; }
-.management-card { padding: 42rpx 36rpx; border: 2rpx solid $brand-color-border; border-radius: $brand-radius-card; background: $brand-color-surface; }
-.management-card__eyebrow { display: block; color: $brand-color-primary; font-size: 23rpx; font-weight: 700; letter-spacing: 4rpx; }
-.management-card__title { display: block; margin-top: 16rpx; color: $brand-color-text; font-size: 42rpx; font-weight: 700; }
-.management-card__description { display: block; margin-top: 16rpx; color: $brand-color-text-secondary; font-size: 27rpx; line-height: 1.65; }
-.management-card__actions { margin-top: 42rpx; }
-.invitee-field { display: flex; flex-direction: column; gap: 16rpx; }
-.invitee-field__label { color: $brand-color-text; font-size: 26rpx; font-weight: 700; }
-.invitee-field__input-wrap { display: flex; align-items: center; height: 88rpx; padding: 0 24rpx; border: 2rpx solid $brand-color-border; border-radius: 18rpx; background: #fff; }
-.invitee-field__input { flex: 1; min-width: 0; color: $brand-color-text; font-size: 28rpx; }
-.invitee-field__clear { padding: 10rpx; color: #667085; font-size: 42rpx; line-height: 1; }
-.invitee-field__error { color: #c5684d; font-size: 22rpx; }
-.share-button { width: 100%; margin-top: 22rpx; border: 0; border-radius: 999rpx; background: $brand-color-action; color: #fff; font-size: 28rpx; font-weight: 700; line-height: 92rpx; }
-.share-button::after { border: 0; }
-.remove-button { background: #d66b55; }
-.invite-status { display: flex; align-items: flex-start; margin-top: 26rpx; padding: 22rpx; border-radius: 18rpx; background: #effbf5; }
-.invite-status--failed { background: #fff3ee; }
-.invite-status__content { display: flex; flex: 1; flex-direction: column; margin-left: 14rpx; }
-.invite-status__title { color: $brand-color-text; font-size: 25rpx; font-weight: 700; }
-.invite-status__copy { margin-top: 7rpx; color: $brand-color-text-secondary; font-size: 22rpx; line-height: 1.5; }
-.retry-button { margin-top: 18rpx; }
-.prepare-button { margin-top: 20rpx; }
-.management-card__hint { display: block; margin-top: 22rpx; color: $brand-color-text-secondary; font-size: 24rpx; line-height: 1.6; text-align: center; }
-.management-card__error { display: block; margin-top: 24rpx; color: #c5684d; font-size: 25rpx; text-align: center; }
+.management-page {
+  /* 成员操作集中在一张卡片中：单人可邀请，双人仅保留移除确认。 */
+  min-height: 100vh;
+  padding: 48rpx 32rpx;
+  box-sizing: border-box;
+  background: $brand-color-background;
+}
+.management-card {
+  padding: 42rpx 36rpx;
+  border: 2rpx solid $brand-color-border;
+  border-radius: $brand-radius-card;
+  background: $brand-color-surface;
+  &__eyebrow {
+    display: block;
+    color: $brand-color-primary;
+    font-size: 23rpx;
+    font-weight: 700;
+    letter-spacing: 4rpx;
+  }
+  &__title {
+    display: block;
+    margin-top: 16rpx;
+    color: $brand-color-text;
+    font-size: 42rpx;
+    font-weight: 700;
+  }
+  &__description {
+    display: block;
+    margin-top: 16rpx;
+    color: $brand-color-text-secondary;
+    font-size: 27rpx;
+    line-height: 1.65;
+  }
+  &__actions {
+    margin-top: 42rpx;
+  }
+  &__hint {
+    display: block;
+    margin-top: 22rpx;
+    color: $brand-color-text-secondary;
+    font-size: 24rpx;
+    line-height: 1.6;
+    text-align: center;
+  }
+  &__error {
+    display: block;
+    margin-top: 24rpx;
+    color: #c5684d;
+    font-size: 25rpx;
+    text-align: center;
+  }
+}
+.invitee-field {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  &__label {
+    color: $brand-color-text;
+    font-size: 26rpx;
+    font-weight: 700;
+  }
+  &__input-wrap {
+    display: flex;
+    align-items: center;
+    height: 88rpx;
+    padding: 0 24rpx;
+    border: 2rpx solid $brand-color-border;
+    border-radius: 18rpx;
+    background: #fff;
+  }
+  &__input {
+    flex: 1;
+    min-width: 0;
+    color: $brand-color-text;
+    font-size: 28rpx;
+  }
+  &__clear {
+    padding: 10rpx;
+    color: #667085;
+    font-size: 42rpx;
+    line-height: 1;
+  }
+  &__error {
+    color: #c5684d;
+    font-size: 22rpx;
+  }
+}
+.share-button {
+  width: 100%;
+  margin-top: 22rpx;
+  border: 0;
+  border-radius: 999rpx;
+  background: $brand-color-action;
+  color: #fff;
+  font-size: 28rpx;
+  font-weight: 700;
+  line-height: 92rpx;
+  &::after {
+    border: 0;
+  }
+}
+.remove-button {
+  background: #d66b55;
+}
+.invite-status {
+  display: flex;
+  align-items: flex-start;
+  margin-top: 26rpx;
+  padding: 22rpx;
+  border-radius: 18rpx;
+  background: #effbf5;
+  &--failed {
+    background: #fff3ee;
+  }
+  &__content {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    margin-left: 14rpx;
+  }
+  &__title {
+    color: $brand-color-text;
+    font-size: 25rpx;
+    font-weight: 700;
+  }
+  &__copy {
+    margin-top: 7rpx;
+    color: $brand-color-text-secondary;
+    font-size: 22rpx;
+    line-height: 1.5;
+  }
+}
+.retry-button {
+  margin-top: 18rpx;
+}
+.prepare-button {
+  margin-top: 20rpx;
+}
 </style>

@@ -40,7 +40,7 @@ interface LedgerCloudClient {
   deleteEntry(input: { entryId: string; operationToken: string }): Promise<{ status: 'DELETED'; entryId: string; deletedAt: string }>
   restoreEntry(input: { entryId: string; operationToken: string }): Promise<{ status: 'RESTORED'; entry: LedgerEntrySummary }>
   listEntries(input: { month: string; payerMode: string; categoryIds: string[]; includeDeleted?: boolean }): Promise<{ status: 'LISTED'; entries: LedgerEntrySummary[]; deletedEntries: LedgerEntrySummary[] }>
-  getEntry(input: { entryId: string }): Promise<{ status: 'LOADED'; detail: unknown }>
+  getEntry(input: { entryId: string }): Promise<{ status: 'LOADED'; detail: LedgerEntryDetail }>
   addCategory(input: AddLedgerCategoryRequest): Promise<{ status: 'ADDED'; category: LedgerCategory }>
   updateCategory(input: { categoryId: string; operationToken: string; name?: string; setHiddenByMe?: boolean }): Promise<{ status: 'UPDATED'; category: LedgerCategory; hiddenByMe: boolean }>
   removeCategory(input: { categoryId: string; operationToken: string }): Promise<{ status: 'REMOVED'; categoryId: string }>

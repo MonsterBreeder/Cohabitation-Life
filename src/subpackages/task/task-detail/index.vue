@@ -25,7 +25,7 @@
     <view v-else-if="detail" class="task-detail-page__content" data-testid="task-detail-card">
       <!-- 头部：左侧色带 + 大标题 + chip 行 -->
       <view class="task-detail-page__header">
-        <view class="task-detail-page__type-mark" :class="`task-detail-page__type-mark--${detail.type}`" />
+        <view class="task-detail-page__type-mark" :class="`task-detail-page__type-mark--${detail.type.replace('_', '-')}`" />
         <view class="task-detail-page__title-block">
           <text class="task-detail-page__title">{{ detail.title }}</text>
           <view class="task-detail-page__chips">
@@ -317,53 +317,165 @@ onUnload(() => {
 </script>
 
 <style lang="scss" scoped>
-/* 整体：暖白底色 + 大留白。 */
-.task-detail-page { min-height: 100vh; padding: 64rpx 32rpx 80rpx; box-sizing: border-box; background: $brand-color-background; }
-.task-detail-page__state { display: flex; min-height: 60vh; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
-.task-detail-page__state-title { margin-top: 24rpx; color: $brand-color-text; font-size: 30rpx; font-weight: 600; }
-.task-detail-page__state-copy { margin-top: 12rpx; padding: 0 80rpx; color: $brand-color-text-secondary; font-size: 25rpx; line-height: 1.6; }
-
-/* 内容容器：列布局。 */
-.task-detail-page__content { display: flex; flex-direction: column; gap: 24rpx; }
-
-/* 头部：左色带 + 大标题 + chip 行。 */
-.task-detail-page__header {
-  display: flex; align-items: stretch;
-  padding: 32rpx 28rpx;
-  border-radius: 24rpx;
-  background: $brand-color-surface;
+.task-detail-page {
+  /* 整体：暖白底色 + 大留白。 */
+  min-height: 100vh;
+  padding: 64rpx 32rpx 80rpx;
+  box-sizing: border-box;
+  background: $brand-color-background;
+  &__state {
+    display: flex;
+    min-height: 60vh;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+  &__state-title {
+    margin-top: 24rpx;
+    color: $brand-color-text;
+    font-size: 30rpx;
+    font-weight: 600;
+  }
+  &__state-copy {
+    margin-top: 12rpx;
+    padding: 0 80rpx;
+    color: $brand-color-text-secondary;
+    font-size: 25rpx;
+    line-height: 1.6;
+  }
+  /* 内容容器：列布局。 */
+  &__content {
+    display: flex;
+    flex-direction: column;
+    gap: 24rpx;
+  }
+  /* 头部：左色带 + 大标题 + chip 行。 */
+  &__header {
+    display: flex;
+    align-items: stretch;
+    padding: 32rpx 28rpx;
+    border-radius: 24rpx;
+    background: $brand-color-surface;
+  }
+  &__type-mark {
+    width: 10rpx;
+    align-self: stretch;
+    margin-right: 24rpx;
+    border-radius: 6rpx;
+  }
+  &__type-mark--low-stock {
+    background: #E8B647;
+  }
+  &__type-mark--to-handle {
+    background: #5BBE93;
+  }
+  &__type-mark--expiring {
+    background: #E78A7B;
+  }
+  &__title-block {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 18rpx;
+  }
+  &__title {
+    color: $brand-color-text;
+    font-size: 40rpx;
+    font-weight: 500;
+    line-height: 1.35;
+    letter-spacing: .5rpx;
+  }
+  &__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12rpx;
+  }
+  &__chip {
+    font-size: 22rpx;
+  }
+  /* 备注：薄卡片（与 wd-cell 区分，是更大的可换行文本）。 */
+  &__note {
+    padding: 26rpx 28rpx;
+    border-radius: 20rpx;
+    background: $brand-color-surface;
+  }
+  &__note-label {
+    display: block;
+    color: $brand-color-text-secondary;
+    font-size: 22rpx;
+    letter-spacing: 1rpx;
+  }
+  &__note-text {
+    display: block;
+    margin-top: 12rpx;
+    color: $brand-color-text;
+    font-size: 28rpx;
+    line-height: 1.6;
+  }
+  /* 错误：通用低饱和红。 */
+  &__error {
+    display: block;
+    color: #c5684d;
+    font-size: 25rpx;
+    text-align: center;
+  }
+  /* 操作按钮组。 */
+  &__actions {
+    display: flex;
+    flex-direction: column;
+    gap: 18rpx;
+    margin-top: 8rpx;
+  }
+  /* 事件流：wd-cell-group 包裹每行。 */
+  &__events {
+    margin-top: 8rpx;
+  }
+  &__events-title {
+    display: block;
+    margin-bottom: 12rpx;
+    color: $brand-color-text-secondary;
+    font-size: 22rpx;
+    letter-spacing: 1rpx;
+  }
+  &__event {
+    padding: 18rpx 0;
+  }
+  &__event-row {
+    display: flex;
+    align-items: center;
+    gap: 16rpx;
+  }
+  &__event-dot {
+    width: 14rpx;
+    height: 14rpx;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  &__event-dot--create {
+    background: #5BBE93;
+  }
+  &__event-dot--claim {
+    background: #43c89a;
+  }
+  &__event-dot--complete {
+    background: #267a5a;
+  }
+  &__event-dot--abandon {
+    background: #E78A7B;
+  }
+  &__event-dot--edit {
+    background: #E8B647;
+  }
+  &__event-text {
+    color: $brand-color-text;
+    font-size: 26rpx;
+    line-height: 1.4;
+  }
+  &__event-time {
+    color: $brand-color-text-secondary;
+    font-size: 22rpx;
+    flex-shrink: 0;
+  }
 }
-.task-detail-page__type-mark { width: 10rpx; align-self: stretch; margin-right: 24rpx; border-radius: 6rpx; }
-.task-detail-page__type-mark--low_stock { background: #E8B647; }
-.task-detail-page__type-mark--to_handle { background: #5BBE93; }
-.task-detail-page__type-mark--expiring { background: #E78A7B; }
-.task-detail-page__title-block { display: flex; flex: 1; flex-direction: column; gap: 18rpx; }
-.task-detail-page__title { color: $brand-color-text; font-size: 40rpx; font-weight: 500; line-height: 1.35; letter-spacing: .5rpx; }
-.task-detail-page__chips { display: flex; flex-wrap: wrap; gap: 12rpx; }
-.task-detail-page__chip { font-size: 22rpx; }
-
-/* 备注：薄卡片（与 wd-cell 区分，是更大的可换行文本）。 */
-.task-detail-page__note { padding: 26rpx 28rpx; border-radius: 20rpx; background: $brand-color-surface; }
-.task-detail-page__note-label { display: block; color: $brand-color-text-secondary; font-size: 22rpx; letter-spacing: 1rpx; }
-.task-detail-page__note-text { display: block; margin-top: 12rpx; color: $brand-color-text; font-size: 28rpx; line-height: 1.6; }
-
-/* 错误：通用低饱和红。 */
-.task-detail-page__error { display: block; color: #c5684d; font-size: 25rpx; text-align: center; }
-
-/* 操作按钮组。 */
-.task-detail-page__actions { display: flex; flex-direction: column; gap: 18rpx; margin-top: 8rpx; }
-
-/* 事件流：wd-cell-group 包裹每行。 */
-.task-detail-page__events { margin-top: 8rpx; }
-.task-detail-page__events-title { display: block; margin-bottom: 12rpx; color: $brand-color-text-secondary; font-size: 22rpx; letter-spacing: 1rpx; }
-.task-detail-page__event { padding: 18rpx 0; }
-.task-detail-page__event-row { display: flex; align-items: center; gap: 16rpx; }
-.task-detail-page__event-dot { width: 14rpx; height: 14rpx; border-radius: 50%; flex-shrink: 0; }
-.task-detail-page__event-dot--create { background: #5BBE93; }
-.task-detail-page__event-dot--claim { background: #43c89a; }
-.task-detail-page__event-dot--complete { background: #267a5a; }
-.task-detail-page__event-dot--abandon { background: #E78A7B; }
-.task-detail-page__event-dot--edit { background: #E8B647; }
-.task-detail-page__event-text { color: $brand-color-text; font-size: 26rpx; line-height: 1.4; }
-.task-detail-page__event-time { color: $brand-color-text-secondary; font-size: 22rpx; flex-shrink: 0; }
 </style>

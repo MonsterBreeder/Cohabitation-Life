@@ -29,8 +29,30 @@ const items: Array<{ id: BuiltinProfileAvatarId; label: string; src: string }> =
 </script>
 
 <style lang="scss" scoped>
-.avatar-picker { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18rpx; }
-.avatar-picker__item { display: flex; flex-direction: column; align-items: center; gap: 12rpx; padding: 18rpx 8rpx; border: 3rpx solid transparent; border-radius: 24rpx; background: #fff; color: $brand-color-text-secondary; font-size: 22rpx; line-height: 1.2; }
-.avatar-picker__item::after { border: 0; }
-.avatar-picker__item--active { border-color: $brand-color-primary; background: #effbf5; color: $brand-color-text; }
+.avatar-picker {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18rpx;
+  &__item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12rpx;
+    padding: 18rpx 8rpx;
+    border: 3rpx solid transparent;
+    border-radius: 24rpx;
+    background: #fff;
+    color: $brand-color-text-secondary;
+    font-size: 22rpx;
+    line-height: 1.2;
+  }
+  &__item::after {
+    border: 0;
+  }
+  &__item--active {
+    border-color: $brand-color-primary;
+    background: #effbf5;
+    color: $brand-color-text;
+  }
+}
 </style>

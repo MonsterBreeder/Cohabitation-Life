@@ -114,48 +114,76 @@ defineExpose({ send, canSend })
 </script>
 
 <style lang="scss" scoped>
-.task-comments { display: flex; flex-direction: column; margin-top: 16rpx; }
-.task-comments__title { display: block; margin-bottom: 16rpx; color: $brand-color-text-secondary; font-size: 22rpx; letter-spacing: 1rpx; }
-
-.task-comments__empty { padding: 32rpx 28rpx; border-radius: 20rpx; background: $brand-color-surface; }
-.task-comments__empty-text { display: block; color: $brand-color-text-secondary; font-size: 25rpx; line-height: 1.6; }
-
-/* 评论列表：内部 padding 加大让首条评论有空间；列表本身最大 800rpx，超出滚动。 */
-.task-comments__list {
-  padding: 28rpx 28rpx;
-  border-radius: 20rpx;
-  background: $brand-color-surface;
-  max-height: 800rpx;
-  overflow-y: auto;
-}
-.task-comments__list > .task-comment-item + .task-comment-item {
-  /* 相邻评论之间加分隔线和间距 */
-  border-top: 1rpx solid rgba(0, 0, 0, 0.06);
-  margin-top: 24rpx;
-  padding-top: 24rpx;
-}
-
-.task-comments__sealed { margin-top: 8rpx; padding: 18rpx 24rpx; border-radius: 16rpx; background: $brand-color-surface; }
-.task-comments__sealed-text { color: $brand-color-text-secondary; font-size: 23rpx; }
-
-.task-comments__composer {
+.task-comments {
   display: flex;
   flex-direction: column;
-  gap: 16rpx;
   margin-top: 16rpx;
-  padding: 20rpx 20rpx 24rpx;
-  border-radius: 20rpx;
-  background: $brand-color-surface;
+  &__title {
+    display: block;
+    margin-bottom: 16rpx;
+    color: $brand-color-text-secondary;
+    font-size: 22rpx;
+    letter-spacing: 1rpx;
+  }
+  &__empty {
+    padding: 32rpx 28rpx;
+    border-radius: 20rpx;
+    background: $brand-color-surface;
+  }
+  &__empty-text {
+    display: block;
+    color: $brand-color-text-secondary;
+    font-size: 25rpx;
+    line-height: 1.6;
+  }
+  /* 评论列表：内部 padding 加大让首条评论有空间；列表本身最大 800rpx，超出滚动。 */
+  &__list {
+    padding: 28rpx 28rpx;
+    border-radius: 20rpx;
+    background: $brand-color-surface;
+    max-height: 800rpx;
+    overflow-y: auto;
+  }
+  &__list > .task-comment-item + .task-comment-item {
+    /* 相邻评论之间加分隔线和间距 */
+    border-top: 1rpx solid rgba(0, 0, 0, 0.06);
+    margin-top: 24rpx;
+    padding-top: 24rpx;
+  }
+  &__sealed {
+    margin-top: 8rpx;
+    padding: 18rpx 24rpx;
+    border-radius: 16rpx;
+    background: $brand-color-surface;
+  }
+  &__sealed-text {
+    color: $brand-color-text-secondary;
+    font-size: 23rpx;
+  }
+  &__composer {
+    display: flex;
+    flex-direction: column;
+    gap: 16rpx;
+    margin-top: 16rpx;
+    padding: 20rpx 20rpx 24rpx;
+    border-radius: 20rpx;
+    background: $brand-color-surface;
+  }
+  /* textarea 容器：强制 block + 100% 宽度，绕开 wd-textarea 内部 flex 的宽度塌缩问题 */
+  &__input {
+    display: block;
+    width: 100%;
+  }
+  &__send-row {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+  }
+  &__error {
+    display: block;
+    margin-top: 10rpx;
+    color: #c5684d;
+    font-size: 22rpx;
+  }
 }
-/* textarea 容器：强制 block + 100% 宽度，绕开 wd-textarea 内部 flex 的宽度塌缩问题 */
-.task-comments__input {
-  display: block;
-  width: 100%;
-}
-.task-comments__send-row {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-}
-.task-comments__error { display: block; margin-top: 10rpx; color: #c5684d; font-size: 22rpx; }
 </style>

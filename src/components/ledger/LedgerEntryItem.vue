@@ -55,60 +55,64 @@ function onPress(): void {
   border-radius: 16rpx;
   background: $brand-color-surface;
   transition: transform .12s ease, background .15s ease;
+  &:active {
+    transform: scale(.99);
+    background: #f8faf7;
+  }
+  &__main {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 6rpx;
+    min-width: 0;
+  }
+  &__head {
+    display: flex;
+    align-items: center;
+    gap: 12rpx;
+  }
+  &__dot {
+    width: 14rpx;
+    height: 14rpx;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  &__category {
+    color: $brand-color-text;
+    font-size: 28rpx;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+  &__note {
+    color: $brand-color-text-secondary;
+    font-size: 23rpx;
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  &__payer {
+    color: $brand-color-text-secondary;
+    font-size: 23rpx;
+    line-height: 1.4;
+  }
+  &__aside {
+    display: flex;
+    align-items: center;
+    gap: 14rpx;
+    flex-shrink: 0;
+  }
+  &__amount {
+    font-size: 30rpx;
+    font-weight: 700;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+  }
+  &__amount--expense {
+    color: $brand-color-accent;
+  }
+  &__amount--income {
+    color: $brand-color-primary;
+  }
 }
-.ledger-entry-item:active {
-  transform: scale(.99);
-  background: #f8faf7;
-}
-.ledger-entry-item__main {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 6rpx;
-  min-width: 0;
-}
-.ledger-entry-item__head {
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-}
-.ledger-entry-item__dot {
-  width: 14rpx;
-  height: 14rpx;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.ledger-entry-item__category {
-  color: $brand-color-text;
-  font-size: 28rpx;
-  font-weight: 600;
-  line-height: 1.3;
-}
-.ledger-entry-item__note {
-  color: $brand-color-text-secondary;
-  font-size: 23rpx;
-  line-height: 1.4;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ledger-entry-item__payer {
-  color: $brand-color-text-secondary;
-  font-size: 23rpx;
-  line-height: 1.4;
-}
-.ledger-entry-item__aside {
-  display: flex;
-  align-items: center;
-  gap: 14rpx;
-  flex-shrink: 0;
-}
-.ledger-entry-item__amount {
-  font-size: 30rpx;
-  font-weight: 700;
-  line-height: 1.2;
-  font-variant-numeric: tabular-nums;
-}
-.ledger-entry-item__amount--expense { color: $brand-color-accent; }
-.ledger-entry-item__amount--income { color: $brand-color-primary; }
 </style>

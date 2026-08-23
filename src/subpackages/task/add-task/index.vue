@@ -34,7 +34,7 @@
             v-for="opt in typeOptions"
             :key="opt.value"
             class="add-task-page__type"
-            :class="`add-task-page__type--${opt.value}`"
+            :class="`add-task-page__type--${opt.value.replace('_', '-')}`"
             :data-selected="draft.type === opt.value ? 'true' : 'false'"
             :data-testid="'add-task-type-' + opt.value"
             hover-class="add-task-page__type--hover"
@@ -294,75 +294,201 @@ onShow(() => {
 </script>
 
 <style lang="scss" scoped>
-/* 整体：暖白底色 + 大留白。 */
-.add-task-page { min-height: 100vh; padding: 64rpx 32rpx 80rpx; box-sizing: border-box; background: $brand-color-background; }
-.add-task-page__state { display: flex; min-height: 60vh; flex-direction: column; align-items: center; justify-content: center; }
-.add-task-page__state-title { margin-top: 24rpx; color: $brand-color-text; font-size: 30rpx; font-weight: 600; }
-
-/* 标题区：eyebrow + 主标 + 副标，字重比纯黑更柔。 */
-.add-task-page__heading { display: flex; flex-direction: column; margin-bottom: 40rpx; }
-.add-task-page__eyebrow { color: $brand-color-primary; font-size: 22rpx; font-weight: 600; letter-spacing: 6rpx; opacity: .85; }
-.add-task-page__title { margin-top: 16rpx; color: $brand-color-text; font-size: 46rpx; font-weight: 500; line-height: 1.35; letter-spacing: .5rpx; }
-.add-task-page__subtitle { margin-top: 12rpx; color: $brand-color-text-secondary; font-size: 25rpx; line-height: 1.6; }
-
-/* 字段：上下间距加大到 40rpx。 */
-.add-task-page__field { margin-top: 40rpx; }
-.add-task-page__label { display: block; margin-bottom: 16rpx; color: $brand-color-text; font-size: 25rpx; font-weight: 600; letter-spacing: .5rpx; }
-.add-task-page__count { display: block; margin-top: 10rpx; text-align: right; color: $brand-color-text-secondary; font-size: 22rpx; }
-.add-task-page__validation { display: block; margin-top: 10rpx; color: #c5684d; font-size: 22rpx; }
-.add-task-page__error { display: block; margin: 24rpx 0; color: #c5684d; font-size: 25rpx; text-align: center; }
-
-/* 类型卡：横向 3 列 + 左侧色带。用 <view> + @click 是因为 3 张带品牌色带的卡片
+.add-task-page {
+  /* 整体：暖白底色 + 大留白。 */
+  min-height: 100vh;
+  padding: 64rpx 32rpx 80rpx;
+  box-sizing: border-box;
+  background: $brand-color-background;
+  &__state {
+    display: flex;
+    min-height: 60vh;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  &__state-title {
+    margin-top: 24rpx;
+    color: $brand-color-text;
+    font-size: 30rpx;
+    font-weight: 600;
+  }
+  /* 标题区：eyebrow + 主标 + 副标，字重比纯黑更柔。 */
+  &__heading {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 40rpx;
+  }
+  &__eyebrow {
+    color: $brand-color-primary;
+    font-size: 22rpx;
+    font-weight: 600;
+    letter-spacing: 6rpx;
+    opacity: .85;
+  }
+  &__title {
+    margin-top: 16rpx;
+    color: $brand-color-text;
+    font-size: 46rpx;
+    font-weight: 500;
+    line-height: 1.35;
+    letter-spacing: .5rpx;
+  }
+  &__subtitle {
+    margin-top: 12rpx;
+    color: $brand-color-text-secondary;
+    font-size: 25rpx;
+    line-height: 1.6;
+  }
+  /* 字段：上下间距加大到 40rpx。 */
+  &__field {
+    margin-top: 40rpx;
+  }
+  &__label {
+    display: block;
+    margin-bottom: 16rpx;
+    color: $brand-color-text;
+    font-size: 25rpx;
+    font-weight: 600;
+    letter-spacing: .5rpx;
+  }
+  &__count {
+    display: block;
+    margin-top: 10rpx;
+    text-align: right;
+    color: $brand-color-text-secondary;
+    font-size: 22rpx;
+  }
+  &__validation {
+    display: block;
+    margin-top: 10rpx;
+    color: #c5684d;
+    font-size: 22rpx;
+  }
+  &__error {
+    display: block;
+    margin: 24rpx 0;
+    color: #c5684d;
+    font-size: 25rpx;
+    text-align: center;
+  }
+  /* 类型卡：横向 3 列 + 左侧色带。用 <view> + @click 是因为 3 张带品牌色带的卡片
    属于"项目独有的品牌展示"组合，wd-radio 不适合套这种布局。 */
-.add-task-page__types { display: flex; gap: 16rpx; width: 100%; }
-.add-task-page__type {
-  flex: 1;
-  position: relative;
-  display: flex; align-items: center; gap: 16rpx;
-  padding: 22rpx 18rpx 22rpx 24rpx;
-  border-radius: 20rpx;
-  background: $brand-color-surface;
-  transition: background .15s ease, transform .15s ease;
-  overflow: hidden;
-  min-height: 132rpx;
+  &__types {
+    display: flex;
+    gap: 16rpx;
+    width: 100%;
+  }
+  &__type {
+    flex: 1;
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 16rpx;
+    padding: 22rpx 18rpx 22rpx 24rpx;
+    border-radius: 20rpx;
+    background: $brand-color-surface;
+    transition: background .15s ease, transform .15s ease;
+    overflow: hidden;
+    min-height: 132rpx;
+  }
+  &__type::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 18rpx;
+    bottom: 18rpx;
+    width: 6rpx;
+    border-radius: 0 6rpx 6rpx 0;
+    transition: width .15s ease, top .15s ease, bottom .15s ease;
+  }
+  &__type--low-stock::before {
+    background: #E8B647;
+  }
+  &__type--to-handle::before {
+    background: #5BBE93;
+  }
+  &__type--expiring::before {
+    background: #E78A7B;
+  }
+  &__type[data-selected='true'] {
+    background: #effbf5;
+    transform: translateY(-2rpx);
+  }
+  &__type[data-selected='true']::before {
+    width: 10rpx;
+    top: 12rpx;
+    bottom: 12rpx;
+  }
+  &__type--hover {
+    transform: scale(.98);
+  }
+  &__type-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4rpx;
+    min-width: 0;
+  }
+  &__type-label {
+    color: $brand-color-text;
+    font-size: 27rpx;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+  &__type-desc {
+    color: $brand-color-text-secondary;
+    font-size: 20rpx;
+    line-height: 1.4;
+  }
+  /* 截止日期：原生 picker 包在自定义 pill 里；label 跟其他字段对齐。 */
+  &__date-row {
+    display: flex;
+    align-items: center;
+    gap: 18rpx;
+    flex-wrap: wrap;
+  }
+  &__date-label {
+    color: $brand-color-text;
+    font-size: 25rpx;
+    font-weight: 600;
+    letter-spacing: .5rpx;
+    margin-right: 6rpx;
+  }
+  &__date-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 12rpx;
+    height: 76rpx;
+    padding: 0 24rpx;
+    border-radius: 999rpx;
+    background: $brand-color-surface;
+    box-shadow: inset 0 0 0 1rpx #eef2ef;
+    color: $brand-color-text;
+    font-size: 26rpx;
+    font-weight: 500;
+  }
+  &__date-pill--empty {
+    color: $brand-color-text-secondary;
+    font-weight: 400;
+  }
+  &__date-pill:active {
+    box-shadow: inset 0 0 0 2rpx $brand-color-primary;
+  }
+  &__date-clear {
+    color: $brand-color-text-secondary;
+    font-size: 23rpx;
+    text-decoration: underline;
+  }
+  /* 提交：保留我的大圆角，但用 wd-button 实现。 */
+  &__submit {
+    margin-top: 48rpx;
+  }
+  &__hint {
+    display: block;
+    margin-top: 16rpx;
+    color: $brand-color-text-secondary;
+    font-size: 22rpx;
+    text-align: center;
+  }
 }
-.add-task-page__type::before {
-  content: '';
-  position: absolute;
-  left: 0; top: 18rpx; bottom: 18rpx;
-  width: 6rpx;
-  border-radius: 0 6rpx 6rpx 0;
-  transition: width .15s ease, top .15s ease, bottom .15s ease;
-}
-.add-task-page__type--low_stock::before { background: #E8B647; }
-.add-task-page__type--to_handle::before { background: #5BBE93; }
-.add-task-page__type--expiring::before { background: #E78A7B; }
-.add-task-page__type[data-selected='true'] { background: #effbf5; transform: translateY(-2rpx); }
-.add-task-page__type[data-selected='true']::before { width: 10rpx; top: 12rpx; bottom: 12rpx; }
-.add-task-page__type--hover { transform: scale(.98); }
-.add-task-page__type-content { display: flex; flex-direction: column; gap: 4rpx; min-width: 0; }
-.add-task-page__type-label { color: $brand-color-text; font-size: 27rpx; font-weight: 600; line-height: 1.3; }
-.add-task-page__type-desc { color: $brand-color-text-secondary; font-size: 20rpx; line-height: 1.4; }
-
-/* 截止日期：原生 picker 包在自定义 pill 里；label 跟其他字段对齐。 */
-.add-task-page__date-row { display: flex; align-items: center; gap: 18rpx; flex-wrap: wrap; }
-.add-task-page__date-label { color: $brand-color-text; font-size: 25rpx; font-weight: 600; letter-spacing: .5rpx; margin-right: 6rpx; }
-.add-task-page__date-pill {
-  display: inline-flex; align-items: center; gap: 12rpx;
-  height: 76rpx;
-  padding: 0 24rpx;
-  border-radius: 999rpx;
-  background: $brand-color-surface;
-  box-shadow: inset 0 0 0 1rpx #eef2ef;
-  color: $brand-color-text;
-  font-size: 26rpx;
-  font-weight: 500;
-}
-.add-task-page__date-pill--empty { color: $brand-color-text-secondary; font-weight: 400; }
-.add-task-page__date-pill:active { box-shadow: inset 0 0 0 2rpx $brand-color-primary; }
-.add-task-page__date-clear { color: $brand-color-text-secondary; font-size: 23rpx; text-decoration: underline; }
-
-/* 提交：保留我的大圆角，但用 wd-button 实现。 */
-.add-task-page__submit { margin-top: 48rpx; }
-.add-task-page__hint { display: block; margin-top: 16rpx; color: $brand-color-text-secondary; font-size: 22rpx; text-align: center; }
 </style>

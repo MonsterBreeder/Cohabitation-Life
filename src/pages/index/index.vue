@@ -1,5 +1,5 @@
 <template>
-  <view class="page">
+  <view class="home-page">
     <wd-toast />
 
     <!-- 加载态：转圈 + 标准文案（与全站 loading 风格统一；方案 2 全站统一为转圈） -->
@@ -176,38 +176,143 @@ onShow(() => {
 </script>
 
 <style lang="scss" scoped>
-.page { min-height: 100vh; padding: 48rpx 32rpx 160rpx; box-sizing: border-box; background: $brand-color-background; }
-.page-state { display: flex; min-height: calc(100vh - 128rpx); flex-direction: column; align-items: center; justify-content: center; text-align: center; }
-.page-state__title { margin-top: 28rpx; color: $brand-color-text; font-size: 34rpx; font-weight: 700; }
-.page-state__copy { max-width: 520rpx; margin: 16rpx 0 36rpx; color: $brand-color-text-secondary; font-size: 26rpx; line-height: 1.65; }
-.home-content { display: flex; flex-direction: column; }
-.hero { display: flex; flex-direction: column; margin-bottom: 42rpx; }
-.hero__eyebrow { color: $brand-color-primary; font-size: 23rpx; font-weight: 600; letter-spacing: 4rpx; }
-.hero__title { margin-top: 14rpx; color: $brand-color-text; font-size: 52rpx; font-weight: 700; line-height: 1.3; }
-.hero__copy { margin-top: 12rpx; color: $brand-color-text-secondary; font-size: 27rpx; line-height: 1.6; }
-.home-empty { display: flex; flex-direction: column; align-items: center; margin-top: 36rpx; padding: 54rpx 32rpx; border: 2rpx dashed $brand-color-border; border-radius: $brand-radius-card; background: rgba($brand-color-surface, .7); text-align: center; }
-.home-empty__title { margin-top: 20rpx; color: $brand-color-text; font-size: 30rpx; font-weight: 700; }
-.home-empty__copy { margin-top: 12rpx; color: $brand-color-text-secondary; font-size: 25rpx; line-height: 1.6; }
-.home-tasks { display: flex; flex-direction: column; margin-top: 36rpx; }
-.home-error { display: block; margin-top: 24rpx; color: #c5684d; font-size: 25rpx; text-align: center; }
+.home-page {
+  min-height: 100vh;
+  padding: 48rpx 32rpx 160rpx;
+  box-sizing: border-box;
+  background: $brand-color-background;
+}
+.page-state {
+  display: flex;
+  min-height: calc(100vh - 128rpx);
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  &__title {
+    margin-top: 28rpx;
+    color: $brand-color-text;
+    font-size: 34rpx;
+    font-weight: 700;
+  }
+  &__copy {
+    max-width: 520rpx;
+    margin: 16rpx 0 36rpx;
+    color: $brand-color-text-secondary;
+    font-size: 26rpx;
+    line-height: 1.65;
+  }
+}
+.home-content {
+  display: flex;
+  flex-direction: column;
+}
+.hero {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 42rpx;
+  &__eyebrow {
+    color: $brand-color-primary;
+    font-size: 23rpx;
+    font-weight: 600;
+    letter-spacing: 4rpx;
+  }
+  &__title {
+    margin-top: 14rpx;
+    color: $brand-color-text;
+    font-size: 52rpx;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+  &__copy {
+    margin-top: 12rpx;
+    color: $brand-color-text-secondary;
+    font-size: 27rpx;
+    line-height: 1.6;
+  }
+}
+.home-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 36rpx;
+  padding: 54rpx 32rpx;
+  border: 2rpx dashed $brand-color-border;
+  border-radius: $brand-radius-card;
+  background: rgba($brand-color-surface, .7);
+  text-align: center;
+  &__title {
+    margin-top: 20rpx;
+    color: $brand-color-text;
+    font-size: 30rpx;
+    font-weight: 700;
+  }
+  &__copy {
+    margin-top: 12rpx;
+    color: $brand-color-text-secondary;
+    font-size: 25rpx;
+    line-height: 1.6;
+  }
+}
+.home-tasks {
+  display: flex;
+  flex-direction: column;
+  margin-top: 36rpx;
+}
+.home-error {
+  display: block;
+  margin-top: 24rpx;
+  color: #c5684d;
+  font-size: 25rpx;
+  text-align: center;
+}
 .home-completed-link {
-  display: flex; align-items: center; gap: 20rpx;
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
   margin-top: 24rpx;
   padding: 24rpx 24rpx;
   border-radius: 20rpx;
   background: $brand-color-surface;
   transition: transform .12s ease, background .15s ease;
+  &:active {
+    transform: scale(.99);
+    background: #effbf5;
+  }
+  &__icon {
+    width: 64rpx;
+    height: 64rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 16rpx;
+    background: #effbf5;
+    flex-shrink: 0;
+  }
+  &__text {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 4rpx;
+    min-width: 0;
+  }
+  &__title {
+    color: $brand-color-text;
+    font-size: 28rpx;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+  &__copy {
+    color: $brand-color-text-secondary;
+    font-size: 22rpx;
+    line-height: 1.4;
+  }
+  &__arrow {
+    color: $brand-color-text-secondary;
+    font-size: 40rpx;
+    font-weight: 300;
+    line-height: 1;
+    flex-shrink: 0;
+  }
 }
-.home-completed-link:active { transform: scale(.99); background: #effbf5; }
-.home-completed-link__icon {
-  width: 64rpx; height: 64rpx;
-  display: flex; align-items: center; justify-content: center;
-  border-radius: 16rpx;
-  background: #effbf5;
-  flex-shrink: 0;
-}
-.home-completed-link__text { display: flex; flex: 1; flex-direction: column; gap: 4rpx; min-width: 0; }
-.home-completed-link__title { color: $brand-color-text; font-size: 28rpx; font-weight: 600; line-height: 1.3; }
-.home-completed-link__copy { color: $brand-color-text-secondary; font-size: 22rpx; line-height: 1.4; }
-.home-completed-link__arrow { color: $brand-color-text-secondary; font-size: 40rpx; font-weight: 300; line-height: 1; flex-shrink: 0; }
 </style>

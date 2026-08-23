@@ -98,29 +98,142 @@ onShow(() => { void loadProfile() })
 </script>
 
 <style lang="scss" scoped>
-/* 我的页承载个人、家庭和成员设置，首页不再出现管理入口。 */
-.profile-page { min-height: 100vh; padding: 48rpx 32rpx 32rpx; box-sizing: border-box; background: $brand-color-background; }
-/* 加载 / 错误 / 空 通用态：与 pages/index/index.vue 的 .page-state 保持同一视觉语言
+.profile-page {
+  /* 我的页承载个人、家庭和成员设置，首页不再出现管理入口。 */
+  min-height: 100vh;
+  padding: 48rpx 32rpx 32rpx;
+  box-sizing: border-box;
+  background: $brand-color-background;
+}
+.page-state {
+  /* 加载 / 错误 / 空 通用态：与 pages/index/index.vue 的 .page-state 保持同一视觉语言
    （方案 2 全站 loading 统一为"转圈 + 文案"） */
-.page-state { display: flex; min-height: 70vh; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
-.page-state__title { margin-top: 24rpx; color: $brand-color-text; font-size: 32rpx; font-weight: 700; }
-.profile-content { display: flex; flex-direction: column; padding-bottom: 32rpx; }
-.profile-heading { display: flex; flex-direction: column; margin-bottom: 34rpx; }
-.profile-heading__eyebrow { color: $brand-color-primary; font-size: 23rpx; font-weight: 700; letter-spacing: 4rpx; }
-.profile-heading__title { margin-top: 14rpx; color: $brand-color-text; font-size: 46rpx; font-weight: 700; line-height: 1.28; }
-.profile-summary { display: flex; width: 100%; align-items: center; padding: 30rpx; border: 0; border-radius: $brand-radius-card; background: $brand-color-surface; box-shadow: 0 14rpx 34rpx rgba(41, 68, 58, .07); text-align: left; }
-.profile-summary::after { border: 0; }
-.profile-summary__content { display: flex; min-width: 0; flex: 1; flex-direction: column; margin-left: 24rpx; }
-.profile-summary__label { color: $brand-color-text-secondary; font-size: 23rpx; }
-.profile-summary__name { margin-top: 10rpx; color: $brand-color-text; font-size: 36rpx; font-weight: 700; }
-.profile-section { margin-top: 46rpx; }
-.profile-section__title { display: block; margin-bottom: 20rpx; color: $brand-color-text; font-size: 30rpx; font-weight: 700; }
-.profile-action { display: flex; width: 100%; align-items: center; margin-top: 18rpx; padding: 26rpx 28rpx; border: 2rpx solid #d8eee2; border-radius: $brand-radius-card; background: #effbf5; text-align: left; }
-.profile-action::after { border: 0; }
-.profile-action__icon { display: flex; align-items: center; justify-content: center; width: 62rpx; height: 62rpx; border-radius: 50%; background: #fff; }
-.profile-action__content { display: flex; flex: 1; flex-direction: column; margin-left: 18rpx; }
-.profile-action__title { color: $brand-color-text; font-size: 28rpx; font-weight: 700; }
-.profile-action__copy { margin-top: 8rpx; color: $brand-color-text-secondary; font-size: 23rpx; }
-.profile-error { display: flex; min-height: 70vh; align-items: center; justify-content: center; padding: 32rpx; text-align: center; }
-.profile-error__copy { color: $brand-color-text-secondary; font-size: 27rpx; }
+  display: flex;
+  min-height: 70vh;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  &__title {
+    margin-top: 24rpx;
+    color: $brand-color-text;
+    font-size: 32rpx;
+    font-weight: 700;
+  }
+}
+.profile-content {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 32rpx;
+}
+.profile-heading {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 34rpx;
+  &__eyebrow {
+    color: $brand-color-primary;
+    font-size: 23rpx;
+    font-weight: 700;
+    letter-spacing: 4rpx;
+  }
+  &__title {
+    margin-top: 14rpx;
+    color: $brand-color-text;
+    font-size: 46rpx;
+    font-weight: 700;
+    line-height: 1.28;
+  }
+}
+.profile-summary {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  padding: 30rpx;
+  border: 0;
+  border-radius: $brand-radius-card;
+  background: $brand-color-surface;
+  box-shadow: 0 14rpx 34rpx rgba(41, 68, 58, .07);
+  text-align: left;
+  &::after {
+    border: 0;
+  }
+  &__content {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+    margin-left: 24rpx;
+  }
+  &__label {
+    color: $brand-color-text-secondary;
+    font-size: 23rpx;
+  }
+  &__name {
+    margin-top: 10rpx;
+    color: $brand-color-text;
+    font-size: 36rpx;
+    font-weight: 700;
+  }
+}
+.profile-section {
+  margin-top: 46rpx;
+  &__title {
+    display: block;
+    margin-bottom: 20rpx;
+    color: $brand-color-text;
+    font-size: 30rpx;
+    font-weight: 700;
+  }
+}
+.profile-action {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  margin-top: 18rpx;
+  padding: 26rpx 28rpx;
+  border: 2rpx solid #d8eee2;
+  border-radius: $brand-radius-card;
+  background: #effbf5;
+  text-align: left;
+  &::after {
+    border: 0;
+  }
+  &__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 62rpx;
+    height: 62rpx;
+    border-radius: 50%;
+    background: #fff;
+  }
+  &__content {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    margin-left: 18rpx;
+  }
+  &__title {
+    color: $brand-color-text;
+    font-size: 28rpx;
+    font-weight: 700;
+  }
+  &__copy {
+    margin-top: 8rpx;
+    color: $brand-color-text-secondary;
+    font-size: 23rpx;
+  }
+}
+.profile-error {
+  display: flex;
+  min-height: 70vh;
+  align-items: center;
+  justify-content: center;
+  padding: 32rpx;
+  text-align: center;
+  &__copy {
+    color: $brand-color-text-secondary;
+    font-size: 27rpx;
+  }
+}
 </style>

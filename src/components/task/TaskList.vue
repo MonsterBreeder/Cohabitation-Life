@@ -53,7 +53,19 @@ const emit = defineEmits<{ press: [taskId: string] }>()
 </script>
 
 <style lang="scss" scoped>
-.task-list { display: flex; flex-direction: column; gap: 32rpx; }
-.task-list__section { display: flex; flex-direction: column; gap: 16rpx; }
-.task-list__section-title { color: $brand-color-text; font-size: 28rpx; font-weight: 700; }
+.task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 32rpx;
+  &__section {
+    display: flex;
+    flex-direction: column;
+    gap: 16rpx;
+  }
+  &__section-title {
+    color: $brand-color-text;
+    font-size: 28rpx;
+    font-weight: 700;
+  }
+}
 </style>

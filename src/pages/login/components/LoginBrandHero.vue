@@ -26,17 +26,75 @@ withDefaults(defineProps<{ compact?: boolean }>(), {
 </script>
 
 <style lang="scss" scoped>
-/* 品牌主体：Logo、产品名和欢迎文案。 */
-.brand-hero { display: flex; flex-direction: column; align-items: center; text-align: center; }
-.brand-hero__logo-wrap { position: relative; display: flex; align-items: center; justify-content: center; width: 188rpx; height: 188rpx; margin-bottom: 24rpx; }
-.brand-hero__logo { position: relative; z-index: 1; width: 152rpx; height: 152rpx; }
-.brand-hero__accent { position: absolute; width: 24rpx; height: 24rpx; border-radius: 50%; }
-.brand-hero__accent--mint { top: 22rpx; left: 10rpx; background: $brand-color-primary; }
-.brand-hero__accent--coral { right: 14rpx; bottom: 18rpx; width: 18rpx; height: 18rpx; background: $brand-color-accent; }
-.brand-hero__name { color: $brand-color-primary; font-size: 25rpx; font-weight: 700; letter-spacing: 7rpx; }
-.brand-hero__title { margin-top: 28rpx; color: $brand-color-text; font-size: 48rpx; font-weight: 700; line-height: 1.35; }
-.brand-hero__subtitle { margin-top: 18rpx; color: $brand-color-text-secondary; font-size: 28rpx; line-height: 1.7; }
-.brand-hero--compact .brand-hero__logo-wrap { width: 152rpx; height: 152rpx; margin-bottom: 16rpx; }
-.brand-hero--compact .brand-hero__logo { width: 124rpx; height: 124rpx; }
-.brand-hero--compact .brand-hero__accent { transform: scale(.8); }
+.brand-hero {
+  /* 品牌主体：Logo、产品名和欢迎文案。 */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  &__logo-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 188rpx;
+    height: 188rpx;
+    margin-bottom: 24rpx;
+  }
+  &__logo {
+    position: relative;
+    z-index: 1;
+    width: 152rpx;
+    height: 152rpx;
+  }
+  &__accent {
+    position: absolute;
+    width: 24rpx;
+    height: 24rpx;
+    border-radius: 50%;
+  }
+  &__accent--mint {
+    top: 22rpx;
+    left: 10rpx;
+    background: $brand-color-primary;
+  }
+  &__accent--coral {
+    right: 14rpx;
+    bottom: 18rpx;
+    width: 18rpx;
+    height: 18rpx;
+    background: $brand-color-accent;
+  }
+  &__name {
+    color: $brand-color-primary;
+    font-size: 25rpx;
+    font-weight: 700;
+    letter-spacing: 7rpx;
+  }
+  &__title {
+    margin-top: 28rpx;
+    color: $brand-color-text;
+    font-size: 48rpx;
+    font-weight: 700;
+    line-height: 1.35;
+  }
+  &__subtitle {
+    margin-top: 18rpx;
+    color: $brand-color-text-secondary;
+    font-size: 28rpx;
+    line-height: 1.7;
+  }
+  &--compact &__logo-wrap {
+    width: 152rpx;
+    height: 152rpx;
+    margin-bottom: 16rpx;
+  }
+  &--compact &__logo {
+    width: 124rpx;
+    height: 124rpx;
+  }
+  &--compact &__accent {
+    transform: scale(.8);
+  }
+}
 </style>

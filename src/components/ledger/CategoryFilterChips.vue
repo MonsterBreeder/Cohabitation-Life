@@ -20,7 +20,7 @@
 </template>
 
 <script setup lang="ts">
-import type { CategoryView } from '../../../pages/ledger/ledger-home-view'
+import type { CategoryView } from '../../pages/ledger/ledger-home-view'
 
 interface Props {
   categories: CategoryView[]
@@ -44,36 +44,36 @@ function onToggle(id: string): void {
   gap: 12rpx;
   padding: 4rpx 0;
   width: 100%;
-}
-.category-filter__chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8rpx;
-  padding: 10rpx 18rpx;
-  border: 2rpx solid $brand-color-border;
-  border-radius: 999rpx;
-  background: $brand-color-surface;
-  transition: all .15s ease;
-  flex-shrink: 0;
-}
-.category-filter__chip--active {
-  border-color: var(--chip-color, $brand-color-primary);
-  background: #effbf5;
-}
-.category-filter__dot {
-  width: 12rpx;
-  height: 12rpx;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.category-filter__label {
-  color: $brand-color-text;
-  font-size: 24rpx;
-  font-weight: 500;
-  line-height: 1.2;
-}
-.category-filter__chip--active .category-filter__label {
-  color: $brand-color-action;
-  font-weight: 600;
+  &__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8rpx;
+    padding: 10rpx 18rpx;
+    border: 2rpx solid $brand-color-border;
+    border-radius: 999rpx;
+    background: $brand-color-surface;
+    transition: all .15s ease;
+    flex-shrink: 0;
+  }
+  &__chip--active {
+    border-color: var(--chip-color, $brand-color-primary);
+    background: #effbf5;
+  }
+  &__dot {
+    width: 12rpx;
+    height: 12rpx;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  &__label {
+    color: $brand-color-text;
+    font-size: 24rpx;
+    font-weight: 500;
+    line-height: 1.2;
+  }
+  &__chip--active &__label {
+    color: $brand-color-action;
+    font-weight: 600;
+  }
 }
 </style>

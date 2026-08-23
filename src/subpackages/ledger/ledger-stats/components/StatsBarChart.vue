@@ -28,8 +28,8 @@
 </template>
 
 <script setup lang="ts">
-import type { PayerBar } from '../../subpackages/ledger/ledger-stats/ledger-stats-view'
-import { formatYuan } from '../../utils/format'
+import type { PayerBar } from '../ledger-stats-view'
+import { formatYuan } from '../../../../utils/format'
 
 interface Props {
   bars: PayerBar[]
@@ -42,44 +42,59 @@ function formatCents(cents: number): string {
 </script>
 
 <style lang="scss" scoped>
-.stats-bar { width: 100%; }
-.stats-bar__empty { display: flex; align-items: center; justify-content: center; height: 200rpx; }
-.stats-bar__empty-text { color: #74847D; font-size: 26rpx; font-style: italic; }
-.stats-bar__list { display: flex; flex-direction: column; gap: 18rpx; }
-.stats-bar__row {
-  display: flex;
-  align-items: center;
-  gap: 18rpx;
-}
-.stats-bar__label {
-  width: 120rpx;
-  color: #29443A;
-  font-size: 26rpx;
-  font-weight: 500;
-  flex-shrink: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.stats-bar__track {
-  flex: 1;
-  height: 18rpx;
-  overflow: hidden;
-  border-radius: 999rpx;
-  background: #E4ECE7;
-}
-.stats-bar__fill {
-  height: 100%;
-  border-radius: 999rpx;
-  background: #43C89A;
-  transition: width .35s ease;
-}
-.stats-bar__value {
-  min-width: 140rpx;
-  color: #29443A;
-  font-size: 26rpx;
-  font-weight: 600;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
+.stats-bar {
+  width: 100%;
+  &__empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 200rpx;
+    &-text {
+      color: #74847D;
+      font-size: 26rpx;
+      font-style: italic;
+    }
+  }
+  &__list {
+    display: flex;
+    flex-direction: column;
+    gap: 18rpx;
+  }
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: 18rpx;
+  }
+  &__label {
+    width: 120rpx;
+    color: #29443A;
+    font-size: 26rpx;
+    font-weight: 500;
+    flex-shrink: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  &__track {
+    flex: 1;
+    height: 18rpx;
+    overflow: hidden;
+    border-radius: 999rpx;
+    background: #E4ECE7;
+  }
+  &__fill {
+    height: 100%;
+    border-radius: 999rpx;
+    background: #43C89A;
+    transition: width .35s ease;
+  }
+  &__value {
+    min-width: 140rpx;
+    color: #29443A;
+    font-size: 26rpx;
+    font-weight: 600;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
 }
 </style>

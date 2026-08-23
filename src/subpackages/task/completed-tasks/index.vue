@@ -69,7 +69,7 @@
           :data-task-id="item.id"
           @click="goDetail(item.id)"
         >
-          <view class="completed-page__item-mark" :class="`completed-page__item-mark--${item.type}`" />
+          <view class="completed-page__item-mark" :class="`completed-page__item-mark--${item.type.replace('_', '-')}`" />
           <view class="completed-page__item-text">
             <text class="completed-page__item-title">{{ item.title }}</text>
             <text class="completed-page__item-meta">
@@ -176,79 +176,196 @@ onReachBottom(() => {
 </script>
 
 <style lang="scss" scoped>
-/* 整体：暖白底色 + 大留白。 */
-.completed-page { min-height: 100vh; padding: 64rpx 32rpx 80rpx; box-sizing: border-box; background: $brand-color-background; }
-.completed-page__heading { display: flex; flex-direction: column; margin-bottom: 32rpx; }
-.completed-page__eyebrow { color: $brand-color-primary; font-size: 22rpx; font-weight: 600; letter-spacing: 6rpx; opacity: .85; }
-.completed-page__title { margin-top: 16rpx; color: $brand-color-text; font-size: 46rpx; font-weight: 500; line-height: 1.35; letter-spacing: .5rpx; }
-.completed-page__subtitle { margin-top: 12rpx; color: $brand-color-text-secondary; font-size: 25rpx; line-height: 1.6; }
-
-/* 加载/错误：纵向居中。 */
-.completed-page__state { display: flex; min-height: 40vh; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
-.completed-page__state-title { margin-top: 24rpx; color: $brand-color-text; font-size: 30rpx; font-weight: 600; }
-.completed-page__state-copy { margin-top: 12rpx; padding: 0 80rpx; color: $brand-color-text-secondary; font-size: 25rpx; line-height: 1.6; }
-
-/* 空状态：wd-empty 容纳品牌 logo。 */
-.completed-page__empty { padding: 80rpx 0; }
-.completed-page__empty :deep(.wd-empty) { padding: 0; }
-.completed-page__empty-logo { width: 220rpx; height: 220rpx; opacity: .92; }
-.completed-page__empty-copy { display: block; margin-top: 16rpx; padding: 0 80rpx; color: $brand-color-text-secondary; font-size: 25rpx; line-height: 1.6; }
-
-/* 分组容器：每组之间留出"日期间距"，让今天的记录和昨天的记录能呼吸。 */
-.completed-page__groups { display: flex; flex-direction: column; }
-.completed-page__group { display: flex; flex-direction: column; margin-top: 12rpx; }
-
-/* 日期头：左侧大号主标签（"今天"/"昨天"/"8月16日"），右侧小号件数角标。
+.completed-page {
+  /* 整体：暖白底色 + 大留白。 */
+  min-height: 100vh;
+  padding: 64rpx 32rpx 80rpx;
+  box-sizing: border-box;
+  background: $brand-color-background;
+  &__heading {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 32rpx;
+  }
+  &__eyebrow {
+    color: $brand-color-primary;
+    font-size: 22rpx;
+    font-weight: 600;
+    letter-spacing: 6rpx;
+    opacity: .85;
+  }
+  &__title {
+    margin-top: 16rpx;
+    color: $brand-color-text;
+    font-size: 46rpx;
+    font-weight: 500;
+    line-height: 1.35;
+    letter-spacing: .5rpx;
+  }
+  &__subtitle {
+    margin-top: 12rpx;
+    color: $brand-color-text-secondary;
+    font-size: 25rpx;
+    line-height: 1.6;
+  }
+  /* 加载/错误：纵向居中。 */
+  &__state {
+    display: flex;
+    min-height: 40vh;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+  &__state-title {
+    margin-top: 24rpx;
+    color: $brand-color-text;
+    font-size: 30rpx;
+    font-weight: 600;
+  }
+  &__state-copy {
+    margin-top: 12rpx;
+    padding: 0 80rpx;
+    color: $brand-color-text-secondary;
+    font-size: 25rpx;
+    line-height: 1.6;
+  }
+  /* 空状态：wd-empty 容纳品牌 logo。 */
+  &__empty {
+    padding: 80rpx 0;
+  }
+  &__empty :deep(.wd-empty) {
+    padding: 0;
+  }
+  &__empty-logo {
+    width: 220rpx;
+    height: 220rpx;
+    opacity: .92;
+  }
+  &__empty-copy {
+    display: block;
+    margin-top: 16rpx;
+    padding: 0 80rpx;
+    color: $brand-color-text-secondary;
+    font-size: 25rpx;
+    line-height: 1.6;
+  }
+  /* 分组容器：每组之间留出"日期间距"，让今天的记录和昨天的记录能呼吸。 */
+  &__groups {
+    display: flex;
+    flex-direction: column;
+  }
+  &__group {
+    display: flex;
+    flex-direction: column;
+    margin-top: 12rpx;
+  }
+  /* 日期头：左侧大号主标签（"今天"/"昨天"/"8月16日"），右侧小号件数角标。
    整组用极淡的米色背景做底，色带卡片浮在白底上。 */
-.completed-page__group-head {
-  display: flex; align-items: baseline; justify-content: space-between;
-  padding: 28rpx 6rpx 18rpx;
-}
-.completed-page__group-title { color: $brand-color-text; font-size: 30rpx; font-weight: 700; letter-spacing: .5rpx; }
-.completed-page__group-meta { color: $brand-color-text-secondary; font-size: 22rpx; }
-
-/* 列表卡片：左侧色带（按 type）+ 中间标题/描述 + 右侧描边徽章。
+  &__group-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 28rpx 6rpx 18rpx;
+  }
+  &__group-title {
+    color: $brand-color-text;
+    font-size: 30rpx;
+    font-weight: 700;
+    letter-spacing: .5rpx;
+  }
+  &__group-meta {
+    color: $brand-color-text-secondary;
+    font-size: 22rpx;
+  }
+  /* 列表卡片：左侧色带（按 type）+ 中间标题/描述 + 右侧描边徽章。
    同组内卡片紧贴，第一张圆角顶部、最后一张圆角底部，整组看起来像一张连续卡片。 */
-.completed-page__group-items {
-  display: flex; flex-direction: column;
-  border-radius: 20rpx;
-  background: $brand-color-surface;
-  overflow: hidden;
+  &__group-items {
+    display: flex;
+    flex-direction: column;
+    border-radius: 20rpx;
+    background: $brand-color-surface;
+    overflow: hidden;
+  }
+  &__item {
+    display: flex;
+    align-items: center;
+    gap: 20rpx;
+    padding: 24rpx 24rpx 24rpx 0;
+    background: $brand-color-surface;
+    transition: transform .12s ease, background .15s ease;
+  }
+  &__item:active {
+    background: #effbf5;
+    transform: scale(.998);
+  }
+  /* 同组卡片之间的细分割线，第一张不要 */
+  &__item + &__item {
+    border-top: 1rpx solid $brand-color-border;
+  }
+  &__item-mark {
+    width: 6rpx;
+    align-self: stretch;
+    flex-shrink: 0;
+    border-radius: 0 4rpx 4rpx 0;
+  }
+  &__item-mark--low-stock {
+    background: #E8B647;
+  }
+  &__item-mark--to-handle {
+    background: #5BBE93;
+  }
+  &__item-mark--expiring {
+    background: #E78A7B;
+  }
+  &__item-text {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 4rpx;
+    min-width: 0;
+  }
+  &__item-title {
+    color: $brand-color-text;
+    font-size: 28rpx;
+    font-weight: 500;
+    line-height: 1.4;
+  }
+  &__item-meta {
+    color: $brand-color-text-secondary;
+    font-size: 22rpx;
+  }
+  /* 状态徽章：完成=绿描边、放弃=珊瑚描边。 */
+  &__item-tag {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    height: 44rpx;
+    padding: 0 18rpx;
+    border-radius: 999rpx;
+    font-size: 22rpx;
+    font-weight: 500;
+    letter-spacing: .5rpx;
+  }
+  &__item-tag--completed {
+    color: $brand-color-action;
+    box-shadow: inset 0 0 0 1.5rpx $brand-color-primary;
+    background: transparent;
+  }
+  &__item-tag--abandoned {
+    color: #c5684d;
+    box-shadow: inset 0 0 0 1.5rpx #E78A7B;
+    background: transparent;
+  }
+  /* 加载更多：wd-loadmore 自带文案，间距由 Wot UI 决定。 */
+  &__more {
+    margin-top: 16rpx;
+  }
+  &__end {
+    margin-top: 32rpx;
+  }
+  &__end-divider {
+    color: $brand-color-text-secondary;
+  }
 }
-.completed-page__item {
-  display: flex; align-items: center; gap: 20rpx;
-  padding: 24rpx 24rpx 24rpx 0;
-  background: $brand-color-surface;
-  transition: transform .12s ease, background .15s ease;
-}
-.completed-page__item:active { background: #effbf5; transform: scale(.998); }
-/* 同组卡片之间的细分割线，第一张不要 */
-.completed-page__item + .completed-page__item {
-  border-top: 1rpx solid $brand-color-border;
-}
-.completed-page__item-mark { width: 6rpx; align-self: stretch; flex-shrink: 0; border-radius: 0 4rpx 4rpx 0; }
-.completed-page__item-mark--low_stock { background: #E8B647; }
-.completed-page__item-mark--to_handle { background: #5BBE93; }
-.completed-page__item-mark--expiring { background: #E78A7B; }
-.completed-page__item-text { display: flex; flex: 1; flex-direction: column; gap: 4rpx; min-width: 0; }
-.completed-page__item-title { color: $brand-color-text; font-size: 28rpx; font-weight: 500; line-height: 1.4; }
-.completed-page__item-meta { color: $brand-color-text-secondary; font-size: 22rpx; }
-/* 状态徽章：完成=绿描边、放弃=珊瑚描边。 */
-.completed-page__item-tag {
-  flex-shrink: 0;
-  display: inline-flex; align-items: center;
-  height: 44rpx; padding: 0 18rpx;
-  border-radius: 999rpx;
-  font-size: 22rpx;
-  font-weight: 500;
-  letter-spacing: .5rpx;
-}
-.completed-page__item-tag--completed { color: $brand-color-action; box-shadow: inset 0 0 0 1.5rpx $brand-color-primary; background: transparent; }
-.completed-page__item-tag--abandoned { color: #c5684d; box-shadow: inset 0 0 0 1.5rpx #E78A7B; background: transparent; }
-
-/* 加载更多：wd-loadmore 自带文案，间距由 Wot UI 决定。 */
-.completed-page__more { margin-top: 16rpx; }
-
-.completed-page__end { margin-top: 32rpx; }
-.completed-page__end-divider { color: $brand-color-text-secondary; }
 </style>

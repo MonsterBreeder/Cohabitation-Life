@@ -52,6 +52,9 @@
     "mp-weixin" : {
         "appid" : "wxd40af14967fa64fa",
         "cloudfunctionRoot" : "cloudfunctions/",
+        "optimization" : {
+            "subPackages" : true
+        },
         "setting" : {
             "urlCheck" : false
         },

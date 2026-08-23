@@ -25,7 +25,7 @@
 </template>
 
 <script setup lang="ts">
-import type { CategoryView } from '../../pages/ledger/ledger-home-view'
+import type { CategoryView } from '../../../../pages/ledger/ledger-home-view'
 
 interface Props {
   categories: CategoryView[]
@@ -55,39 +55,43 @@ function onSelect(id: string): void {
   gap: 16rpx;
   padding: 4rpx 0;
   width: 100%;
+  &__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8rpx;
+    padding: 14rpx 22rpx;
+    border: 2rpx solid $brand-color-border;
+    border-radius: 999rpx;
+    background: $brand-color-surface;
+    transition: all .15s ease;
+    &--active {
+      border-color: var(--chip-color, $brand-color-primary);
+      background: rgba(67, 200, 154, 0.08);
+    }
+  }
+  &__label {
+    color: $brand-color-text;
+    font-size: 26rpx;
+    font-weight: 500;
+    line-height: 1.2;
+    &--active {
+      color: $brand-color-action;
+      font-weight: 600;
+    }
+  }
+  &__add {
+    display: inline-flex;
+    align-items: center;
+    gap: 6rpx;
+    padding: 14rpx 22rpx;
+    border: 2rpx dashed $brand-color-border;
+    border-radius: 999rpx;
+    background: rgba($brand-color-surface, .5);
+    &-label {
+      color: $brand-color-text-secondary;
+      font-size: 26rpx;
+      font-weight: 500;
+    }
+  }
 }
-.category-picker__chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8rpx;
-  padding: 14rpx 22rpx;
-  border: 2rpx solid $brand-color-border;
-  border-radius: 999rpx;
-  background: $brand-color-surface;
-  transition: all .15s ease;
-}
-.category-picker__chip--active {
-  border-color: var(--chip-color, $brand-color-primary);
-  background: rgba(67, 200, 154, 0.08);
-}
-.category-picker__label {
-  color: $brand-color-text;
-  font-size: 26rpx;
-  font-weight: 500;
-  line-height: 1.2;
-}
-.category-picker__label--active {
-  color: $brand-color-action;
-  font-weight: 600;
-}
-.category-picker__add {
-  display: inline-flex;
-  align-items: center;
-  gap: 6rpx;
-  padding: 14rpx 22rpx;
-  border: 2rpx dashed $brand-color-border;
-  border-radius: 999rpx;
-  background: rgba($brand-color-surface, .5);
-}
-.category-picker__add-label { color: $brand-color-text-secondary; font-size: 26rpx; font-weight: 500; }
 </style>

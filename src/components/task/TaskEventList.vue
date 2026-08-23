@@ -33,11 +33,34 @@ function formatTime(iso: string): string {
 </script>
 
 <style lang="scss" scoped>
-.task-event-list { display: flex; flex-direction: column; }
-.task-event-list__empty { padding: 24rpx 0; text-align: center; }
-.task-event-list__empty-text { color: $brand-color-text-secondary; font-size: 24rpx; }
-.task-event-list__row { display: flex; justify-content: space-between; align-items: center; padding: 16rpx 0; border-bottom: 1rpx solid $brand-color-border; }
-.task-event-list__row:last-child { border-bottom: 0; }
-.task-event-list__text { color: $brand-color-text; font-size: 26rpx; }
-.task-event-list__time { color: $brand-color-text-secondary; font-size: 22rpx; }
+.task-event-list {
+  display: flex;
+  flex-direction: column;
+  &__empty {
+    padding: 24rpx 0;
+    text-align: center;
+  }
+  &__empty-text {
+    color: $brand-color-text-secondary;
+    font-size: 24rpx;
+  }
+  &__row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16rpx 0;
+    border-bottom: 1rpx solid $brand-color-border;
+  }
+  &__row:last-child {
+    border-bottom: 0;
+  }
+  &__text {
+    color: $brand-color-text;
+    font-size: 26rpx;
+  }
+  &__time {
+    color: $brand-color-text-secondary;
+    font-size: 22rpx;
+  }
+}
 </style>

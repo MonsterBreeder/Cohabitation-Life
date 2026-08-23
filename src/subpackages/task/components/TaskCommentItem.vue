@@ -47,31 +47,55 @@ const relativeTime = computed(() => formatRelativeTime(props.comment.at))
   align-items: flex-start;
   gap: 16rpx;
   padding: 4rpx 0;
-}
-.task-comment-item__avatar {
-  flex-shrink: 0;
-  width: 56rpx; height: 56rpx;
-  border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  background: $brand-color-primary;
-  color: #fff;
-  font-size: 26rpx;
-  font-weight: 600;
-  letter-spacing: 0;
-  margin-top: 4rpx;
-}
-.task-comment-item__avatar--person-neutral { background: #74847D; }
-.task-comment-item__avatar-text { line-height: 1; }
-.task-comment-item__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6rpx; }
-.task-comment-item__header { display: flex; align-items: baseline; gap: 16rpx; }
-.task-comment-item__name { color: $brand-color-text; font-size: 25rpx; font-weight: 600; }
-.task-comment-item__time { color: $brand-color-text-secondary; font-size: 21rpx; }
-.task-comment-item__text {
-  display: block;
-  color: $brand-color-text;
-  font-size: 28rpx;
-  line-height: 1.55;
-  word-break: break-word;
-  white-space: pre-wrap;
+  &__avatar {
+    flex-shrink: 0;
+    width: 56rpx;
+    height: 56rpx;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: $brand-color-primary;
+    color: #fff;
+    font-size: 26rpx;
+    font-weight: 600;
+    letter-spacing: 0;
+    margin-top: 4rpx;
+  }
+  &__avatar--person-neutral {
+    background: #74847D;
+  }
+  &__avatar-text {
+    line-height: 1;
+  }
+  &__body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6rpx;
+  }
+  &__header {
+    display: flex;
+    align-items: baseline;
+    gap: 16rpx;
+  }
+  &__name {
+    color: $brand-color-text;
+    font-size: 25rpx;
+    font-weight: 600;
+  }
+  &__time {
+    color: $brand-color-text-secondary;
+    font-size: 21rpx;
+  }
+  &__text {
+    display: block;
+    color: $brand-color-text;
+    font-size: 28rpx;
+    line-height: 1.55;
+    word-break: break-word;
+    white-space: pre-wrap;
+  }
 }
 </style>

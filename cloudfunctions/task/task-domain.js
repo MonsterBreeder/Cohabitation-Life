@@ -48,14 +48,14 @@ function creationLockId(identityKey, requestId) {
   return `tcrequest_${crypto.createHash('sha256').update(`${identityKey}:${requestId}`).digest('hex')}`
 }
 
-function normaliseTask(record) {
+function normaliseTask(record, currentTime) {
   if (!record) return null
   return {
     id: record._id,
     type: record.type,
     title: record.title,
     dueDate: record.dueDate || undefined,
-    isOverdueOrToday: computeIsOverdueOrToday(record.dueDate),
+    isOverdueOrToday: computeIsOverdueOrToday(record.dueDate, currentTime),
     status: record.status,
     assigneeKey: record.assigneeKey || undefined,
     createdBy: record.createdBy,
@@ -84,8 +84,8 @@ function safeCreatorDisplay(record, profile) {
   return safeAssigneeDisplay({ assigneeProfile: profile }, profile)
 }
 
-function taskSummaryFromRecord(record, profilesByKey = {}) {
-  const normalised = normaliseTask(record)
+function taskSummaryFromRecord(record, profilesByKey = {}, currentTime) {
+  const normalised = normaliseTask(record, currentTime)
   if (!normalised) return null
   return {
     id: normalised.id,
@@ -153,9 +153,9 @@ function toIsoString(value) {
 }
 
 // "今天"或"已逾期"的判断：仅比较 yyyy-MM-dd 字符串，本地时区。
-function computeIsOverdueOrToday(dueDate) {
+function computeIsOverdueOrToday(dueDate, currentTime = new Date()) {
   if (!dueDate || typeof dueDate !== 'string' || !DUE_DATE_PATTERN.test(dueDate)) return false
-  const today = new Date()
+  const today = currentTime instanceof Date ? currentTime : new Date(currentTime)
   const yyyy = today.getFullYear()
   const mm = String(today.getMonth() + 1).padStart(2, '0')
   const dd = String(today.getDate()).padStart(2, '0')
@@ -355,9 +355,11 @@ async function listCurrentTasks(dependencies) {
   if (homes.length === 0) throw new TaskDomainError('TASK_FORBIDDEN')
   if (homes.length > 1) throw new TaskDomainError('TASK_FORBIDDEN')
 
-  const records = await repository.findOpenTasksByHousehold(homes[0]._id, now())
+  // 同一次列表计算只取一次当前时间，保证查询范围和逾期判断使用同一基准。
+  const currentTime = now()
+  const records = await repository.findOpenTasksByHousehold(homes[0]._id, currentTime)
   const profiles = await loadProfilesForTasks(records, repository)
-  const summaries = records.map((r) => taskSummaryFromRecord(r, profiles)).filter(Boolean)
+  const summaries = records.map((r) => taskSummaryFromRecord(r, profiles, currentTime)).filter(Boolean)
 
   const priority = []
   const groups = { low_stock: [], to_handle: [], expiring: [] }

@@ -120,58 +120,71 @@ defineExpose({ uploadNow, isUploading })
 <style lang="scss" scoped>
 .receipt-uploader {
   width: 100%;
+  &__trigger {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8rpx;
+    height: 220rpx;
+    border: 2rpx dashed $brand-color-border;
+    border-radius: $brand-radius-card;
+    background: rgba($brand-color-surface, .5);
+    transition: all .15s ease;
+    &:active {
+      background: rgba($brand-color-primary, .06);
+    }
+    &--disabled {
+      opacity: .5;
+      pointer-events: none;
+    }
+  }
+  &__hint {
+    color: $brand-color-text;
+    font-size: 26rpx;
+    font-weight: 500;
+  }
+  &__sub {
+    color: $brand-color-text-secondary;
+    font-size: 22rpx;
+  }
+  &__preview {
+    position: relative;
+    width: 100%;
+    height: 360rpx;
+    border-radius: $brand-radius-card;
+    overflow: hidden;
+    background: $brand-color-surface;
+  }
+  &__image {
+    width: 100%;
+    height: 100%;
+  }
+  &__remove {
+    position: absolute;
+    top: 16rpx;
+    right: 16rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48rpx;
+    height: 48rpx;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.55);
+  }
+  &__overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12rpx;
+    background: rgba(0, 0, 0, 0.45);
+    &-text {
+      color: #FFFFFF;
+      font-size: 24rpx;
+    }
+  }
 }
-.receipt-uploader__trigger {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8rpx;
-  height: 220rpx;
-  border: 2rpx dashed $brand-color-border;
-  border-radius: $brand-radius-card;
-  background: rgba($brand-color-surface, .5);
-  transition: all .15s ease;
-}
-.receipt-uploader__trigger:active {
-  background: rgba($brand-color-primary, .06);
-}
-.receipt-uploader__trigger--disabled {
-  opacity: .5;
-  pointer-events: none;
-}
-.receipt-uploader__hint { color: $brand-color-text; font-size: 26rpx; font-weight: 500; }
-.receipt-uploader__sub { color: $brand-color-text-secondary; font-size: 22rpx; }
-.receipt-uploader__preview {
-  position: relative;
-  width: 100%;
-  height: 360rpx;
-  border-radius: $brand-radius-card;
-  overflow: hidden;
-  background: $brand-color-surface;
-}
-.receipt-uploader__image { width: 100%; height: 100%; }
-.receipt-uploader__remove {
-  position: absolute;
-  top: 16rpx;
-  right: 16rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 48rpx;
-  height: 48rpx;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.55);
-}
-.receipt-uploader__overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12rpx;
-  background: rgba(0, 0, 0, 0.45);
-}
-.receipt-uploader__overlay-text { color: #FFFFFF; font-size: 24rpx; }
 </style>

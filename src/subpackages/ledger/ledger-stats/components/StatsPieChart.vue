@@ -25,7 +25,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { CategorySlice } from '../../subpackages/ledger/ledger-stats/ledger-stats-view'
+import type { CategorySlice } from '../ledger-stats-view'
 
 interface Props {
   slices: CategorySlice[]
@@ -73,9 +73,26 @@ function arcPath(cx: number, cy: number, r: number, startAngle: number, endAngle
 </script>
 
 <style lang="scss" scoped>
-.stats-pie { width: 100%; }
-.stats-pie__empty { display: flex; align-items: center; justify-content: center; height: 240rpx; }
-.stats-pie__empty-text { color: #74847D; font-size: 26rpx; font-style: italic; }
-.stats-pie__container { display: flex; align-items: center; justify-content: center; }
-.stats-pie__svg { display: block; }
+.stats-pie {
+  width: 100%;
+  &__empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 240rpx;
+    &-text {
+      color: #74847D;
+      font-size: 26rpx;
+      font-style: italic;
+    }
+  }
+  &__container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  &__svg {
+    display: block;
+  }
+}
 </style>

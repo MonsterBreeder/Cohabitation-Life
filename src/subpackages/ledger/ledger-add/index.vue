@@ -199,9 +199,9 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { onLoad } from '@dcloudio/uni-app'
-import AmountInput from '../../../components/ledger/AmountInput.vue'
-import CategoryPicker from '../../../components/ledger/CategoryPicker.vue'
-import ReceiptUploader from '../../../components/ledger/ReceiptUploader.vue'
+import AmountInput from './components/AmountInput.vue'
+import CategoryPicker from './components/CategoryPicker.vue'
+import ReceiptUploader from './components/ReceiptUploader.vue'
 import { useHouseholdStore } from '../../../store/modules/household'
 import { useLedgerStore } from '../../../store/modules/ledger'
 import { formatDateYMD } from '../../../utils/format'
@@ -430,104 +430,191 @@ watch(
   padding: 32rpx 32rpx 200rpx;
   box-sizing: border-box;
   background: $brand-color-background;
-}
-.ledger-add-page__state { display: flex; min-height: 60vh; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
-.ledger-add-page__state-title { margin-top: 24rpx; color: $brand-color-text; font-size: 32rpx; font-weight: 700; }
-.ledger-add-page__content { display: flex; flex-direction: column; gap: 32rpx; }
+  &__state {
+    display: flex;
+    min-height: 60vh;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+  &__state-title {
+    margin-top: 24rpx;
+    color: $brand-color-text;
+    font-size: 32rpx;
+    font-weight: 700;
+  }
+  &__content {
+    display: flex;
+    flex-direction: column;
+    gap: 32rpx;
+  }
+  &__tabs {
+    display: flex;
+    gap: 16rpx;
+  }
+  &__tab {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18rpx 0;
+    border-radius: 999rpx;
+    background: $brand-color-surface;
+    color: $brand-color-text-secondary;
+    font-size: 28rpx;
+    font-weight: 600;
+    transition: all .15s ease;
+  }
+  &__tab--active {
+    &.ledger-add-page__tab--expense {
+      background: $brand-color-accent;
+      color: #FFFFFF;
+    }
 
-.ledger-add-page__tabs {
-  display: flex;
-  gap: 16rpx;
+    &.ledger-add-page__tab--income {
+      background: $brand-color-primary;
+      color: #FFFFFF;
+    }
+  }
+  &__amount-block {
+    padding: 0 8rpx;
+  }
+  &__validation {
+    display: block;
+    margin-top: 8rpx;
+    color: #c5684d;
+    font-size: 23rpx;
+  }
+  &__field {
+    display: flex;
+    flex-direction: column;
+    gap: 14rpx;
+  }
+  &__label {
+    color: $brand-color-text-secondary;
+    font-size: 24rpx;
+    font-weight: 500;
+  }
+  &__empty-tip {
+    color: $brand-color-text-secondary;
+    font-size: 24rpx;
+    font-style: italic;
+  }
+  &__payer-row {
+    display: flex;
+    gap: 16rpx;
+  }
+  &__payer-chip {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18rpx 0;
+    border-radius: $brand-radius-input;
+    background: $brand-color-surface;
+    color: $brand-color-text;
+    font-size: 26rpx;
+    font-weight: 500;
+    border: 2rpx solid transparent;
+  }
+  &__payer-chip--active {
+    background: #effbf5;
+    border-color: $brand-color-primary;
+    color: $brand-color-action;
+    font-weight: 600;
+  }
+  &__date-pill {
+    display: flex;
+    align-items: center;
+    gap: 12rpx;
+    padding: 18rpx 24rpx;
+    border-radius: $brand-radius-input;
+    background: $brand-color-surface;
+  }
+  &__date-text {
+    color: $brand-color-text;
+    font-size: 28rpx;
+    font-weight: 500;
+  }
+  &__count {
+    color: $brand-color-text-secondary;
+    font-size: 22rpx;
+    text-align: right;
+  }
+  &__actions {
+    margin-top: 24rpx;
+  }
+  /* 类目弹窗 */
+  &__dialog-mask {
+    position: fixed;
+    inset: 0;
+    z-index: 99;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, .45);
+  }
+  &__dialog {
+    width: 86vw;
+    max-width: 640rpx;
+    display: flex;
+    flex-direction: column;
+    gap: 20rpx;
+    padding: 32rpx 28rpx 28rpx;
+    border-radius: $brand-radius-card;
+    background: $brand-color-surface;
+  }
+  &__dialog-title {
+    color: $brand-color-text;
+    font-size: 32rpx;
+    font-weight: 700;
+  }
+  &__dialog-field {
+    display: flex;
+    flex-direction: column;
+    gap: 10rpx;
+  }
+  &__icon-row {
+    display: flex;
+    gap: 16rpx;
+    flex-wrap: wrap;
+  }
+  &__icon-chip {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 72rpx;
+    height: 72rpx;
+    border-radius: 50%;
+    background: rgba($brand-color-border, .4);
+    border: 2rpx solid transparent;
+    transition: all .15s ease;
+  }
+  &__icon-chip--active {
+    background: #effbf5;
+    border-color: $brand-color-primary;
+  }
+  &__color-row {
+    display: flex;
+    gap: 18rpx;
+    flex-wrap: wrap;
+  }
+  &__color-chip {
+    width: 60rpx;
+    height: 60rpx;
+    border-radius: 50%;
+    border: 4rpx solid transparent;
+    transition: all .15s ease;
+  }
+  &__color-chip--active {
+    border-color: $brand-color-text;
+  }
+  &__dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 16rpx;
+    margin-top: 8rpx;
+  }
 }
-.ledger-add-page__tab {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 18rpx 0;
-  border-radius: 999rpx;
-  background: $brand-color-surface;
-  color: $brand-color-text-secondary;
-  font-size: 28rpx;
-  font-weight: 600;
-  transition: all .15s ease;
-}
-.ledger-add-page__tab--active.ledger-add-page__tab--expense { background: $brand-color-accent; color: #FFFFFF; }
-.ledger-add-page__tab--active.ledger-add-page__tab--income { background: $brand-color-primary; color: #FFFFFF; }
-
-.ledger-add-page__amount-block { padding: 0 8rpx; }
-.ledger-add-page__validation { display: block; margin-top: 8rpx; color: #c5684d; font-size: 23rpx; }
-
-.ledger-add-page__field { display: flex; flex-direction: column; gap: 14rpx; }
-.ledger-add-page__label { color: $brand-color-text-secondary; font-size: 24rpx; font-weight: 500; }
-.ledger-add-page__empty-tip { color: $brand-color-text-secondary; font-size: 24rpx; font-style: italic; }
-
-.ledger-add-page__payer-row { display: flex; gap: 16rpx; }
-.ledger-add-page__payer-chip {
-  flex: 1;
-  display: flex; align-items: center; justify-content: center;
-  padding: 18rpx 0;
-  border-radius: $brand-radius-input;
-  background: $brand-color-surface;
-  color: $brand-color-text;
-  font-size: 26rpx; font-weight: 500;
-  border: 2rpx solid transparent;
-}
-.ledger-add-page__payer-chip--active {
-  background: #effbf5;
-  border-color: $brand-color-primary;
-  color: $brand-color-action;
-  font-weight: 600;
-}
-
-.ledger-add-page__date-pill {
-  display: flex; align-items: center; gap: 12rpx;
-  padding: 18rpx 24rpx;
-  border-radius: $brand-radius-input;
-  background: $brand-color-surface;
-}
-.ledger-add-page__date-text { color: $brand-color-text; font-size: 28rpx; font-weight: 500; }
-
-.ledger-add-page__count { color: $brand-color-text-secondary; font-size: 22rpx; text-align: right; }
-
-.ledger-add-page__actions { margin-top: 24rpx; }
-
-/* 类目弹窗 */
-.ledger-add-page__dialog-mask {
-  position: fixed; inset: 0; z-index: 99;
-  display: flex; align-items: center; justify-content: center;
-  background: rgba(0, 0, 0, .45);
-}
-.ledger-add-page__dialog {
-  width: 86vw;
-  max-width: 640rpx;
-  display: flex; flex-direction: column; gap: 20rpx;
-  padding: 32rpx 28rpx 28rpx;
-  border-radius: $brand-radius-card;
-  background: $brand-color-surface;
-}
-.ledger-add-page__dialog-title { color: $brand-color-text; font-size: 32rpx; font-weight: 700; }
-.ledger-add-page__dialog-field { display: flex; flex-direction: column; gap: 10rpx; }
-.ledger-add-page__icon-row { display: flex; gap: 16rpx; flex-wrap: wrap; }
-.ledger-add-page__icon-chip {
-  display: flex; align-items: center; justify-content: center;
-  width: 72rpx; height: 72rpx;
-  border-radius: 50%;
-  background: rgba($brand-color-border, .4);
-  border: 2rpx solid transparent;
-  transition: all .15s ease;
-}
-.ledger-add-page__icon-chip--active {
-  background: #effbf5;
-  border-color: $brand-color-primary;
-}
-.ledger-add-page__color-row { display: flex; gap: 18rpx; flex-wrap: wrap; }
-.ledger-add-page__color-chip {
-  width: 60rpx; height: 60rpx;
-  border-radius: 50%;
-  border: 4rpx solid transparent;
-  transition: all .15s ease;
-}
-.ledger-add-page__color-chip--active { border-color: $brand-color-text; }
-.ledger-add-page__dialog-actions { display: flex; justify-content: flex-end; gap: 16rpx; margin-top: 8rpx; }
 </style>

@@ -305,108 +305,184 @@ onShow(async () => {
   padding: 32rpx 32rpx 200rpx;
   box-sizing: border-box;
   background: $brand-color-background;
+  &__state {
+    display: flex;
+    min-height: 60vh;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+  &__state-title {
+    margin-top: 24rpx;
+    color: $brand-color-text;
+    font-size: 32rpx;
+    font-weight: 700;
+  }
+  &__state-copy {
+    max-width: 480rpx;
+    margin: 12rpx 0 32rpx;
+    color: $brand-color-text-secondary;
+    font-size: 25rpx;
+    line-height: 1.6;
+  }
+  &__content {
+    display: flex;
+    flex-direction: column;
+    gap: 28rpx;
+  }
+  /* 月度概览 */
+  &__overview {
+    display: flex;
+    flex-direction: column;
+    padding: 28rpx 28rpx 24rpx;
+    border-radius: $brand-radius-card;
+    background: $brand-color-surface;
+    box-shadow: 0 2rpx 16rpx rgba(38, 122, 90, 0.04);
+  }
+  &__month-label {
+    color: $brand-color-text-secondary;
+    font-size: 24rpx;
+    font-weight: 500;
+    letter-spacing: 2rpx;
+  }
+  &__numbers {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 18rpx;
+  }
+  &__number-block {
+    display: flex;
+    flex-direction: column;
+    gap: 8rpx;
+  }
+  &__number-label {
+    color: $brand-color-text-secondary;
+    font-size: 22rpx;
+  }
+  &__number-value {
+    color: $brand-color-text;
+    font-size: 38rpx;
+    font-weight: 700;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+  }
+  &__number-value--expense {
+    color: $brand-color-accent;
+  }
+  &__number-value--income {
+    color: $brand-color-primary;
+  }
+  &__bar {
+    display: flex;
+    width: 100%;
+    height: 18rpx;
+    margin-top: 24rpx;
+    overflow: hidden;
+    border-radius: 999rpx;
+    background: rgba($brand-color-border, .5);
+  }
+  &__bar-slice {
+    height: 100%;
+  }
+  &__bar-empty {
+    margin-top: 24rpx;
+    color: $brand-color-text-secondary;
+    font-size: 22rpx;
+    font-style: italic;
+  }
+  /* 筛选条 */
+  &__filters {
+    display: flex;
+    flex-direction: column;
+    gap: 18rpx;
+    padding: 20rpx 24rpx;
+    border-radius: $brand-radius-card;
+    background: $brand-color-surface;
+  }
+  &__filter-row {
+    display: flex;
+    align-items: center;
+    gap: 12rpx;
+  }
+  &__filter-row--month {
+    justify-content: space-between;
+  }
+  &__month-btn {
+    min-width: 110rpx;
+  }
+  &__month-current {
+    color: $brand-color-text;
+    font-size: 28rpx;
+    font-weight: 600;
+  }
+  /* 列表 */
+  &__empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 80rpx 32rpx;
+    border: 2rpx dashed $brand-color-border;
+    border-radius: $brand-radius-card;
+    background: rgba($brand-color-surface, .6);
+    text-align: center;
+  }
+  &__empty-title {
+    margin-top: 16rpx;
+    color: $brand-color-text;
+    font-size: 30rpx;
+    font-weight: 700;
+  }
+  &__empty-copy {
+    margin-top: 8rpx;
+    color: $brand-color-text-secondary;
+    font-size: 24rpx;
+    line-height: 1.6;
+  }
+  &__list {
+    display: flex;
+    flex-direction: column;
+    gap: 24rpx;
+  }
+  &__group {
+    display: flex;
+    flex-direction: column;
+    gap: 12rpx;
+  }
+  &__group-label {
+    padding-left: 8rpx;
+    color: $brand-color-text-secondary;
+    font-size: 24rpx;
+    font-weight: 600;
+  }
+  &__entry-wrap { }
+  /* 已删除区 */
+  &__deleted {
+    display: flex;
+    flex-direction: column;
+    gap: 12rpx;
+  }
+  &__deleted-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18rpx 24rpx;
+    border-radius: 14rpx;
+    background: $brand-color-surface;
+  }
+  &__deleted-title {
+    color: $brand-color-text-secondary;
+    font-size: 26rpx;
+    font-weight: 600;
+  }
+  &__deleted-toggle {
+    color: $brand-color-action;
+    font-size: 24rpx;
+  }
+  &__deleted-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10rpx;
+  }
 }
-.ledger-home__state {
-  display: flex;
-  min-height: 60vh;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-}
-.ledger-home__state-title { margin-top: 24rpx; color: $brand-color-text; font-size: 32rpx; font-weight: 700; }
-.ledger-home__state-copy { max-width: 480rpx; margin: 12rpx 0 32rpx; color: $brand-color-text-secondary; font-size: 25rpx; line-height: 1.6; }
-.ledger-home__content { display: flex; flex-direction: column; gap: 28rpx; }
-
-/* 月度概览 */
-.ledger-home__overview {
-  display: flex;
-  flex-direction: column;
-  padding: 28rpx 28rpx 24rpx;
-  border-radius: $brand-radius-card;
-  background: $brand-color-surface;
-  box-shadow: 0 2rpx 16rpx rgba(38, 122, 90, 0.04);
-}
-.ledger-home__month-label {
-  color: $brand-color-text-secondary;
-  font-size: 24rpx;
-  font-weight: 500;
-  letter-spacing: 2rpx;
-}
-.ledger-home__numbers {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 18rpx;
-}
-.ledger-home__number-block { display: flex; flex-direction: column; gap: 8rpx; }
-.ledger-home__number-label { color: $brand-color-text-secondary; font-size: 22rpx; }
-.ledger-home__number-value {
-  color: $brand-color-text;
-  font-size: 38rpx;
-  font-weight: 700;
-  line-height: 1.2;
-  font-variant-numeric: tabular-nums;
-}
-.ledger-home__number-value--expense { color: $brand-color-accent; }
-.ledger-home__number-value--income { color: $brand-color-primary; }
-.ledger-home__bar {
-  display: flex;
-  width: 100%;
-  height: 18rpx;
-  margin-top: 24rpx;
-  overflow: hidden;
-  border-radius: 999rpx;
-  background: rgba($brand-color-border, .5);
-}
-.ledger-home__bar-slice { height: 100%; }
-.ledger-home__bar-empty {
-  margin-top: 24rpx;
-  color: $brand-color-text-secondary;
-  font-size: 22rpx;
-  font-style: italic;
-}
-
-/* 筛选条 */
-.ledger-home__filters {
-  display: flex;
-  flex-direction: column;
-  gap: 18rpx;
-  padding: 20rpx 24rpx;
-  border-radius: $brand-radius-card;
-  background: $brand-color-surface;
-}
-.ledger-home__filter-row { display: flex; align-items: center; gap: 12rpx; }
-.ledger-home__filter-row--month { justify-content: space-between; }
-.ledger-home__month-btn { min-width: 110rpx; }
-.ledger-home__month-current { color: $brand-color-text; font-size: 28rpx; font-weight: 600; }
-
-/* 列表 */
-.ledger-home__empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 80rpx 32rpx;
-  border: 2rpx dashed $brand-color-border;
-  border-radius: $brand-radius-card;
-  background: rgba($brand-color-surface, .6);
-  text-align: center;
-}
-.ledger-home__empty-title { margin-top: 16rpx; color: $brand-color-text; font-size: 30rpx; font-weight: 700; }
-.ledger-home__empty-copy { margin-top: 8rpx; color: $brand-color-text-secondary; font-size: 24rpx; line-height: 1.6; }
-.ledger-home__list { display: flex; flex-direction: column; gap: 24rpx; }
-.ledger-home__group { display: flex; flex-direction: column; gap: 12rpx; }
-.ledger-home__group-label { padding-left: 8rpx; color: $brand-color-text-secondary; font-size: 24rpx; font-weight: 600; }
-.ledger-home__entry-wrap { }
-
-/* 已删除区 */
-.ledger-home__deleted { display: flex; flex-direction: column; gap: 12rpx; }
-.ledger-home__deleted-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 18rpx 24rpx;
-  border-radius: 14rpx;
-  background: $brand-color-surface;
-}
-.ledger-home__deleted-title { color: $brand-color-text-secondary; font-size: 26rpx; font-weight: 600; }
-.ledger-home__deleted-toggle { color: $brand-color-action; font-size: 24rpx; }
-.ledger-home__deleted-list { display: flex; flex-direction: column; gap: 10rpx; }
 </style>

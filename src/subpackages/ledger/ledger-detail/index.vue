@@ -240,56 +240,142 @@ function onDelete(): void {
   padding: 32rpx 32rpx 200rpx;
   box-sizing: border-box;
   background: $brand-color-background;
+  &__state {
+    display: flex;
+    min-height: 60vh;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+  &__state-title {
+    margin-top: 24rpx;
+    color: $brand-color-text;
+    font-size: 32rpx;
+    font-weight: 700;
+  }
+  &__state-copy {
+    max-width: 480rpx;
+    margin: 12rpx 0 32rpx;
+    color: $brand-color-text-secondary;
+    font-size: 25rpx;
+    line-height: 1.6;
+  }
+  &__content {
+    display: flex;
+    flex-direction: column;
+    gap: 24rpx;
+  }
+  &__header {
+    display: flex;
+    align-items: center;
+    gap: 20rpx;
+    padding: 32rpx 28rpx;
+    border-radius: $brand-radius-card;
+    background: $brand-color-surface;
+    box-shadow: 0 2rpx 16rpx rgba(38, 122, 90, 0.04);
+  }
+  &__type-mark {
+    width: 12rpx;
+    align-self: stretch;
+    border-radius: 6rpx;
+    flex-shrink: 0;
+  }
+  &__head-text {
+    display: flex;
+    flex-direction: column;
+    gap: 6rpx;
+    flex: 1;
+  }
+  &__type-label {
+    color: $brand-color-text-secondary;
+    font-size: 22rpx;
+  }
+  &__category-name {
+    color: $brand-color-text;
+    font-size: 30rpx;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+  &__amount {
+    font-size: 60rpx;
+    font-weight: 700;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+  }
+  &__panel {
+    display: flex;
+    flex-direction: column;
+    padding: 8rpx 28rpx;
+    border-radius: $brand-radius-card;
+    background: $brand-color-surface;
+  }
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: 24rpx;
+    padding: 24rpx 0;
+    border-bottom: 1rpx solid $brand-color-border;
+  }
+  &__row:last-child {
+    border-bottom: 0;
+  }
+  &__row-label {
+    width: 140rpx;
+    color: $brand-color-text-secondary;
+    font-size: 26rpx;
+    flex-shrink: 0;
+  }
+  &__row-value {
+    color: $brand-color-text;
+    font-size: 28rpx;
+    font-weight: 500;
+    flex: 1;
+    word-break: break-all;
+  }
+  &__receipt {
+    padding: 24rpx 0;
+  }
+  &__receipt-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 12rpx;
+    margin-top: 16rpx;
+  }
+  &__receipt-image {
+    width: 100%;
+    height: 480rpx;
+    border-radius: 16rpx;
+  }
+  &__receipt-hint {
+    color: $brand-color-text-secondary;
+    font-size: 22rpx;
+    text-align: center;
+  }
+  &__error {
+    display: block;
+    color: #c5684d;
+    font-size: 25rpx;
+    text-align: center;
+  }
+  &__actions {
+    display: flex;
+    flex-direction: column;
+    gap: 16rpx;
+    margin-top: 16rpx;
+  }
+  &__delete-btn {
+    color: $brand-color-accent;
+    border-color: $brand-color-accent;
+  }
+  &__readonly {
+    display: flex;
+    justify-content: center;
+    padding: 24rpx 0;
+  }
+  &__readonly-text {
+    color: $brand-color-text-secondary;
+    font-size: 24rpx;
+  }
 }
-.ledger-detail-page__state { display: flex; min-height: 60vh; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
-.ledger-detail-page__state-title { margin-top: 24rpx; color: $brand-color-text; font-size: 32rpx; font-weight: 700; }
-.ledger-detail-page__state-copy { max-width: 480rpx; margin: 12rpx 0 32rpx; color: $brand-color-text-secondary; font-size: 25rpx; line-height: 1.6; }
-.ledger-detail-page__content { display: flex; flex-direction: column; gap: 24rpx; }
-
-.ledger-detail-page__header {
-  display: flex;
-  align-items: center;
-  gap: 20rpx;
-  padding: 32rpx 28rpx;
-  border-radius: $brand-radius-card;
-  background: $brand-color-surface;
-  box-shadow: 0 2rpx 16rpx rgba(38, 122, 90, 0.04);
-}
-.ledger-detail-page__type-mark {
-  width: 12rpx;
-  align-self: stretch;
-  border-radius: 6rpx;
-  flex-shrink: 0;
-}
-.ledger-detail-page__head-text { display: flex; flex-direction: column; gap: 6rpx; flex: 1; }
-.ledger-detail-page__type-label { color: $brand-color-text-secondary; font-size: 22rpx; }
-.ledger-detail-page__category-name { color: $brand-color-text; font-size: 30rpx; font-weight: 600; line-height: 1.3; }
-.ledger-detail-page__amount { font-size: 60rpx; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; }
-
-.ledger-detail-page__panel { display: flex; flex-direction: column; padding: 8rpx 28rpx; border-radius: $brand-radius-card; background: $brand-color-surface; }
-.ledger-detail-page__row {
-  display: flex;
-  align-items: center;
-  gap: 24rpx;
-  padding: 24rpx 0;
-  border-bottom: 1rpx solid $brand-color-border;
-}
-.ledger-detail-page__row:last-child { border-bottom: 0; }
-.ledger-detail-page__row-label { width: 140rpx; color: $brand-color-text-secondary; font-size: 26rpx; flex-shrink: 0; }
-.ledger-detail-page__row-value { color: $brand-color-text; font-size: 28rpx; font-weight: 500; flex: 1; word-break: break-all; }
-.ledger-detail-page__receipt { padding: 24rpx 0; }
-.ledger-detail-page__receipt-wrap {
-  display: flex; flex-direction: column; gap: 12rpx;
-  margin-top: 16rpx;
-}
-.ledger-detail-page__receipt-image { width: 100%; height: 480rpx; border-radius: 16rpx; }
-.ledger-detail-page__receipt-hint { color: $brand-color-text-secondary; font-size: 22rpx; text-align: center; }
-
-.ledger-detail-page__error { display: block; color: #c5684d; font-size: 25rpx; text-align: center; }
-
-.ledger-detail-page__actions { display: flex; flex-direction: column; gap: 16rpx; margin-top: 16rpx; }
-.ledger-detail-page__delete-btn { color: $brand-color-accent; border-color: $brand-color-accent; }
-
-.ledger-detail-page__readonly { display: flex; justify-content: center; padding: 24rpx 0; }
-.ledger-detail-page__readonly-text { color: $brand-color-text-secondary; font-size: 24rpx; }
 </style>

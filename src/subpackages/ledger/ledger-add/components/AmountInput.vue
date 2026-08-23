@@ -5,11 +5,10 @@
   type 切换会改金额颜色（支出红 / 收入绿）。
 -->
 <template>
-  <view class="amount-input">
-    <text class="amount-input__prefix" :class="prefixClass">¥</text>
+  <view class="amount-input" :class="toneClass">
+    <text class="amount-input__prefix">¥</text>
     <input
       class="amount-input__field"
-      :class="prefixClass"
       :value="displayValue"
       type="digit"
       :placeholder="placeholder"
@@ -24,7 +23,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { validateAmountCents } from '../../utils/ledger-validators'
+import { validateAmountCents } from '../../../../utils/ledger-validators'
 
 interface Props {
   modelValue: number          // 单位：分
@@ -51,7 +50,7 @@ const displayValue = computed(() => {
   return (props.modelValue / 100).toString()
 })
 
-const prefixClass = computed(() => (props.type === 'income' ? 'amount-input--income' : 'amount-input--expense'))
+const toneClass = computed(() => (props.type === 'income' ? 'amount-input--income' : 'amount-input--expense'))
 
 function onInput(e: any): void {
   const raw = (e && e.detail && typeof e.detail.value === 'string') ? e.detail.value : ''
@@ -77,28 +76,32 @@ function onInput(e: any): void {
   align-items: baseline;
   gap: 12rpx;
   padding: 24rpx 0;
-}
-.amount-input__prefix {
-  font-size: 56rpx;
-  font-weight: 700;
-  line-height: 1.2;
-  font-variant-numeric: tabular-nums;
-}
-.amount-input--expense { color: $brand-color-accent; }
-.amount-input--income { color: $brand-color-primary; }
-.amount-input__field {
-  flex: 1;
-  font-size: 56rpx;
-  font-weight: 700;
-  line-height: 1.2;
-  font-variant-numeric: tabular-nums;
-  background: transparent;
-  border: none;
-  outline: none;
-}
-.amount-input__placeholder {
-  color: $brand-color-text-secondary;
-  font-weight: 500;
-  opacity: .4;
+  &--expense {
+    color: $brand-color-accent;
+  }
+  &--income {
+    color: $brand-color-primary;
+  }
+  &__prefix {
+    font-size: 56rpx;
+    font-weight: 700;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+  }
+  &__field {
+    flex: 1;
+    font-size: 56rpx;
+    font-weight: 700;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+    background: transparent;
+    border: none;
+    outline: none;
+  }
+  &__placeholder {
+    color: $brand-color-text-secondary;
+    font-weight: 500;
+    opacity: .4;
+  }
 }
 </style>

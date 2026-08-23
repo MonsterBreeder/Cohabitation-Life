@@ -133,8 +133,8 @@ watch(navigationIntent, navigateIfReady)
 </script>
 
 <style lang="scss" scoped>
-/* 页面背景与上下装饰。 */
 .login-page {
+  /* 页面背景与上下装饰。 */
   position: relative;
   min-height: 100vh;
   display: flex;
@@ -144,24 +144,117 @@ watch(navigationIntent, navigateIfReady)
   padding: 64rpx 48rpx;
   box-sizing: border-box;
   background: $brand-color-background;
+  &__content {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 620rpx;
+    margin: 0 auto;
+  }
+  /* 协议、主按钮与错误提示。 */
+  &__actions {
+    margin-top: 76rpx;
+  }
+  &__ornament {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+  }
+  &__ornament--top {
+    top: -106rpx;
+    right: -82rpx;
+    width: 246rpx;
+    height: 246rpx;
+    background: rgba($brand-color-primary, .14);
+  }
+  &__ornament--bottom {
+    bottom: -74rpx;
+    left: -58rpx;
+    width: 168rpx;
+    height: 168rpx;
+    background: rgba($brand-color-accent, .13);
+  }
+  &__validation {
+    display: block;
+    margin-top: 14rpx;
+    color: #ba564b;
+    font-size: 24rpx;
+    line-height: 1.5;
+  }
+  &__request-error {
+    display: block;
+    margin-top: 22rpx;
+    color: #ba564b;
+    font-size: 25rpx;
+    line-height: 1.6;
+    text-align: center;
+  }
+  /* 已登录用户恢复状态与失败重试卡片。 */
+  &__recovery {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  &__recovery-label {
+    margin-top: 28rpx;
+    color: $brand-color-text-secondary;
+    font-size: 28rpx;
+  }
+  &__recovery-error {
+    margin-top: 72rpx;
+    padding: 40rpx 32rpx;
+    border: 2rpx solid $brand-color-border;
+    border-radius: $brand-radius-card;
+    background: $brand-color-surface;
+    text-align: center;
+  }
+  &__error-title {
+    display: block;
+    color: $brand-color-text;
+    font-size: 32rpx;
+    font-weight: 700;
+  }
+  &__error-copy {
+    display: block;
+    margin-top: 16rpx;
+    color: $brand-color-text-secondary;
+    font-size: 26rpx;
+    line-height: 1.65;
+  }
+
+  :deep(.login-page__submit) {
+    width: 100%;
+    height: 96rpx;
+    margin-top: 28rpx;
+    background: $brand-color-action;
+    color: #fff;
+    font-size: 30rpx;
+    font-weight: 700;
+  }
+
+  :deep(.login-page__submit.is-disabled) {
+    background: rgba($brand-color-action, .48);
+    color: rgba(255, 255, 255, .9);
+  }
+
+  :deep(.login-page__retry) {
+    height: 80rpx;
+    margin-top: 28rpx;
+    border-color: $brand-color-primary;
+    background: $brand-color-surface;
+    color: $brand-color-action;
+    font-size: 28rpx;
+  }
+
+  :deep(.login-page__retry.is-disabled) {
+    opacity: .6;
+  }
+
+  @media (max-width: 640px) {
+    padding-right: 40rpx;
+    padding-left: 40rpx;
+  }
 }
-.login-page__content { position: relative; z-index: 1; width: 100%; max-width: 620rpx; margin: 0 auto; }
-/* 协议、主按钮与错误提示。 */
-.login-page__actions { margin-top: 76rpx; }
-.login-page__ornament { position: absolute; border-radius: 50%; pointer-events: none; }
-.login-page__ornament--top { top: -106rpx; right: -82rpx; width: 246rpx; height: 246rpx; background: rgba($brand-color-primary, .14); }
-.login-page__ornament--bottom { bottom: -74rpx; left: -58rpx; width: 168rpx; height: 168rpx; background: rgba($brand-color-accent, .13); }
-.login-page__validation { display: block; margin-top: 14rpx; color: #ba564b; font-size: 24rpx; line-height: 1.5; }
-:deep(.login-page__submit) { width: 100%; height: 96rpx; margin-top: 28rpx; background: $brand-color-action; color: #fff; font-size: 30rpx; font-weight: 700; }
-:deep(.login-page__submit.is-disabled) { background: rgba($brand-color-action, .48); color: rgba(255, 255, 255, .9); }
-.login-page__request-error { display: block; margin-top: 22rpx; color: #ba564b; font-size: 25rpx; line-height: 1.6; text-align: center; }
-/* 已登录用户恢复状态与失败重试卡片。 */
-.login-page__recovery { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; }
-.login-page__recovery-label { margin-top: 28rpx; color: $brand-color-text-secondary; font-size: 28rpx; }
-.login-page__recovery-error { margin-top: 72rpx; padding: 40rpx 32rpx; border: 2rpx solid $brand-color-border; border-radius: $brand-radius-card; background: $brand-color-surface; text-align: center; }
-.login-page__error-title { display: block; color: $brand-color-text; font-size: 32rpx; font-weight: 700; }
-.login-page__error-copy { display: block; margin-top: 16rpx; color: $brand-color-text-secondary; font-size: 26rpx; line-height: 1.65; }
-:deep(.login-page__retry) { height: 80rpx; margin-top: 28rpx; border-color: $brand-color-primary; background: $brand-color-surface; color: $brand-color-action; font-size: 28rpx; }
-:deep(.login-page__retry.is-disabled) { opacity: .6; }
-@media (max-width: 640px) { .login-page { padding-right: 40rpx; padding-left: 40rpx; } }
 </style>

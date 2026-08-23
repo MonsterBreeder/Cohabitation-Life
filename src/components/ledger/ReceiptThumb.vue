@@ -100,7 +100,16 @@ function onPreview(): void {
   border-radius: 12rpx;
   background: #f1f5f2;
   flex-shrink: 0;
+  &__image {
+    width: 100%;
+    height: 100%;
+  }
+  &__placeholder {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+  }
 }
-.receipt-thumb__image { width: 100%; height: 100%; }
-.receipt-thumb__placeholder { display: flex; width: 100%; height: 100%; align-items: center; justify-content: center; }
 </style>

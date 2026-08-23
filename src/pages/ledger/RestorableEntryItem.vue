@@ -41,24 +41,24 @@ function onRestore(): void {
   border-radius: 14rpx;
   background: rgba($brand-color-border, .4);
   opacity: .9;
-}
-.restorable-entry__main {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 4rpx;
-  min-width: 0;
-}
-.restorable-entry__category {
-  color: $brand-color-text-secondary;
-  font-size: 26rpx;
-  font-weight: 500;
-  line-height: 1.3;
-}
-.restorable-entry__meta {
-  color: $brand-color-text-secondary;
-  font-size: 22rpx;
-  line-height: 1.4;
-  font-variant-numeric: tabular-nums;
+  &__main {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 4rpx;
+    min-width: 0;
+  }
+  &__category {
+    color: $brand-color-text-secondary;
+    font-size: 26rpx;
+    font-weight: 500;
+    line-height: 1.3;
+  }
+  &__meta {
+    color: $brand-color-text-secondary;
+    font-size: 22rpx;
+    line-height: 1.4;
+    font-variant-numeric: tabular-nums;
+  }
 }
 </style>

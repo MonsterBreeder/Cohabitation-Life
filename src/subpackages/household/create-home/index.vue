@@ -212,26 +212,150 @@ watch(phase, (nextPhase) => {
 </script>
 
 <style lang="scss" scoped>
-.create-home-page { min-height: 100vh; padding: 52rpx 40rpx 72rpx; box-sizing: border-box; background: $brand-color-background; }
-.create-home-page__content { width: 100%; max-width: 680rpx; margin: 0 auto; }
-.create-home-page__heading { margin-bottom: 48rpx; }
-.create-home-page__eyebrow { display: block; color: $brand-color-primary; font-size: 24rpx; font-weight: 700; letter-spacing: 4rpx; }
-.create-home-page__title { display: block; margin-top: 18rpx; color: $brand-color-text; font-size: 44rpx; font-weight: 700; line-height: 1.35; }
-.create-home-page__subtitle { display: block; margin-top: 16rpx; color: $brand-color-text-secondary; font-size: 27rpx; line-height: 1.65; }
-.create-home-page__field { margin-top: 48rpx; padding: 32rpx; border: 2rpx solid $brand-color-border; border-radius: $brand-radius-card; background: $brand-color-surface; }
-.create-home-page__field-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18rpx; gap: 24rpx; }
-.create-home-page__label { color: $brand-color-text; font-size: 29rpx; font-weight: 700; }
-.create-home-page__count { flex-shrink: 0; color: $brand-color-text-secondary; font-size: 23rpx; }
-.create-home-page__validation { display: block; margin-top: 14rpx; color: #ba564b; font-size: 24rpx; line-height: 1.5; }
-.create-home-page__failure { margin-top: 28rpx; padding: 28rpx; border: 2rpx solid rgba($brand-color-accent, .42); border-radius: $brand-radius-input; background: rgba($brand-color-accent, .08); }
-.create-home-page__failure-title { display: block; color: #8e463e; font-size: 27rpx; font-weight: 700; }
-.create-home-page__failure-copy { display: block; margin-top: 10rpx; color: #8e5a54; font-size: 24rpx; line-height: 1.55; }
-:deep(.create-home-page__submit) { width: 100%; height: 94rpx; margin-top: 40rpx; background: $brand-color-action; color: #fff; font-size: 30rpx; font-weight: 700; }
-:deep(.create-home-page__submit.is-disabled) { background: rgba($brand-color-action, .42); color: rgba(255, 255, 255, .9); }
-.create-home-page__privacy { display: block; margin-top: 20rpx; color: $brand-color-text-secondary; font-size: 23rpx; line-height: 1.5; text-align: center; }
-.create-home-page__state { display: flex; min-height: calc(100vh - 124rpx); flex-direction: column; align-items: center; justify-content: center; max-width: 600rpx; margin: 0 auto; text-align: center; gap: 24rpx; }
-.create-home-page__state-title { color: $brand-color-text; font-size: 34rpx; font-weight: 700; }
-.create-home-page__state-copy { margin-bottom: 12rpx; color: $brand-color-text-secondary; font-size: 26rpx; line-height: 1.65; }
-.create-home-page__error { color: #ba564b; font-size: 24rpx; line-height: 1.5; }
-@media (max-width: 360px) { .create-home-page { padding-right: 30rpx; padding-left: 30rpx; } .create-home-page__field { padding: 26rpx; } }
+.create-home-page {
+  min-height: 100vh;
+  padding: 52rpx 40rpx 72rpx;
+  box-sizing: border-box;
+  background: $brand-color-background;
+  &__content {
+    width: 100%;
+    max-width: 680rpx;
+    margin: 0 auto;
+  }
+  &__heading {
+    margin-bottom: 48rpx;
+  }
+  &__eyebrow {
+    display: block;
+    color: $brand-color-primary;
+    font-size: 24rpx;
+    font-weight: 700;
+    letter-spacing: 4rpx;
+  }
+  &__title {
+    display: block;
+    margin-top: 18rpx;
+    color: $brand-color-text;
+    font-size: 44rpx;
+    font-weight: 700;
+    line-height: 1.35;
+  }
+  &__subtitle {
+    display: block;
+    margin-top: 16rpx;
+    color: $brand-color-text-secondary;
+    font-size: 27rpx;
+    line-height: 1.65;
+  }
+  &__field {
+    margin-top: 48rpx;
+    padding: 32rpx;
+    border: 2rpx solid $brand-color-border;
+    border-radius: $brand-radius-card;
+    background: $brand-color-surface;
+  }
+  &__field-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 18rpx;
+    gap: 24rpx;
+  }
+  &__label {
+    color: $brand-color-text;
+    font-size: 29rpx;
+    font-weight: 700;
+  }
+  &__count {
+    flex-shrink: 0;
+    color: $brand-color-text-secondary;
+    font-size: 23rpx;
+  }
+  &__validation {
+    display: block;
+    margin-top: 14rpx;
+    color: #ba564b;
+    font-size: 24rpx;
+    line-height: 1.5;
+  }
+  &__failure {
+    margin-top: 28rpx;
+    padding: 28rpx;
+    border: 2rpx solid rgba($brand-color-accent, .42);
+    border-radius: $brand-radius-input;
+    background: rgba($brand-color-accent, .08);
+  }
+  &__failure-title {
+    display: block;
+    color: #8e463e;
+    font-size: 27rpx;
+    font-weight: 700;
+  }
+  &__failure-copy {
+    display: block;
+    margin-top: 10rpx;
+    color: #8e5a54;
+    font-size: 24rpx;
+    line-height: 1.55;
+  }
+  &__privacy {
+    display: block;
+    margin-top: 20rpx;
+    color: $brand-color-text-secondary;
+    font-size: 23rpx;
+    line-height: 1.5;
+    text-align: center;
+  }
+  &__state {
+    display: flex;
+    min-height: calc(100vh - 124rpx);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    max-width: 600rpx;
+    margin: 0 auto;
+    text-align: center;
+    gap: 24rpx;
+  }
+  &__state-title {
+    color: $brand-color-text;
+    font-size: 34rpx;
+    font-weight: 700;
+  }
+  &__state-copy {
+    margin-bottom: 12rpx;
+    color: $brand-color-text-secondary;
+    font-size: 26rpx;
+    line-height: 1.65;
+  }
+  &__error {
+    color: #ba564b;
+    font-size: 24rpx;
+    line-height: 1.5;
+  }
+
+  :deep(.create-home-page__submit) {
+    width: 100%;
+    height: 94rpx;
+    margin-top: 40rpx;
+    background: $brand-color-action;
+    color: #fff;
+    font-size: 30rpx;
+    font-weight: 700;
+  }
+
+  :deep(.create-home-page__submit.is-disabled) {
+    background: rgba($brand-color-action, .42);
+    color: rgba(255, 255, 255, .9);
+  }
+
+  @media (max-width: 360px) {
+    padding-right: 30rpx;
+    padding-left: 30rpx;
+
+    &__field {
+      padding: 26rpx;
+    }
+  }
+}
 </style>

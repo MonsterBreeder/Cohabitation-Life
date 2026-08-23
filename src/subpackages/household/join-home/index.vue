@@ -69,18 +69,96 @@ onShow(() => { void load() })
 </script>
 
 <style lang="scss" scoped>
-/* 邀请确认聚焦单一步骤，转入时把会发生的变化清晰显示在确认按钮前。 */
-.join-page { display: flex; min-height: 100vh; align-items: center; padding: 48rpx; box-sizing: border-box; background: $brand-color-background; }
-.join-card { width: 100%; padding: 48rpx 40rpx; border: 2rpx solid $brand-color-border; border-radius: $brand-radius-card; background: $brand-color-surface; }
-.join-card__eyebrow { display: block; color: $brand-color-primary; font-size: 24rpx; font-weight: 700; letter-spacing: 4rpx; }
-.join-card__title { display: block; margin-top: 22rpx; color: $brand-color-text; font-size: 44rpx; font-weight: 700; }
-.join-card__description { display: block; margin-top: 22rpx; color: $brand-color-text-secondary; font-size: 28rpx; line-height: 1.7; }
-.join-card__inviter { display: flex; align-items: center; justify-content: space-between; margin-top: 26rpx; padding: 20rpx 22rpx; border-radius: 18rpx; background: #effbf5; }
-.join-card__inviter-name { color: $brand-color-text; font-size: 27rpx; font-weight: 700; }
-.join-card__inviter-status { padding: 6rpx 14rpx; border-radius: 999rpx; background: #d9f5e8; color: $brand-color-action; font-size: 21rpx; font-weight: 700; }
-.join-card__warning { margin: 28rpx 0; padding: 24rpx; border-radius: 18rpx; background: #fff3e8; }
-.join-card__warning-title { display: block; color: #a55d31; font-size: 27rpx; font-weight: 700; }
-.join-card__warning-copy { display: block; margin-top: 10rpx; color: #8f6e58; font-size: 24rpx; line-height: 1.6; }
-.join-card__error { display: block; margin: 22rpx 0; color: #c5684d; font-size: 25rpx; line-height: 1.6; }
-.join-card__hint { display: block; margin-top: 22rpx; color: $brand-color-text-secondary; font-size: 23rpx; text-align: center; }
+.join-page {
+  /* 邀请确认聚焦单一步骤，转入时把会发生的变化清晰显示在确认按钮前。 */
+  display: flex;
+  min-height: 100vh;
+  align-items: center;
+  padding: 48rpx;
+  box-sizing: border-box;
+  background: $brand-color-background;
+}
+.join-card {
+  width: 100%;
+  padding: 48rpx 40rpx;
+  border: 2rpx solid $brand-color-border;
+  border-radius: $brand-radius-card;
+  background: $brand-color-surface;
+  &__eyebrow {
+    display: block;
+    color: $brand-color-primary;
+    font-size: 24rpx;
+    font-weight: 700;
+    letter-spacing: 4rpx;
+  }
+  &__title {
+    display: block;
+    margin-top: 22rpx;
+    color: $brand-color-text;
+    font-size: 44rpx;
+    font-weight: 700;
+  }
+  &__description {
+    display: block;
+    margin-top: 22rpx;
+    color: $brand-color-text-secondary;
+    font-size: 28rpx;
+    line-height: 1.7;
+  }
+  &__inviter {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 26rpx;
+    padding: 20rpx 22rpx;
+    border-radius: 18rpx;
+    background: #effbf5;
+  }
+  &__inviter-name {
+    color: $brand-color-text;
+    font-size: 27rpx;
+    font-weight: 700;
+  }
+  &__inviter-status {
+    padding: 6rpx 14rpx;
+    border-radius: 999rpx;
+    background: #d9f5e8;
+    color: $brand-color-action;
+    font-size: 21rpx;
+    font-weight: 700;
+  }
+  &__warning {
+    margin: 28rpx 0;
+    padding: 24rpx;
+    border-radius: 18rpx;
+    background: #fff3e8;
+  }
+  &__warning-title {
+    display: block;
+    color: #a55d31;
+    font-size: 27rpx;
+    font-weight: 700;
+  }
+  &__warning-copy {
+    display: block;
+    margin-top: 10rpx;
+    color: #8f6e58;
+    font-size: 24rpx;
+    line-height: 1.6;
+  }
+  &__error {
+    display: block;
+    margin: 22rpx 0;
+    color: #c5684d;
+    font-size: 25rpx;
+    line-height: 1.6;
+  }
+  &__hint {
+    display: block;
+    margin-top: 22rpx;
+    color: $brand-color-text-secondary;
+    font-size: 23rpx;
+    text-align: center;
+  }
+}
 </style>

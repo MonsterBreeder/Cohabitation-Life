@@ -48,8 +48,8 @@ const message = computed(() => content.value.message)
 </script>
 
 <style lang="scss" scoped>
-/* 邀请异常页使用单卡片布局，下一步始终是联系对方重新邀请。 */
 .invite-status {
+  /* 邀请异常页使用单卡片布局，下一步始终是联系对方重新邀请。 */
   position: relative;
   min-height: 100vh;
   display: flex;
@@ -59,15 +59,81 @@ const message = computed(() => content.value.message)
   padding: 64rpx 48rpx;
   box-sizing: border-box;
   background: $brand-color-background;
+  &__content {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 620rpx;
+  }
+  &__logo {
+    display: block;
+    width: 132rpx;
+    height: 132rpx;
+    margin: 0 auto 40rpx;
+  }
+  &__card {
+    padding: 48rpx 40rpx;
+    border: 2rpx solid $brand-color-border;
+    border-radius: $brand-radius-card;
+    background: $brand-color-surface;
+  }
+  &__eyebrow {
+    display: block;
+    color: $brand-color-primary;
+    font-size: 24rpx;
+    font-weight: 700;
+    letter-spacing: 5rpx;
+  }
+  &__title {
+    display: block;
+    margin-top: 22rpx;
+    color: $brand-color-text;
+    font-size: 42rpx;
+    font-weight: 700;
+    line-height: 1.35;
+  }
+  &__description {
+    display: block;
+    margin-top: 20rpx;
+    color: $brand-color-text-secondary;
+    font-size: 28rpx;
+    line-height: 1.7;
+  }
+  &__tip {
+    display: flex;
+    align-items: flex-start;
+    margin-top: 38rpx;
+    padding-top: 28rpx;
+    border-top: 2rpx solid $brand-color-border;
+  }
+  &__tip-mark {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 32rpx;
+    height: 32rpx;
+    margin: 4rpx 14rpx 0 0;
+    border-radius: 50%;
+    background: $brand-color-accent;
+    color: #fff;
+    font-size: 21rpx;
+    font-weight: 700;
+    line-height: 1;
+  }
+  &__tip-text {
+    color: $brand-color-text;
+    font-size: 25rpx;
+    line-height: 1.65;
+  }
+  &__dot {
+    position: absolute;
+    top: 96rpx;
+    right: -44rpx;
+    width: 172rpx;
+    height: 172rpx;
+    border-radius: 50%;
+    background: rgba($brand-color-primary, .13);
+  }
 }
-.invite-status__content { position: relative; z-index: 1; width: 100%; max-width: 620rpx; }
-.invite-status__logo { display: block; width: 132rpx; height: 132rpx; margin: 0 auto 40rpx; }
-.invite-status__card { padding: 48rpx 40rpx; border: 2rpx solid $brand-color-border; border-radius: $brand-radius-card; background: $brand-color-surface; }
-.invite-status__eyebrow { display: block; color: $brand-color-primary; font-size: 24rpx; font-weight: 700; letter-spacing: 5rpx; }
-.invite-status__title { display: block; margin-top: 22rpx; color: $brand-color-text; font-size: 42rpx; font-weight: 700; line-height: 1.35; }
-.invite-status__description { display: block; margin-top: 20rpx; color: $brand-color-text-secondary; font-size: 28rpx; line-height: 1.7; }
-.invite-status__tip { display: flex; align-items: flex-start; margin-top: 38rpx; padding-top: 28rpx; border-top: 2rpx solid $brand-color-border; }
-.invite-status__tip-mark { display: flex; flex: none; align-items: center; justify-content: center; width: 32rpx; height: 32rpx; margin: 4rpx 14rpx 0 0; border-radius: 50%; background: $brand-color-accent; color: #fff; font-size: 21rpx; font-weight: 700; line-height: 1; }
-.invite-status__tip-text { color: $brand-color-text; font-size: 25rpx; line-height: 1.65; }
-.invite-status__dot { position: absolute; top: 96rpx; right: -44rpx; width: 172rpx; height: 172rpx; border-radius: 50%; background: rgba($brand-color-primary, .13); }
 </style>

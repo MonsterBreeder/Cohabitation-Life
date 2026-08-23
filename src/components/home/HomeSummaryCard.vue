@@ -23,10 +23,49 @@ const emit = defineEmits<{ press: [] }>()
 </script>
 
 <style lang="scss" scoped>
-.household-card { display: flex; width: 100%; align-items: center; padding: 36rpx; border: 0; border-radius: $brand-radius-card; background: linear-gradient(135deg, #fff, #effbf5); box-shadow: 0 16rpx 40rpx rgba(41, 68, 58, .08); text-align: left; line-height: 1; }
-.household-card::after { border: 0; }
-.household-card__content { display: flex; min-width: 0; flex: 1; flex-direction: column; margin-left: 28rpx; }
-.household-card__eyebrow { color: $brand-color-action; font-size: 23rpx; font-weight: 600; letter-spacing: 3rpx; }
-.household-card__name { max-width: 100%; margin-top: 16rpx; overflow: hidden; color: $brand-color-text; font-size: 40rpx; font-weight: 700; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
-.household-card__meta { margin-top: 14rpx; color: $brand-color-text-secondary; font-size: 24rpx; line-height: 1.4; }
+.household-card {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  padding: 36rpx;
+  border: 0;
+  border-radius: $brand-radius-card;
+  background: linear-gradient(135deg, #fff, #effbf5);
+  box-shadow: 0 16rpx 40rpx rgba(41, 68, 58, .08);
+  text-align: left;
+  line-height: 1;
+  &::after {
+    border: 0;
+  }
+  &__content {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+    margin-left: 28rpx;
+  }
+  &__eyebrow {
+    color: $brand-color-action;
+    font-size: 23rpx;
+    font-weight: 600;
+    letter-spacing: 3rpx;
+  }
+  &__name {
+    max-width: 100%;
+    margin-top: 16rpx;
+    overflow: hidden;
+    color: $brand-color-text;
+    font-size: 40rpx;
+    font-weight: 700;
+    line-height: 1.3;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  &__meta {
+    margin-top: 14rpx;
+    color: $brand-color-text-secondary;
+    font-size: 24rpx;
+    line-height: 1.4;
+  }
+}
 </style>
