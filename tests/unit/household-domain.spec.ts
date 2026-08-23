@@ -183,9 +183,23 @@ describe('profile editing', () => {
     expect(repository.users.get('trusted-user')).not.toHaveProperty('gender')
   })
 
+  it('keeps an existing long nickname unchanged until the user actually renames it', async () => {
+    const legacyNickname = '旧昵称'.repeat(4)
+    const repository = createRepository([{ _id: 'home-1', name: '旧名称', memberKeys: ['trusted-user'], ownerKey: 'trusted-user' }])
+    repository.users.set('trusted-user', { _id: 'trusted-user', nickname: legacyNickname, avatar: { kind: 'builtin', id: 'person-01' }, profilePreset: 'custom' })
+    const deps = dependencies(repository)
+
+    await expect(getCurrentHousehold(deps)).resolves.toMatchObject({ profile: { nickname: legacyNickname } })
+    await expect(updateProfile({ nickname: legacyNickname, avatar: { kind: 'builtin', id: 'person-02' }, profilePreset: 'custom' }, deps))
+      .resolves.toMatchObject({ profile: { nickname: legacyNickname, avatar: { id: 'person-02' } } })
+    await expect(updateProfile({ nickname: '新昵称'.repeat(4), avatar: { kind: 'builtin', id: 'person-02' }, profilePreset: 'custom' }, deps))
+      .rejects.toMatchObject({ code: 'INVALID_REQUEST' })
+  })
+
   it('rejects invalid text, forged avatars and non-members without overwriting old data', async () => {
     const repository = createRepository([{ _id: 'home-1', name: '旧名称', avatar: { kind: 'builtin', id: 'household-01' }, memberKeys: ['trusted-user'] }])
     const deps = dependencies(repository)
+    await expect(updateProfile({ nickname: '昵称'.repeat(6), avatar: { kind: 'builtin', id: 'person-01' }, profilePreset: 'custom' }, deps)).rejects.toMatchObject({ code: 'INVALID_REQUEST' })
     await expect(updateHousehold({ name: '家庭'.repeat(11), avatar: { kind: 'builtin', id: 'household-02' } }, deps)).rejects.toMatchObject({ code: 'INVALID_REQUEST' })
     await expect(updateProfile({ nickname: '昵称', avatar: { kind: 'custom', id: 'unsafe' }, profilePreset: 'custom' }, deps)).rejects.toMatchObject({ code: 'INVALID_REQUEST' })
     expect(repository.households.get('home-1').name).toBe('旧名称')

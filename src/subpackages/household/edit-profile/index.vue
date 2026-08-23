@@ -18,7 +18,7 @@
         <wd-input v-model="nickname" placeholder="例如：小伙伴" clearable @input="markCustomNickname" />
         <text v-if="nicknameValidation" class="edit-profile-page__error">{{ nicknameValidation }}</text>
       </view>
-      <wd-button block type="primary" :loading="saving" :disabled="saving || !!nicknameValidation || !changed" @click="save">保存修改</wd-button>
+      <wd-button block type="primary" :loading="saving" :disabled="saving || !changed" @click="save">保存修改</wd-button>
       <wd-button block plain :disabled="saving" @click="cancel">取消</wd-button>
     </view>
   </view>
@@ -31,7 +31,7 @@ import { storeToRefs } from 'pinia'
 import { useHouseholdStore } from '../../../store/modules/household'
 import type { BuiltinProfileAvatarId, CurrentProfile, ProfileAvatar } from '../../../types/household'
 import ProfileAvatarPicker from '../components/ProfileAvatarPicker.vue'
-import { hasProfileChanges, nicknameError, pickRandomProfileAvatar, profilePresets } from '../edit-view'
+import { hasProfileChanges, nicknameChangeError, pickRandomProfileAvatar, profilePresets } from '../edit-view'
 
 const store = useHouseholdStore()
 const { profile, errorMessage } = storeToRefs(store)
@@ -42,8 +42,8 @@ const loading = ref(false)
 const saving = ref(false)
 const initialized = ref(false)
 const customAvatar = ref<ProfileAvatar>(); const customPreview = ref('')
+const nicknameValidation = ref('')
 const draft = computed<CurrentProfile>(() => ({ nickname: nickname.value, avatar: customAvatar.value || { kind: 'builtin', id: avatarId.value }, profilePreset: preset.value }))
-const nicknameValidation = computed(() => nicknameError(nickname.value))
 const changed = computed(() => profile.value ? hasProfileChanges(profile.value, draft.value) : false)
 
 function initialise(): void {
@@ -61,12 +61,14 @@ async function load(): Promise<void> {
   if (!profile.value) { uni.navigateBack(); return }
   initialise()
 }
-function selectPreset(item: typeof profilePresets[number]): void { customAvatar.value = undefined; customPreview.value = ''; preset.value = item.id; nickname.value = item.nickname; avatarId.value = item.avatarId }
-function selectRandom(): void { customAvatar.value = undefined; customPreview.value = ''; preset.value = 'random'; nickname.value = '小伙伴'; avatarId.value = pickRandomProfileAvatar() }
+function selectPreset(item: typeof profilePresets[number]): void { customAvatar.value = undefined; customPreview.value = ''; preset.value = item.id; nickname.value = item.nickname; nicknameValidation.value = ''; avatarId.value = item.avatarId }
+function selectRandom(): void { customAvatar.value = undefined; customPreview.value = ''; preset.value = 'random'; nickname.value = '小伙伴'; nicknameValidation.value = ''; avatarId.value = pickRandomProfileAvatar() }
 function markCustomAvatar(): void { customAvatar.value = undefined; customPreview.value = ''; if (!['xiaoshuai', 'xiaomei', 'random'].includes(preset.value)) preset.value = 'custom' }
-function markCustomNickname(): void { preset.value = 'custom' }
+function markCustomNickname(): void { nicknameValidation.value = ''; preset.value = 'custom' }
 async function save(): Promise<void> {
-  if (saving.value || nicknameValidation.value) return
+  if (saving.value || !profile.value) return
+  nicknameValidation.value = nicknameChangeError(profile.value.nickname, nickname.value)
+  if (nicknameValidation.value) return
   saving.value = true
   const ok = await store.saveProfile(draft.value)
   saving.value = false

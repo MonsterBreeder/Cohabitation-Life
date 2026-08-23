@@ -2,6 +2,8 @@ export type DisplayTextValidation =
   | { valid: true; value: string; count: number }
   | { valid: false; value: string; count: number; reason: 'empty' | 'multiline' | 'too_long' }
 
+export const PROFILE_NAME_MAX_LENGTH = 10
+
 /** 去掉首尾空白，保留名称中间由用户输入的空格。 */
 export function normaliseDisplayText(value: string): string {
   return typeof value === 'string' ? value.trim() : ''

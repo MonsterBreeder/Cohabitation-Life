@@ -50,6 +50,7 @@ const HOUSEHOLD_AVATARS = new Set(['household-01', 'household-02', 'household-03
 const PROFILE_AVATARS = new Set(['person-neutral', 'person-01', 'person-02', 'person-03', 'person-04'])
 const PROFILE_PRESETS = new Set(['neutral', 'xiaoshuai', 'xiaomei', 'random', 'custom'])
 const CREDENTIAL_PATTERN = /^[A-Za-z0-9_-]{16,128}$/
+const PROFILE_NAME_MAX_LENGTH = 10
 
 class HouseholdDomainError extends Error {
   constructor(code, retryable = false) {
@@ -89,7 +90,8 @@ function safeAvatar(record, builtinSet, fallback) {
 }
 
 function normaliseProfile(record) {
-  const nickname = validateDisplayText(record && record.nickname, 12) || DEFAULT_PROFILE_NAME
+  const savedNickname = record && typeof record.nickname === 'string' ? record.nickname.trim() : ''
+  const nickname = savedNickname && !/\r|\n/u.test(savedNickname) ? savedNickname : DEFAULT_PROFILE_NAME
   const avatar = safeAvatar(record, PROFILE_AVATARS, { kind: 'builtin', id: 'person-neutral' })
   const profilePreset = record && PROFILE_PRESETS.has(record.profilePreset) ? record.profilePreset : 'neutral'
   return { nickname, avatar, profilePreset }
@@ -240,20 +242,23 @@ async function updateHousehold(input, dependencies) {
 async function updateProfile(input, dependencies) {
   const { identityKey, repository, now } = dependencies
   if (!identityKey || !repository) throw new HouseholdDomainError('INVALID_REQUEST')
-  const nickname = validateDisplayText(input && input.nickname, 12)
+  const nickname = typeof (input && input.nickname) === 'string' ? input.nickname.trim() : ''
   const avatar = input && input.avatar
-  if (!nickname || !avatar || !PROFILE_PRESETS.has(input.profilePreset)) {
+  if (!nickname || /\r|\n/u.test(nickname) || !avatar || !PROFILE_PRESETS.has(input.profilePreset)) {
     throw new HouseholdDomainError('INVALID_REQUEST')
   }
-  if (![DEFAULT_PROFILE_NAME, '小帅', '小美'].includes(nickname) && (!dependencies.checkText || !await dependencies.checkText(nickname))) throw new HouseholdDomainError('CONTENT_REJECTED')
   const existing = await repository.findHouseholdsByMemberKey(identityKey)
   if (existing.length > 1) throw new HouseholdDomainError('MULTIPLE_HOUSEHOLDS')
   if (existing.length === 0) throw new HouseholdDomainError('NO_HOME')
+  const previous = repository.getUser ? await repository.getUser(identityKey) : null
+  const previousNickname = normaliseProfile(previous).nickname
+  const isRenaming = nickname !== previousNickname
+  if (isRenaming && !validateDisplayText(nickname, PROFILE_NAME_MAX_LENGTH)) throw new HouseholdDomainError('INVALID_REQUEST')
+  if (isRenaming && ![DEFAULT_PROFILE_NAME, '小帅', '小美'].includes(nickname) && (!dependencies.checkText || !await dependencies.checkText(nickname))) throw new HouseholdDomainError('CONTENT_REJECTED')
   const validAvatar = avatar.kind === 'builtin' && PROFILE_AVATARS.has(avatar.id)
     ? { kind: 'builtin', id: avatar.id }
     : repository.avatarMedia ? await validateAvatarReference(avatar, 'profile', identityKey, repository.avatarMedia) : null
   if (!validAvatar) throw new HouseholdDomainError('INVALID_REQUEST')
-  const previous = repository.getUser ? await repository.getUser(identityKey) : null
   const profile = { nickname, avatar: validAvatar, profilePreset: input.profilePreset, updatedAt: now() }
   if (repository.swapProfileAvatar) await repository.swapProfileAvatar({ householdId: existing[0]._id, identityKey, data: profile, now: profile.updatedAt })
   else await repository.updateUser(identityKey, profile)

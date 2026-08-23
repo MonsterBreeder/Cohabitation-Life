@@ -1,5 +1,5 @@
 import type { BuiltinProfileAvatarId, CurrentProfile } from '../../types/household'
-import { validateDisplayText } from '../../utils/display-text'
+import { normaliseDisplayText, PROFILE_NAME_MAX_LENGTH, validateDisplayText } from '../../utils/display-text'
 
 export const profilePresets = [
   { id: 'xiaoshuai' as const, label: '小帅', nickname: '小帅', avatarId: 'person-01' as const },
@@ -28,9 +28,15 @@ export function householdNameError(value: string): string {
 }
 
 export function nicknameError(value: string): string {
-  const result = validateDisplayText(value, 12)
+  const result = validateDisplayText(value, PROFILE_NAME_MAX_LENGTH)
   if (result.valid) return ''
   if (result.reason === 'multiline') return '昵称不能换行'
-  if (result.reason === 'too_long') return '昵称最多 12 个完整字符'
+  if (result.reason === 'too_long') return `昵称最多 ${PROFILE_NAME_MAX_LENGTH} 个完整字符`
   return '请填写昵称'
+}
+
+/** 已有昵称原样保留；只有用户真正提交了不同名字时才执行新规则。 */
+export function nicknameChangeError(savedValue: string, draftValue: string): string {
+  if (normaliseDisplayText(savedValue) === normaliseDisplayText(draftValue)) return ''
+  return nicknameError(draftValue)
 }
