@@ -165,11 +165,11 @@ async function reload(): Promise<void> {
     // mp-weixin 构建会把 `await import('...')` 错误地编成 `await <string>`，
     // 然后解构出 undefined，调用时抛 "_e is not a function"。
     // store 顶层 import 已经 work，detail / edit 页都通过 store 调云函数。
-    const loaded = await ledgerStore.loadEntry(entryId.value)
+      const loaded = await ledgerStore.loadEntry(entryId.value)
     if (loaded) {
       detail.value = loaded
       if (loaded.receiptMediaId) {
-        receiptUrl.value = await resolveReceiptUrl(loaded.receiptMediaId)
+        receiptUrl.value = loaded.receiptUrl || await resolveReceiptUrl(loaded.receiptMediaId)
       }
     } else {
       // loadEntry 已把 errorMessage 写到 store；UI 通过 storeError 读

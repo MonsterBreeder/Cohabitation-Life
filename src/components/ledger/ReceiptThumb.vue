@@ -6,11 +6,12 @@
 <template>
   <view class="receipt-thumb" :class="{ 'receipt-thumb--loading': isLoading }" @click.stop="onPreview">
     <image
-      v-if="resolvedUrl"
+      v-if="displayUrl"
       class="receipt-thumb__image"
-      :src="resolvedUrl"
+      :src="displayUrl"
       mode="aspectFill"
       :data-testid="testId"
+      @error="onImageError"
     />
     <view v-else class="receipt-thumb__placeholder" :data-testid="`${testId}-placeholder`">
       <wd-loading v-if="isLoading" color="#74847D" size="20rpx" />
@@ -24,17 +25,18 @@ import { ref, watch } from 'vue'
 
 interface Props {
   mediaId: string | null
+  resolvedUrl?: string
   size?: number
   testId?: string
 }
 
-const props = withDefaults(defineProps<Props>(), { size: 88, testId: 'receipt-thumb' })
+const props = withDefaults(defineProps<Props>(), { resolvedUrl: '', size: 88, testId: 'receipt-thumb' })
 
 // 临时 URL 缓存：mediaId → url，5 分钟内复用
 const cache = new Map<string, { url: string; expires: number }>()
 const CACHE_TTL_MS = 5 * 60 * 1000
 
-const resolvedUrl = ref<string>('')
+const displayUrl = ref<string>('')
 const isLoading = ref<boolean>(false)
 
 async function resolveUrl(mediaId: string): Promise<string> {
@@ -66,16 +68,20 @@ async function resolveUrl(mediaId: string): Promise<string> {
 }
 
 watch(
-  () => props.mediaId,
-  async (id) => {
+  () => [props.mediaId, props.resolvedUrl] as const,
+  async ([id, serverUrl]) => {
+    if (serverUrl) {
+      displayUrl.value = serverUrl
+      return
+    }
     if (!id) {
-      resolvedUrl.value = ''
+      displayUrl.value = ''
       return
     }
     isLoading.value = true
     try {
       const url = await resolveUrl(id)
-      resolvedUrl.value = url
+      displayUrl.value = url
     } finally {
       isLoading.value = false
     }
@@ -84,8 +90,13 @@ watch(
 )
 
 function onPreview(): void {
-  if (!resolvedUrl.value) return
-  uni.previewImage({ urls: [resolvedUrl.value] })
+  if (!displayUrl.value) return
+  uni.previewImage({ urls: [displayUrl.value] })
+}
+
+function onImageError(): void {
+  if (props.mediaId) cache.delete(props.mediaId)
+  displayUrl.value = ''
 }
 </script>
 

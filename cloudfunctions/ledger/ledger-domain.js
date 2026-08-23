@@ -124,6 +124,25 @@ function buildPayerDisplay(memberKey, profile, hasLeft) {
   return { memberKey, nickname, avatar, hasLeft: hasLeft === true }
 }
 
+/** 只有云端完成家庭成员校验后，才为凭证签发短期访问地址。 */
+async function attachReceiptUrls(entries, dependencies) {
+  const list = Array.isArray(entries) ? entries : []
+  const fileIds = [...new Set(list.map((entry) => entry && entry.receiptMediaId).filter(Boolean))]
+  if (fileIds.length === 0 || typeof dependencies.getTempFileUrls !== 'function') return list
+  try {
+    const urls = await dependencies.getTempFileUrls(fileIds)
+    return list.map((entry) => ({
+      ...entry,
+      receiptUrl: entry.receiptMediaId && urls && typeof urls[entry.receiptMediaId] === 'string'
+        ? urls[entry.receiptMediaId]
+        : undefined,
+    }))
+  } catch {
+    // 图片地址获取失败不应阻断账本正文，客户端仍可显示可重试占位。
+    return list
+  }
+}
+
 /** 初始化 8 个固定类目。幂等：已存在则跳过。 */
 async function initCategories(input, dependencies) {
   validateCredential(input && input.requestId, 'requestId')
@@ -374,17 +393,31 @@ async function listEntries(input, dependencies) {
   const payerMode = (input && input.payerMode) || 'all'
   const categoryIds = Array.isArray(input && input.categoryIds) ? input.categoryIds : []
   const includeDeleted = input && input.includeDeleted === true
+  const requestedPageSize = Number.parseInt(input && input.pageSize, 10)
+  const pageSize = Number.isFinite(requestedPageSize) ? Math.min(Math.max(requestedPageSize, 1), 50) : 0
+  const requestedPage = Number.parseInt(input && input.page, 10)
+  const page = pageSize > 0 ? Math.max(requestedPage || 1, 1) : 1
 
   const repo = dependencies.repository
   const isMember = await repo.isMemberOfHousehold(dependencies.identityKey, dependencies.householdId)
   if (!isMember) throw new LedgerDomainError('LEDGER_FORBIDDEN', false)
 
-  const records = await repo.findEntriesByHousehold(dependencies.householdId, { month, payerMode, categoryIds, selfMemberKey: dependencies.selfMemberKey || dependencies.identityKey })
-  const active = filterActive(records).map(normaliseEntry)
+  const records = await repo.findEntriesByHousehold(dependencies.householdId, {
+    month,
+    payerMode,
+    categoryIds,
+    selfMemberKey: dependencies.selfMemberKey || dependencies.identityKey,
+    includeDeleted,
+    offset: pageSize > 0 ? (page - 1) * pageSize : 0,
+    limit: pageSize > 0 ? pageSize + 1 : 0,
+  })
+  const hasMore = pageSize > 0 && records.length > pageSize
+  const pageRecords = pageSize > 0 ? records.slice(0, pageSize) : records
+  const active = await attachReceiptUrls(filterActive(pageRecords).map(normaliseEntry), dependencies)
   const deleted = includeDeleted
-    ? (Array.isArray(records) ? records.filter((r) => r && r.deletedAt != null) : []).map(normaliseEntry)
+    ? await attachReceiptUrls((Array.isArray(pageRecords) ? pageRecords.filter((r) => r && r.deletedAt != null) : []).map(normaliseEntry), dependencies)
     : []
-  return { status: 'LISTED', retryable: false, entries: active, deletedEntries: deleted }
+  return { status: 'LISTED', retryable: false, entries: active, deletedEntries: deleted, hasMore }
 }
 
 async function getEntry(input, dependencies) {
@@ -398,7 +431,7 @@ async function getEntry(input, dependencies) {
   // 服务端算 canEdit / canDelete 一起返回（前端拿不到 identityKey，自己算不了）。
   // PRD 008：编辑和软删都只允许创建者（payerMemberKey === identityKey）。
   // 撤销删除（restoreEntry）任何成员都可做——所以 canDelete 跟 PRD 一致、不放开。
-  const detail = normaliseEntryDetail(record)
+  const [detail] = await attachReceiptUrls([normaliseEntryDetail(record)], dependencies)
   return {
     status: 'LOADED',
     retryable: false,

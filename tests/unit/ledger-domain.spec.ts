@@ -42,6 +42,7 @@ function createRepository(initial: { entries?: any[]; categories?: any[]; operat
     findCategoryById: jest.fn(async (id: string) => categories.get(id) || null),
     findEntriesByHousehold: jest.fn(async (householdId: string, filter: any) => {
       let list = [...entries.values()].filter((e) => e.householdId === householdId)
+      if (!filter?.includeDeleted) list = list.filter((e) => e.deletedAt == null)
       if (filter && filter.month && filter.month !== 'all') {
         const [y, m] = filter.month.split('-').map((v) => Number.parseInt(v, 10))
         const start = Date.UTC(y, m - 1, 1)
@@ -57,6 +58,12 @@ function createRepository(initial: { entries?: any[]; categories?: any[]; operat
       if (filter && filter.payerMode === 'me' && filter.selfMemberKey) {
         list = list.filter((e) => e.payerMemberKey === filter.selfMemberKey)
       }
+      list.sort((a, b) => {
+        const occurredDiff = new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
+        return occurredDiff || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      })
+      if (filter?.offset > 0) list = list.slice(filter.offset)
+      if (filter?.limit > 0) list = list.slice(0, filter.limit)
       return list
     }),
     countEntriesByCategory: jest.fn(async (categoryId: string, householdId: string) =>
@@ -146,6 +153,7 @@ function makeDependencies(overrides: any = {}) {
     householdId: HOUSEHOLD_ID,
     repository: repo,
     now: () => NOW,
+    getTempFileUrls: overrides.getTempFileUrls,
   }
 }
 
@@ -370,6 +378,28 @@ describe('listEntries / getEntry', () => {
     const result = await listEntries({ month: 'all', payerMode: 'all', categoryIds: [], includeDeleted: true }, deps)
     expect(result.entries).toHaveLength(1)
     expect(result.deletedEntries).toHaveLength(1)
+  })
+
+  it('listEntries pages results and returns member-authorised receipt URLs', async () => {
+    const entries = Array.from({ length: 21 }, (_, index) => ({
+      ...entryActive,
+      _id: `entry_page_${String(index).padStart(2, '0')}`,
+      occurredAt: new Date(NOW.getTime() - index * 60_000).toISOString(),
+      createdAt: new Date(NOW.getTime() - index * 60_000).toISOString(),
+      receiptMediaId: index === 0 ? 'cloud://receipt-first' : null,
+    }))
+    const repo = createRepository({ households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF] }], entries })
+    const getTempFileUrls = jest.fn(async () => ({ 'cloud://receipt-first': 'https://temp.example/receipt-first.jpg' }))
+    const deps = makeDependencies({ repository: repo, getTempFileUrls })
+
+    const first = await listEntries({ month: 'all', payerMode: 'all', categoryIds: [], page: 1, pageSize: 20 }, deps)
+    const second = await listEntries({ month: 'all', payerMode: 'all', categoryIds: [], page: 2, pageSize: 20 }, deps)
+
+    expect(first.entries).toHaveLength(20)
+    expect(first.hasMore).toBe(true)
+    expect(first.entries[0].receiptUrl).toBe('https://temp.example/receipt-first.jpg')
+    expect(second.entries).toHaveLength(1)
+    expect(second.hasMore).toBe(false)
   })
 
   it('getEntry returns LEDGER_NOT_FOUND for soft-deleted', async () => {

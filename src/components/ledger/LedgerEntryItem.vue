@@ -9,7 +9,7 @@
         <text class="ledger-entry-item__category">{{ category.name }}</text>
       </view>
       <text v-if="entry.note" class="ledger-entry-item__note">{{ entry.note }}</text>
-      <text v-else class="ledger-entry-item__payer">{{ payerName }}</text>
+      <text class="ledger-entry-item__payer">{{ payerName }}</text>
     </view>
 
     <view class="ledger-entry-item__aside">
@@ -20,7 +20,7 @@
           'ledger-entry-item__amount--income': entry.type === 'income',
         }"
       >{{ amountText }}</text>
-      <ReceiptThumb v-if="entry.receiptMediaId" :media-id="entry.receiptMediaId" :test-id="`ledger-entry-thumb-${entry.id}`" />
+      <ReceiptThumb v-if="entry.receiptMediaId" :media-id="entry.receiptMediaId" :resolved-url="entry.receiptUrl" :test-id="`ledger-entry-thumb-${entry.id}`" />
     </view>
   </view>
 </template>
@@ -39,7 +39,7 @@ const props = defineProps<Props>()
 const emit = defineEmits<{ (e: 'press', entryId: string): void }>()
 
 const amountText = computed(() => describeEntryAmount(props.entry.type, props.entry.amountCents))
-const payerName = computed(() => props.entry.payer.nickname || '我')
+const payerName = computed(() => `由 ${props.entry.payer.nickname || '成员'} 付款${props.entry.payer.hasLeft ? '（已离开）' : ''}`)
 
 function onPress(): void {
   emit('press', props.entry.id)

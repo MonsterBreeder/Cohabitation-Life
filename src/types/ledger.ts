@@ -45,6 +45,8 @@ export interface LedgerEntrySummary {
   occurredAt: string
   /** 凭证图云存储 fileID；无凭证时为 null。 */
   receiptMediaId: string | null
+  /** 云端在确认家庭成员身份后签发的短期可访问地址。 */
+  receiptUrl?: string
   payer: LedgerPayerDisplay
   /** 服务端写入时间，ISO 字符串。 */
   createdAt: string
@@ -164,6 +166,10 @@ export interface ListLedgerEntriesRequest {
   payerMode: 'all' | 'me' | string
   categoryIds: string[]
   includeDeleted?: boolean
+  /** 从 1 开始的页码；已删除列表不传时保持原有完整读取。 */
+  page?: number
+  /** 每页数量，服务端限制为 1-50。 */
+  pageSize?: number
 }
 
 export interface ListLedgerEntriesResult {
@@ -171,6 +177,8 @@ export interface ListLedgerEntriesResult {
   entries: LedgerEntrySummary[]
   /** 已软删的账目（仅 includeDeleted=true 时返回）。 */
   deletedEntries: LedgerEntrySummary[]
+  /** 当前筛选下是否还有下一页。 */
+  hasMore?: boolean
 }
 
 export interface GetLedgerEntryRequest {

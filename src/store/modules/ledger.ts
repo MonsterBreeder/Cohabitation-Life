@@ -39,7 +39,7 @@ interface LedgerCloudClient {
   updateEntry(input: { entryId: string; operationToken: string; amountCents: number; categoryId: string; note: string; occurredAt: string; receiptMediaId: string | null }): Promise<{ status: 'UPDATED'; entry: LedgerEntrySummary }>
   deleteEntry(input: { entryId: string; operationToken: string }): Promise<{ status: 'DELETED'; entryId: string; deletedAt: string }>
   restoreEntry(input: { entryId: string; operationToken: string }): Promise<{ status: 'RESTORED'; entry: LedgerEntrySummary }>
-  listEntries(input: { month: string; payerMode: string; categoryIds: string[]; includeDeleted?: boolean }): Promise<{ status: 'LISTED'; entries: LedgerEntrySummary[]; deletedEntries: LedgerEntrySummary[] }>
+  listEntries(input: { month: string; payerMode: string; categoryIds: string[]; includeDeleted?: boolean; page?: number; pageSize?: number }): Promise<{ status: 'LISTED'; entries: LedgerEntrySummary[]; deletedEntries: LedgerEntrySummary[]; hasMore?: boolean }>
   getEntry(input: { entryId: string }): Promise<{ status: 'LOADED'; detail: LedgerEntryDetail }>
   addCategory(input: AddLedgerCategoryRequest): Promise<{ status: 'ADDED'; category: LedgerCategory }>
   updateCategory(input: { categoryId: string; operationToken: string; name?: string; setHiddenByMe?: boolean }): Promise<{ status: 'UPDATED'; category: LedgerCategory; hiddenByMe: boolean }>
@@ -81,6 +81,11 @@ interface LedgerStateShape {
   selectedCategoryIds: string[]
   phase: LedgerPhase
   errorMessage: string | null
+  entriesPage: number
+  entriesHasMore: boolean
+  isLoadingMore: boolean
+  activeEntryQueryKey: string
+  entryLoadVersion: number
   /** 当前家庭 + 当前用户；调用时由入口 store 注入 */
   householdId: string
   selfMemberKey: string
@@ -97,6 +102,11 @@ const initialState = (): LedgerStateShape => ({
   selectedCategoryIds: [],
   phase: 'idle',
   errorMessage: null,
+  entriesPage: 0,
+  entriesHasMore: true,
+  isLoadingMore: false,
+  activeEntryQueryKey: '',
+  entryLoadVersion: 0,
   householdId: '',
   selfMemberKey: '',
 })
@@ -104,6 +114,7 @@ const initialState = (): LedgerStateShape => ({
 // === 单飞 / 幂等锁 ===
 
 const inFlight = new Set<string>()
+const LEDGER_PAGE_SIZE = 20
 
 function inFlightKey(scope: string, key: string): string {
   return `${scope}:${key}`
@@ -198,26 +209,53 @@ export const useLedgerStore = defineStore('ledger', {
       }
     },
 
-    async loadEntries(): Promise<void> {
+    async loadEntries(reset = true): Promise<void> {
       if (!this.householdId) return
-      const key = inFlightKey('list', this.currentMonth + this.payerMode + this.selectedCategoryIds.join(','))
+      const queryKey = `${this.currentMonth}|${this.payerMode}|${this.selectedCategoryIds.join(',')}`
+      const nextPage = reset ? 1 : this.entriesPage + 1
+      if (!reset && (!this.entriesHasMore || this.isLoadingMore)) return
+      const key = inFlightKey('list', `${queryKey}|${nextPage}`)
       if (inFlight.has(key)) return
       inFlight.add(key)
-      this.phase = 'loading'
+      if (reset) this.entryLoadVersion += 1
+      const loadVersion = this.entryLoadVersion
+      if (reset) {
+        this.phase = 'loading'
+        if (this.activeEntryQueryKey !== queryKey) {
+          this.entries = []
+          this.entriesPage = 0
+          this.entriesHasMore = true
+        }
+        this.activeEntryQueryKey = queryKey
+      } else {
+        this.isLoadingMore = true
+      }
       this.errorMessage = null
       try {
         const result = await cloudClient.listEntries({
           month: this.currentMonth,
           payerMode: this.payerMode,
           categoryIds: this.selectedCategoryIds,
+          page: nextPage,
+          pageSize: LEDGER_PAGE_SIZE,
         })
-        this.entries = result.entries
+        if (this.activeEntryQueryKey !== queryKey || this.entryLoadVersion !== loadVersion) return
+        const knownIds = new Set(reset ? [] : this.entries.map((entry) => entry.id))
+        const newEntries = result.entries.filter((entry) => !knownIds.has(entry.id))
+        this.entries = reset ? newEntries : [...this.entries, ...newEntries]
+        this.entriesPage = nextPage
+        this.entriesHasMore = Boolean(result.hasMore)
         this.phase = 'idle'
       } catch (error) {
-        this.applyError(error)
+        if (this.activeEntryQueryKey === queryKey && this.entryLoadVersion === loadVersion) this.applyError(error)
       } finally {
+        if (this.entryLoadVersion === loadVersion) this.isLoadingMore = false
         inFlight.delete(key)
       }
+    },
+
+    async loadMoreEntries(): Promise<void> {
+      await this.loadEntries(false)
     },
 
     async loadDeletedEntries(): Promise<void> {

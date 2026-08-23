@@ -20,7 +20,7 @@
       <text class="ledger-home__state-title">正在加载账本</text>
     </view>
 
-    <view v-else-if="loadError" class="ledger-home__state" data-testid="ledger-home-error">
+    <view v-else-if="loadError && entries.length === 0" class="ledger-home__state" data-testid="ledger-home-error">
       <wd-icon name="warning" size="64rpx" color="#BA564B" />
       <text class="ledger-home__state-title">暂时无法读取</text>
       <text class="ledger-home__state-copy">{{ loadError }}</text>
@@ -90,6 +90,20 @@
             />
           </view>
         </view>
+        <view v-if="loadMoreError" class="ledger-home__more-error" data-testid="ledger-home-more-error" @click="loadMore">
+          <text>加载更早账目失败，点这里重试</text>
+        </view>
+        <wd-loadmore
+          v-else-if="entriesHasMore"
+          state="loading"
+          loading-text="正在加载更早的账目…"
+          :loading-props="{ color: '#43c89a' }"
+          custom-class="ledger-home__more"
+          data-testid="ledger-home-load-more"
+        />
+        <view v-else class="ledger-home__end" data-testid="ledger-home-end">
+          <wd-divider custom-class="ledger-home__end-divider">已经到底了</wd-divider>
+        </view>
       </view>
 
       <!-- ⑤ 已删除区 -->
@@ -130,7 +144,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { onLoad, onShow } from '@dcloudio/uni-app'
+import { onLoad, onReachBottom, onShow } from '@dcloudio/uni-app'
 import MemberFilter from '../../components/ledger/MemberFilter.vue'
 import CategoryFilterChips from '../../components/ledger/CategoryFilterChips.vue'
 import LedgerEntryItem from '../../components/ledger/LedgerEntryItem.vue'
@@ -156,7 +170,7 @@ const householdStore = useHouseholdStore()
 const ledgerStore = useLedgerStore()
 
 const { household, profile } = storeToRefs(householdStore)
-const { entries, deletedEntries, categories, stats, currentMonth, payerMode, selectedCategoryIds, phase, errorMessage } = storeToRefs(ledgerStore)
+const { entries, deletedEntries, categories, stats, currentMonth, payerMode, selectedCategoryIds, phase, errorMessage, entriesHasMore, isLoadingMore } = storeToRefs(ledgerStore)
 
 const showDeleted = ref(false)
 const isAdding = ref(false)
@@ -177,6 +191,7 @@ const householdId = computed(() => household.value?.id || '')
 // 但云端真的返回空账目（家庭刚建好没记过账）时 phase 也是 'idle'，会被误判成 loading 一直转圈。
 const isLoading = computed(() => phase.value === 'loading')
 const loadError = computed(() => errorMessage.value)
+const loadMoreError = computed(() => Boolean(errorMessage.value && entries.value.length > 0 && !isLoadingMore.value))
 
 const monthLabel = computed(() => describeMonthLabel(currentMonth.value))
 // 防御性 try-catch：store getter 在 reactive 链路初始化时偶尔会 throw，computed 缓存 undefined
@@ -256,6 +271,11 @@ async function reload(): Promise<void> {
   ])
 }
 
+async function loadMore(): Promise<void> {
+  if (!entriesHasMore.value || isLoadingMore.value) return
+  await ledgerStore.loadMoreEntries()
+}
+
 watch(
   () => householdId.value,
   async (id) => {
@@ -296,6 +316,10 @@ onShow(async () => {
     ledgerStore.setHouseholdContext(householdId.value, '')
     await reload()
   }
+})
+
+onReachBottom(() => {
+  void loadMore()
 })
 </script>
 
@@ -456,6 +480,15 @@ onShow(async () => {
     font-weight: 600;
   }
   &__entry-wrap { }
+  &__more-error {
+    padding: 24rpx;
+    color: $brand-color-action;
+    font-size: 24rpx;
+    text-align: center;
+  }
+  &__end {
+    padding-top: 8rpx;
+  }
   /* 已删除区 */
   &__deleted {
     display: flex;

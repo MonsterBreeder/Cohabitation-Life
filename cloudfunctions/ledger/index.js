@@ -61,6 +61,7 @@ function createRepository() {
     findCategoryById: (id) => getDocument(categories, id),
     findEntriesByHousehold: async (householdId, filter) => {
       const where = { householdId }
+      if (!filter.includeDeleted) where.deletedAt = null
       if (filter.month && filter.month !== 'all') {
         // 月份格式 yyyy-MM，转为 [yyyy-MM-01, nextMonth-01)
         const [y, m] = filter.month.split('-').map((v) => Number.parseInt(v, 10))
@@ -74,7 +75,9 @@ function createRepository() {
       if (filter.payerMode === 'me' && filter.selfMemberKey) {
         where.payerMemberKey = filter.selfMemberKey
       }
-      const result = await entries.where(where).limit(500).get()
+      let query = entries.where(where).orderBy('occurredAt', 'desc').orderBy('createdAt', 'desc')
+      if (filter.offset > 0) query = query.skip(filter.offset)
+      const result = await query.limit(filter.limit > 0 ? filter.limit : 500).get()
       return result.data
     },
     countEntriesByCategory: async (categoryId, householdId) => {
@@ -109,6 +112,14 @@ function buildDependencies(identityKey, householdId, selfMemberKey) {
     selfMemberKey,
     householdId,
     repository,
+    getTempFileUrls: async (fileIds) => {
+      const result = await cloud.getTempFileURL({ fileList: fileIds })
+      const urls = {}
+      for (const item of (result && result.fileList) || []) {
+        if (item && item.fileID && item.tempFileURL) urls[item.fileID] = item.tempFileURL
+      }
+      return urls
+    },
     now: () => new Date(),
   }
 }

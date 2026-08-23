@@ -109,6 +109,52 @@ describe('loadEntries', () => {
     await store.loadEntries()
     expect(store.entries).toHaveLength(1)
   })
+
+  it('appends the next page without duplicating existing entries', async () => {
+    const listEntries = jest.fn(async (input: { page?: number }) => input.page === 1
+      ? { status: 'LISTED' as const, entries: [makeEntry({ id: 'page-1' })], deletedEntries: [], hasMore: true }
+      : { status: 'LISTED' as const, entries: [makeEntry({ id: 'page-2' })], deletedEntries: [], hasMore: false })
+    setLedgerStoreCloudClientForTesting({
+      initCategories: jest.fn(), addEntry: jest.fn(), updateEntry: jest.fn(), deleteEntry: jest.fn(), restoreEntry: jest.fn(),
+      listEntries, getEntry: jest.fn(), addCategory: jest.fn(), updateCategory: jest.fn(), removeCategory: jest.fn(), getStats: jest.fn(),
+    })
+    const store = useLedgerStore()
+    store.setHouseholdContext('home_xxxxxxxx', 'user_self')
+    store.setMonth('all')
+
+    await store.loadEntries()
+    await store.loadMoreEntries()
+
+    expect(store.entries.map((entry) => entry.id)).toEqual(['page-1', 'page-2'])
+    expect(store.entriesHasMore).toBe(false)
+    expect(listEntries).toHaveBeenNthCalledWith(1, expect.objectContaining({ page: 1, pageSize: 20 }))
+    expect(listEntries).toHaveBeenNthCalledWith(2, expect.objectContaining({ page: 2, pageSize: 20 }))
+  })
+
+  it('ignores an old next-page response after the list has refreshed', async () => {
+    let resolveOldPage: ((value: { status: 'LISTED'; entries: LedgerEntrySummary[]; deletedEntries: []; hasMore: boolean }) => void) | undefined
+    const oldPage = new Promise<{ status: 'LISTED'; entries: LedgerEntrySummary[]; deletedEntries: []; hasMore: boolean }>((resolve) => { resolveOldPage = resolve })
+    const listEntries = jest.fn()
+      .mockResolvedValueOnce({ status: 'LISTED', entries: [makeEntry({ id: 'initial' })], deletedEntries: [], hasMore: true })
+      .mockReturnValueOnce(oldPage)
+      .mockResolvedValueOnce({ status: 'LISTED', entries: [makeEntry({ id: 'refreshed' })], deletedEntries: [], hasMore: false })
+    setLedgerStoreCloudClientForTesting({
+      initCategories: jest.fn(), addEntry: jest.fn(), updateEntry: jest.fn(), deleteEntry: jest.fn(), restoreEntry: jest.fn(),
+      listEntries, getEntry: jest.fn(), addCategory: jest.fn(), updateCategory: jest.fn(), removeCategory: jest.fn(), getStats: jest.fn(),
+    })
+    const store = useLedgerStore()
+    store.setHouseholdContext('home_xxxxxxxx', 'user_self')
+    store.setMonth('all')
+    await store.loadEntries()
+
+    const loadingOldPage = store.loadMoreEntries()
+    await Promise.resolve()
+    await store.loadEntries(true)
+    resolveOldPage?.({ status: 'LISTED', entries: [makeEntry({ id: 'stale-page-2' })], deletedEntries: [], hasMore: false })
+    await loadingOldPage
+
+    expect(store.entries.map((entry) => entry.id)).toEqual(['refreshed'])
+  })
 })
 
 describe('addEntry / updateEntry / deleteEntry / restoreEntry', () => {

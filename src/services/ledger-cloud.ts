@@ -141,6 +141,7 @@ export function isLedgerEntry(value: unknown): value is LedgerEntrySummary {
   if (typeof v.note !== 'string') return false
   if (typeof v.occurredAt !== 'string') return false
   if (v.receiptMediaId !== null && typeof v.receiptMediaId !== 'string') return false
+  if (v.receiptUrl !== undefined && typeof v.receiptUrl !== 'string') return false
   if (!isPayerDisplay(v.payer)) return false
   if (typeof v.createdAt !== 'string') return false
   return true
@@ -301,7 +302,10 @@ export async function listLedgerEntriesInCloud(input: ListLedgerEntriesRequest):
     if (entries.length !== r.entries.length || deletedEntries.length !== r.deletedEntries.length) {
       throw new LedgerCloudError('INVALID_RESPONSE', 'listEntries 响应包含非法账目')
     }
-    return { status: 'LISTED', entries, deletedEntries }
+    if (r.hasMore !== undefined && typeof r.hasMore !== 'boolean') {
+      throw new LedgerCloudError('INVALID_RESPONSE', 'listEntries 分页信息错误')
+    }
+    return { status: 'LISTED', entries, deletedEntries, hasMore: r.hasMore as boolean | undefined }
   }
   if (isLedgerFailure(r)) return r as unknown as ListLedgerEntriesResult
   throw new LedgerCloudError('INVALID_RESPONSE', 'listEntries 响应格式错误')

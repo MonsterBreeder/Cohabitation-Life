@@ -161,13 +161,15 @@ describe('addLedgerEntryInCloud', () => {
 
 describe('listLedgerEntriesInCloud', () => {
   it('returns LISTED with filtered entries', async () => {
-    const entry = makeEntry()
-    const { runtime } = makeRuntime({ status: 'LISTED', entries: [entry], deletedEntries: [] })
+    const entry = makeEntry({ receiptMediaId: 'cloud://receipt', receiptUrl: 'https://temp.example/receipt.jpg' })
+    const { runtime } = makeRuntime({ status: 'LISTED', entries: [entry], deletedEntries: [], hasMore: true })
     setLedgerCloudRuntimeForTesting(runtime)
     const result = await listLedgerEntriesInCloud({ month: 'all', payerMode: 'all', categoryIds: [] })
     expect(result.status).toBe('LISTED')
     expect(result.entries).toHaveLength(1)
     expect(result.deletedEntries).toHaveLength(0)
+    expect(result.entries[0].receiptUrl).toBe('https://temp.example/receipt.jpg')
+    expect(result.hasMore).toBe(true)
   })
 })
 
