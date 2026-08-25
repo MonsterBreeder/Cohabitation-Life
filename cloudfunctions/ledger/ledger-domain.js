@@ -391,6 +391,9 @@ async function restoreEntry(input, dependencies) {
 async function listEntries(input, dependencies) {
   const month = (input && input.month) || 'all'
   const payerMode = (input && input.payerMode) || 'all'
+  // PRD 008 优化 R1：listEntries 与 getStats 复用同一套过滤（typeFilter / payerMode / month），
+  // 让列表和头部统计永远保持一致。
+  const typeFilter = (input && input.typeFilter) || 'all'
   const categoryIds = Array.isArray(input && input.categoryIds) ? input.categoryIds : []
   const includeDeleted = input && input.includeDeleted === true
   const requestedPageSize = Number.parseInt(input && input.pageSize, 10)
@@ -405,6 +408,7 @@ async function listEntries(input, dependencies) {
   const records = await repo.findEntriesByHousehold(dependencies.householdId, {
     month,
     payerMode,
+    typeFilter,
     categoryIds,
     selfMemberKey: dependencies.selfMemberKey || dependencies.identityKey,
     includeDeleted,
@@ -555,12 +559,23 @@ async function removeCategory(input, dependencies) {
 }
 
 async function getStats(input, dependencies) {
+  // PRD 008 优化 R5 / R20-R22：getStats 接收 payerMode / typeFilter / categoryIds / month
+  // 与 listEntries 复用同一套过滤，让头部 stats 跟列表保持一致
   const month = (input && input.month) || ''
+  const payerMode = (input && input.payerMode) || 'all'
+  const typeFilter = (input && input.typeFilter) || 'all'
+  const categoryIds = Array.isArray(input && input.categoryIds) ? input.categoryIds : []
   const repo = dependencies.repository
   const isMember = await repo.isMemberOfHousehold(dependencies.identityKey, dependencies.householdId)
   if (!isMember) throw new LedgerDomainError('LEDGER_FORBIDDEN', false)
 
-  const records = await repo.findEntriesByHousehold(dependencies.householdId, { month, payerMode: 'all', categoryIds: [], selfMemberKey: dependencies.selfMemberKey || dependencies.identityKey })
+  const records = await repo.findEntriesByHousehold(dependencies.householdId, {
+    month,
+    payerMode,
+    typeFilter,
+    categoryIds,
+    selfMemberKey: dependencies.selfMemberKey || dependencies.identityKey,
+  })
   const active = filterActive(records)
 
   let monthExpenseCents = 0

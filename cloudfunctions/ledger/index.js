@@ -62,18 +62,38 @@ function createRepository() {
     findEntriesByHousehold: async (householdId, filter) => {
       const where = { householdId }
       if (!filter.includeDeleted) where.deletedAt = null
+      // PRD 008 优化 KTD2：month 接受 'all' | 'yyyy-MM' | 'yyyy-MM-dd' 三种
       if (filter.month && filter.month !== 'all') {
-        // 月份格式 yyyy-MM，转为 [yyyy-MM-01, nextMonth-01)
-        const [y, m] = filter.month.split('-').map((v) => Number.parseInt(v, 10))
-        const start = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0, 0)).toISOString()
-        const end = new Date(Date.UTC(y, m, 1, 0, 0, 0, 0)).toISOString()
-        where.occurredAt = db.command.gte(start).and(db.command.lt(end))
+        if (/^\d{4}-\d{2}-\d{2}$/.test(filter.month)) {
+          // 按日：[dayStart, dayStart+24h)
+          const [y, m, d] = filter.month.split('-').map((v) => Number.parseInt(v, 10))
+          const start = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0)).toISOString()
+          const end = new Date(Date.UTC(y, m - 1, d + 1, 0, 0, 0, 0)).toISOString()
+          where.occurredAt = db.command.gte(start).and(db.command.lt(end))
+        } else if (/^\d{4}-\d{2}$/.test(filter.month)) {
+          // 按月：[monthStart, nextMonth-01)
+          const [y, m] = filter.month.split('-').map((v) => Number.parseInt(v, 10))
+          const start = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0, 0)).toISOString()
+          const end = new Date(Date.UTC(y, m, 1, 0, 0, 0, 0)).toISOString()
+          where.occurredAt = db.command.gte(start).and(db.command.lt(end))
+        } else {
+          // 其他格式 = 入参非法；用 LedgerDomainError 跟 listEntries 其他错误处理对齐
+          throw new LedgerDomainError('LEDGER_INVALID_REQUEST', false)
+        }
       }
       if (filter.categoryIds && filter.categoryIds.length > 0) {
         where.categoryId = db.command.in(filter.categoryIds)
       }
+      // PRD 008 优化 R1：payerMode 加 'other' 分支（双成员家庭筛对方付的）
       if (filter.payerMode === 'me' && filter.selfMemberKey) {
         where.payerMemberKey = filter.selfMemberKey
+      } else if (filter.payerMode === 'other' && filter.selfMemberKey) {
+        // "对方付的" = payerMemberKey != selfMemberKey
+        where.payerMemberKey = db.command.neq(filter.selfMemberKey)
+      }
+      // PRD 008 优化 R5：typeFilter 加 'expense' / 'income' 分支
+      if (filter.typeFilter === 'expense' || filter.typeFilter === 'income') {
+        where.type = filter.typeFilter
       }
       let query = entries.where(where).orderBy('occurredAt', 'desc').orderBy('createdAt', 'desc')
       if (filter.offset > 0) query = query.skip(filter.offset)
