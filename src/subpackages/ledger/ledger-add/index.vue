@@ -43,12 +43,14 @@
         <AmountInput
           v-model="draft.amountCents"
           :type="draft.type"
-          placeholder="0.00"
           :disabled="isBusy"
           test-id="ledger-add-amount"
           @error="onAmountError"
         />
-        <text v-if="errors.amount" class="ledger-add-page__validation" data-testid="ledger-add-amount-error">
+        <!-- 错误提示延后显示：用户打开记账页时如果 modelValue=0，validateDraft 会立刻报"请输入金额"，
+             加上 AmountInput 自带 placeholder "请输入金额" 就会双重红字，体验很差。
+             submitAttempted 在第一次点保存时置 true，错误信息才浮现。 -->
+        <text v-if="submitAttempted && errors.amount" class="ledger-add-page__validation" data-testid="ledger-add-amount-error">
           {{ errors.amount }}
         </text>
       </view>
@@ -146,41 +148,46 @@
       </view>
     </view>
 
-    <!-- 类目添加弹窗 -->
-    <view v-if="showCategoryDialog" class="ledger-add-page__dialog-mask" @click.self="showCategoryDialog = false">
-      <view class="ledger-add-page__dialog" data-testid="ledger-add-category-dialog">
-        <text class="ledger-add-page__dialog-title">添加类目</text>
+    <!-- 类目添加弹窗
+         重做设计（frontend-design skill Module C）：
+         - 旧版：图标行（8 wd-icon，大部分缺失）+ 颜色行（8 色块）+ 取消/添加 → 双层臃肿
+         - 新版：8 个组合色块（颜色背景 + 中文首字）一行展示 + 类目名 input + 取消/添加
+         - 遮罩：去掉 @click.self 关闭（uni-app 在 .view 上不可靠，用户的反馈"随意一点就关"），
+                 改用弹窗右上角显式 X 按钮 + "取消" 按钮两种关闭方式
+    -->
+    <view v-if="showCategoryDialog" class="ledger-add-page__dialog-mask" data-testid="ledger-add-category-dialog">
+      <view class="ledger-add-page__dialog">
+        <view class="ledger-add-page__dialog-header">
+          <text class="ledger-add-page__dialog-title">添加类目</text>
+          <view
+            class="ledger-add-page__dialog-close"
+            data-testid="ledger-add-category-close"
+            @click="showCategoryDialog = false"
+          >
+            <text class="ledger-add-page__dialog-close-icon">×</text>
+          </view>
+        </view>
         <view class="ledger-add-page__dialog-field">
           <text class="ledger-add-page__label">类目名（2-8 字）</text>
           <wd-input v-model="categoryDraft.name" placeholder="比如：宠物" data-testid="ledger-add-category-name" :maxlength="8" />
         </view>
         <view class="ledger-add-page__dialog-field">
-          <text class="ledger-add-page__label">图标</text>
-          <view class="ledger-add-page__icon-row">
+          <text class="ledger-add-page__label">选择图标和颜色</text>
+          <view class="ledger-add-page__preset-row">
             <view
-              v-for="opt in iconOptions"
-              :key="opt.value"
-              class="ledger-add-page__icon-chip"
-              :class="{ 'ledger-add-page__icon-chip--active': categoryDraft.iconKey === opt.value }"
-              :data-testid="`ledger-add-cat-icon-${opt.value}`"
-              @click="categoryDraft.iconKey = opt.value"
+              v-for="preset in categoryPresets"
+              :key="preset.iconKey"
+              class="ledger-add-page__preset"
+              :class="{
+                'ledger-add-page__preset--active':
+                  categoryDraft.iconKey === preset.iconKey && categoryDraft.colorKey === preset.colorKey,
+              }"
+              :style="{ background: preset.hex }"
+              :data-testid="`ledger-add-cat-preset-${preset.iconKey}`"
+              @click="onSelectPreset(preset.iconKey, preset.colorKey)"
             >
-              <wd-icon :name="opt.iconName" size="36rpx" :color="categoryDraft.iconKey === opt.value ? '#267A5A' : '#74847D'" />
+              <text class="ledger-add-page__preset-char">{{ preset.firstChar }}</text>
             </view>
-          </view>
-        </view>
-        <view class="ledger-add-page__dialog-field">
-          <text class="ledger-add-page__label">颜色</text>
-          <view class="ledger-add-page__color-row">
-            <view
-              v-for="opt in colorOptions"
-              :key="opt.value"
-              class="ledger-add-page__color-chip"
-              :class="{ 'ledger-add-page__color-chip--active': categoryDraft.colorKey === opt.value }"
-              :style="{ background: opt.hex }"
-              :data-testid="`ledger-add-cat-color-${opt.value}`"
-              @click="categoryDraft.colorKey = opt.value"
-            />
           </view>
         </view>
         <text v-if="categoryDialogError" class="ledger-add-page__validation" data-testid="ledger-add-cat-error">
@@ -208,6 +215,7 @@ import { formatDateYMD } from '../../../utils/format'
 import {
   CATEGORY_COLOR_OPTIONS,
   CATEGORY_ICON_OPTIONS,
+  CATEGORY_PRESETS,
   defaultAddDraft,
   defaultCategoryDraft,
   describeMonthForPicker,
@@ -236,6 +244,9 @@ const householdId = computed(() => household.value?.id || '')
 const isReady = ref(false)
 const isBusy = ref(false)
 const isSaving = ref(false)
+// 错误信息延后显示：用户首次尝试保存时才浮现"金额/类目"等验证文案，
+// 避免页面一打开就一片红字，干扰录入节奏。
+const submitAttempted = ref(false)
 const isAddingCategory = ref(false)
 
 const draft = reactive<AddEntryDraft>(defaultAddDraft())
@@ -247,6 +258,8 @@ const uploaderRef = ref()
 const typeTabs = describeTypeTabs()
 const iconOptions = CATEGORY_ICON_OPTIONS
 const colorOptions = CATEGORY_COLOR_OPTIONS
+// 类目预设（8 个"图标首字 + 颜色"组合），用于添加弹窗的合并选择（替代旧版"先选图标再选颜色"双层）
+const categoryPresets = CATEGORY_PRESETS
 
 const visibleCategories = computed(() => ledgerStore.visibleCategories.map((c) => describeCategory(c)))
 
@@ -339,6 +352,18 @@ function onShowAddCategory(): void {
   showCategoryDialog.value = true
 }
 
+/** 选一个预设色块 = 同时设置 iconKey + colorKey。点击同一色块切换"已选/未选" */
+function onSelectPreset(iconKey: string, colorKey: string): void {
+  // 再次点击同一组合 = 反选（重置成 defaultCategoryDraft 的 tag/gray）
+  if (categoryDraft.iconKey === iconKey && categoryDraft.colorKey === colorKey) {
+    categoryDraft.iconKey = defaultCategoryDraft().iconKey
+    categoryDraft.colorKey = defaultCategoryDraft().colorKey
+  } else {
+    categoryDraft.iconKey = iconKey
+    categoryDraft.colorKey = colorKey
+  }
+}
+
 async function onConfirmAddCategory(): Promise<void> {
   const errorMessage = validateCategoryDraft(categoryDraft)
   if (errorMessage) {
@@ -363,6 +388,9 @@ async function onConfirmAddCategory(): Promise<void> {
 }
 
 async function onSave(): Promise<void> {
+  // 第一次保存：把 submitAttempted 置 true，让所有错误浮现（包含金额/类目等），
+  // 给用户一个明确的"哪些字段还缺"的反馈。
+  submitAttempted.value = true
   if (hasErrors(errors.value) || isBusy.value) return
   isSaving.value = true
   try {
@@ -478,7 +506,9 @@ watch(
     }
   }
   &__amount-block {
-    padding: 0 8rpx;
+    padding: 16rpx 8rpx 8rpx;
+    // 显式给一个最小高度，避免 AmountInput 内部 input 元素默认行高裁掉 56rpx 文字的上下边缘。
+    min-height: 120rpx;
   }
   &__validation {
     display: block;
@@ -545,8 +575,11 @@ watch(
   &__actions {
     margin-top: 24rpx;
   }
-  /* 类目弹窗 */
+  /* 类目弹窗（frontend-design 重做：去双层 + 显式 X 关闭） */
   &__dialog-mask {
+    // 不再 @click.self 关闭弹窗（uni-app .view 上 self 行为不可靠，
+    // 用户的反馈"随意一点就关"——遮罩只在视觉上盖住底层，不再响应 click）。
+    // 关闭入口只走：①右上角 X ②"取消" ③"添加"成功后。
     position: fixed;
     inset: 0;
     z-index: 99;
@@ -565,50 +598,67 @@ watch(
     border-radius: $brand-radius-card;
     background: $brand-color-surface;
   }
+  &__dialog-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
   &__dialog-title {
     color: $brand-color-text;
     font-size: 32rpx;
     font-weight: 700;
+  }
+  &__dialog-close {
+    display: flex;
+    width: 48rpx;
+    height: 48rpx;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background .15s ease;
+    &:active {
+      background: rgba($brand-color-border, .4);
+    }
+  }
+  &__dialog-close-icon {
+    color: $brand-color-text-secondary;
+    font-size: 36rpx;
+    font-weight: 300;
+    line-height: 1;
   }
   &__dialog-field {
     display: flex;
     flex-direction: column;
     gap: 10rpx;
   }
-  &__icon-row {
+  // 8 个组合色块：色块背景 + 中文首字（替代旧版"图标行 + 颜色行"两次选择，单次点击完成组合）
+  &__preset-row {
     display: flex;
-    gap: 16rpx;
     flex-wrap: wrap;
+    gap: 18rpx;
+    margin-top: 4rpx;
   }
-  &__icon-chip {
+  &__preset {
     display: flex;
+    width: 80rpx;
+    height: 80rpx;
     align-items: center;
     justify-content: center;
-    width: 72rpx;
-    height: 72rpx;
-    border-radius: 50%;
-    background: rgba($brand-color-border, .4);
-    border: 2rpx solid transparent;
-    transition: all .15s ease;
-  }
-  &__icon-chip--active {
-    background: #effbf5;
-    border-color: $brand-color-primary;
-  }
-  &__color-row {
-    display: flex;
-    gap: 18rpx;
-    flex-wrap: wrap;
-  }
-  &__color-chip {
-    width: 60rpx;
-    height: 60rpx;
-    border-radius: 50%;
+    border-radius: 20rpx;
     border: 4rpx solid transparent;
-    transition: all .15s ease;
+    box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, .06);
+    transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
   }
-  &__color-chip--active {
+  &__preset--active {
     border-color: $brand-color-text;
+    box-shadow: 0 2rpx 12rpx rgba(41, 68, 58, .2);
+    transform: scale(1.04);
+  }
+  &__preset-char {
+    color: #FFFFFF;
+    font-size: 32rpx;
+    font-weight: 700;
+    line-height: 1;
   }
   &__dialog-actions {
     display: flex;

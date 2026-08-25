@@ -18,6 +18,7 @@
       :data-testid="testId"
       @input="onInput"
     />
+    <text v-if="!displayValue" class="amount-input__hint" aria-hidden="true">点此输入</text>
   </view>
 </template>
 
@@ -34,7 +35,10 @@ interface Props {
 }
 const props = withDefaults(defineProps<Props>(), {
   type: 'expense',
-  placeholder: '0.00',
+  // placeholder 改用"请输入金额"——之前"0.00"跟默认 modelValue=0 的显示态（displayValue 空 → 走 placeholder）
+  // 重合，用户分不清是占位符还是默认值，还跟下面"请输入金额"验证红字撞色，看起来像输入框出 bug。
+  // 改成"请输入金额"后，placeholder 跟验证文案一致（都是"该输入"的语义），不再撞色。
+  placeholder: '请输入金额',
   disabled: false,
   testId: 'amount-input',
 })
@@ -73,9 +77,12 @@ function onInput(e: any): void {
 <style lang="scss" scoped>
 .amount-input {
   display: flex;
-  align-items: baseline;
+  // align-items: center（不再是 baseline）——baseline 在 WeChat 上会因 placeholder
+  // 行高 + input 自带 padding 让 ¥ 和 0.00 上下错位一两个像素；改 center 后 ¥、数字、
+  // "点此输入"提示三者竖直中线对齐，且 input 高度自适应 padding。
+  align-items: center;
   gap: 12rpx;
-  padding: 24rpx 0;
+  padding: 20rpx 0;
   &--expense {
     color: $brand-color-accent;
   }
@@ -87,21 +94,40 @@ function onInput(e: any): void {
     font-weight: 700;
     line-height: 1.2;
     font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
   }
   &__field {
+    // mini-program <input> 在 flex 容器里默认有 min-width: auto，flex:1 会被撑爆；
+    // 在 display:block 容器里默认又有 min-height < 字号，导致 56rpx 字号的字符上下被裁。
+    // 显式给 0 + 固定 height 才能保证文字竖直方向完整显示（用户反馈"0.00 那块下面显示不完全"）。
+    min-width: 0;
     flex: 1;
+    width: auto;
+    height: 72rpx;
+    min-height: 72rpx;
     font-size: 56rpx;
     font-weight: 700;
-    line-height: 1.2;
+    line-height: 72rpx;
     font-variant-numeric: tabular-nums;
     background: transparent;
     border: none;
     outline: none;
+    padding: 0;
+    box-sizing: border-box;
   }
   &__placeholder {
     color: $brand-color-text-secondary;
     font-weight: 500;
-    opacity: .4;
+    opacity: .6;
+  }
+  // 右侧辅助"点此输入"提示：占位符 + 文字双重提示，
+  // 让"未输入"状态比之前"¥ + 0.00"更直白，不容易误以为是默认值。
+  &__hint {
+    color: $brand-color-text-secondary;
+    font-size: 24rpx;
+    font-weight: 500;
+    opacity: .55;
+    flex-shrink: 0;
   }
 }
 </style>
