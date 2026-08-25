@@ -44,19 +44,36 @@ function createRepository(initial: { entries?: any[]; categories?: any[]; operat
       let list = [...entries.values()].filter((e) => e.householdId === householdId)
       if (!filter?.includeDeleted) list = list.filter((e) => e.deletedAt == null)
       if (filter && filter.month && filter.month !== 'all') {
-        const [y, m] = filter.month.split('-').map((v) => Number.parseInt(v, 10))
-        const start = Date.UTC(y, m - 1, 1)
-        const end = Date.UTC(y, m, 1)
-        list = list.filter((e) => {
-          const t = new Date(e.occurredAt).getTime()
-          return t >= start && t < end
-        })
+        // PRD 008 优化 KTD2：兼容 yyyy-MM-dd
+        if (/^\d{4}-\d{2}-\d{2}$/.test(filter.month)) {
+          const [y, m, d] = filter.month.split('-').map((v) => Number.parseInt(v, 10))
+          const start = Date.UTC(y, m - 1, d)
+          const end = Date.UTC(y, m - 1, d + 1)
+          list = list.filter((e) => {
+            const t = new Date(e.occurredAt).getTime()
+            return t >= start && t < end
+          })
+        } else if (/^\d{4}-\d{2}$/.test(filter.month)) {
+          const [y, m] = filter.month.split('-').map((v) => Number.parseInt(v, 10))
+          const start = Date.UTC(y, m - 1, 1)
+          const end = Date.UTC(y, m, 1)
+          list = list.filter((e) => {
+            const t = new Date(e.occurredAt).getTime()
+            return t >= start && t < end
+          })
+        }
       }
       if (filter && filter.categoryIds && filter.categoryIds.length > 0) {
         list = list.filter((e) => filter.categoryIds.includes(e.categoryId))
       }
       if (filter && filter.payerMode === 'me' && filter.selfMemberKey) {
         list = list.filter((e) => e.payerMemberKey === filter.selfMemberKey)
+      } else if (filter && filter.payerMode === 'other' && filter.selfMemberKey) {
+        // PRD 008 优化 R1：other = 排除 selfMemberKey
+        list = list.filter((e) => e.payerMemberKey !== filter.selfMemberKey)
+      }
+      if (filter && (filter.typeFilter === 'expense' || filter.typeFilter === 'income')) {
+        list = list.filter((e) => e.type === filter.typeFilter)
       }
       list.sort((a, b) => {
         const occurredDiff = new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
@@ -380,6 +397,33 @@ describe('listEntries / getEntry', () => {
     expect(result.deletedEntries).toHaveLength(1)
   })
 
+  // 回归测试：listEntries 必须把 typeFilter 传给 findEntriesByHousehold。
+  // PRD 008 优化 R1：双维度 chip（人 × 类型）要求 typeFilter=income 时只返回收入账目。
+  // 之前漏传导致选了"收入"但列表仍显示支出账目。
+  it('listEntries forwards typeFilter to findEntriesByHousehold (income only)', async () => {
+    const incomeEntry = { ...entryActive, _id: 'entry_xxxxxxxxxxxx_income', type: 'income' }
+    const repo = createRepository({
+      households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF] }],
+      entries: [entryActive, incomeEntry],
+    })
+    const deps = makeDependencies({ repository: repo })
+    const result = await listEntries({ month: 'all', payerMode: 'all', typeFilter: 'income', categoryIds: [] }, deps)
+    expect(result.entries.map((e: any) => e.id)).toEqual(['entry_xxxxxxxxxxxx_income'])
+    expect(result.entries.every((e: any) => e.type === 'income')).toBe(true)
+  })
+
+  it('listEntries forwards typeFilter=expense to findEntriesByHousehold', async () => {
+    const incomeEntry = { ...entryActive, _id: 'entry_xxxxxxxxxxxx_income', type: 'income' }
+    const repo = createRepository({
+      households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF] }],
+      entries: [entryActive, incomeEntry],
+    })
+    const deps = makeDependencies({ repository: repo })
+    const result = await listEntries({ month: 'all', payerMode: 'all', typeFilter: 'expense', categoryIds: [] }, deps)
+    expect(result.entries.map((e: any) => e.id)).toEqual(['entry_xxxxxxxxxxxxx_active'])
+    expect(result.entries.every((e: any) => e.type === 'expense')).toBe(true)
+  })
+
   it('listEntries pages results and returns member-authorised receipt URLs', async () => {
     const entries = Array.from({ length: 21 }, (_, index) => ({
       ...entryActive,
@@ -555,5 +599,36 @@ describe('getStats', () => {
     expect(result.stats.netCents).toBe(2000)
     expect(result.stats.byCategory).toHaveLength(2)
     expect(result.stats.byPayer).toHaveLength(2)
+  })
+
+  it('PRD 008 优化 R5: typeFilter=expense 只算支出', async () => {
+    const entries = [
+      { _id: 'entry_xxxxxxxxxxx_e1', householdId: HOUSEHOLD_ID, type: 'expense', amountCents: 5000, categoryId: 'cat_xxxxxxxxxxxxx_dining', payerMemberKey: SELF, note: '', occurredAt: NOW.toISOString(), receiptMediaId: null, createdAt: NOW.toISOString(), updatedAt: NOW.toISOString(), deletedAt: null, payer: { memberKey: SELF } },
+      { _id: 'entry_xxxxxxxxxxx_i1', householdId: HOUSEHOLD_ID, type: 'income', amountCents: 10000, categoryId: 'cat_xxxxxxxxxxxxx_dining', payerMemberKey: SELF, note: '', occurredAt: NOW.toISOString(), receiptMediaId: null, createdAt: NOW.toISOString(), updatedAt: NOW.toISOString(), deletedAt: null, payer: { memberKey: SELF } },
+    ]
+    const repo = createRepository({
+      households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF] }],
+      categories: [catDining],
+      entries,
+    })
+    const deps = makeDependencies({ repository: repo })
+    const result = await getStats({ month: 'all', payerMode: 'all', typeFilter: 'expense' }, deps)
+    expect(result.stats.monthExpenseCents).toBe(5000)
+    expect(result.stats.monthIncomeCents).toBe(0)
+  })
+
+  it('PRD 008 优化 R5: payerMode=me 只算当前用户', async () => {
+    const entries = [
+      { _id: 'entry_xxxxxxxxxxx_me', householdId: HOUSEHOLD_ID, type: 'expense', amountCents: 5000, categoryId: 'cat_xxxxxxxxxxxxx_dining', payerMemberKey: SELF, note: '', occurredAt: NOW.toISOString(), receiptMediaId: null, createdAt: NOW.toISOString(), updatedAt: NOW.toISOString(), deletedAt: null, payer: { memberKey: SELF } },
+      { _id: 'entry_xxxxxxxxxxx_other', householdId: HOUSEHOLD_ID, type: 'expense', amountCents: 3000, categoryId: 'cat_xxxxxxxxxxxxx_dining', payerMemberKey: OTHER, note: '', occurredAt: NOW.toISOString(), receiptMediaId: null, createdAt: NOW.toISOString(), updatedAt: NOW.toISOString(), deletedAt: null, payer: { memberKey: OTHER } },
+    ]
+    const repo = createRepository({
+      households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF, OTHER] }],
+      categories: [catDining],
+      entries,
+    })
+    const deps = makeDependencies({ repository: repo })
+    const result = await getStats({ month: 'all', payerMode: 'me' }, deps)
+    expect(result.stats.monthExpenseCents).toBe(5000)
   })
 })

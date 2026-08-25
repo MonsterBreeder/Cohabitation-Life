@@ -80,15 +80,20 @@ describe('describeAmountLine / describeAmountColor', () => {
   })
 })
 
-describe('describePayerLine', () => {
-  it('formats normal payer', () => {
-    const detail = makeDetail({ payer: { memberKey: 'user_self', nickname: '我', avatar: { kind: 'builtin', id: 'person-neutral' } } as any })
+describe('describePayerLine (PRD 008 优化 R17)', () => {
+  it('formats normal expense payer', () => {
+    const detail = makeDetail({ type: 'expense', payer: { memberKey: 'user_self', nickname: '我', avatar: { kind: 'builtin', id: 'person-neutral' } } as any })
     expect(describePayerLine(detail)).toBe('由 我 付款')
   })
 
-  it('formats left member with note', () => {
-    const detail = makeDetail({ payer: { memberKey: 'user_old', nickname: '前任', avatar: { kind: 'builtin', id: 'person-neutral' }, hasLeft: true } as any })
-    expect(describePayerLine(detail)).toBe('前任（已离开）')
+  it('formats income payer with "入账" (R17)', () => {
+    const detail = makeDetail({ type: 'income', payer: { memberKey: 'user_self', nickname: '我', avatar: { kind: 'builtin', id: 'person-neutral' } } as any })
+    expect(describePayerLine(detail)).toBe('由 我 入账')
+  })
+
+  it('appends "（已离开）" when payer has left (R18)', () => {
+    const detail = makeDetail({ type: 'expense', payer: { memberKey: 'user_old', nickname: '前任', avatar: { kind: 'builtin', id: 'person-neutral' }, hasLeft: true } as any })
+    expect(describePayerLine(detail)).toBe('由 前任 付款（已离开）')
   })
 
   it('returns empty for undefined', () => {

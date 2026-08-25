@@ -7,9 +7,12 @@ import {
   describeHomeActions,
   describeMonthLabel,
   describePayerFilterOptions,
+  describePayerLine,
+  describeTypeFilterOptions,
   groupEntriesByDate,
   LEDGER_CATEGORY_COLOR_MAP,
   LEDGER_CATEGORY_ICON_MAP,
+  shiftDay,
   shiftMonth,
 } from '../../src/pages/ledger/ledger-home-view'
 import type { LedgerCategory, LedgerEntrySummary } from '../../src/types/ledger'
@@ -94,11 +97,12 @@ describe('describeEntryAmount', () => {
 })
 
 describe('describePayerFilterOptions / describeHomeActions', () => {
-  it('returns 2 options for payer filter', () => {
+  it('returns 3 options for payer filter (PRD 008 优化 R1 双维度 chip 第一行)', () => {
     const opts = describePayerFilterOptions('user_self')
-    expect(opts).toHaveLength(2)
+    expect(opts).toHaveLength(3)
     expect(opts[0]).toEqual({ value: 'all', label: '全部' })
     expect(opts[1]).toEqual({ value: 'me', label: '我付的' })
+    expect(opts[2]).toEqual({ value: 'other', label: '对方付的' })
   })
 
   it('describes home actions', () => {
@@ -124,6 +128,67 @@ describe('describeEntryMonth / describeMonthLabel / shiftMonth', () => {
     expect(shiftMonth('2026-08', -1)).toBe('2026-07')
     expect(shiftMonth('2026-12', 1)).toBe('2027-01')
     expect(shiftMonth('invalid', 1)).toBe('')
+  })
+
+  it('formats yyyy-MM-dd label as "YYYY 年 M 月 D 日" (PRD 008 优化 R7)', () => {
+    expect(describeMonthLabel('2026-08-15')).toBe('2026 年 8 月 15 日')
+  })
+})
+
+describe('describePayerLine (PRD 008 优化 R16-R19)', () => {
+  it('uses "付款" for expense', () => {
+    expect(describePayerLine('expense', { hasLeft: false, nickname: 'A' })).toBe('由 A 付款')
+  })
+
+  it('uses "入账" for income', () => {
+    expect(describePayerLine('income', { hasLeft: false, nickname: 'B' })).toBe('由 B 入账')
+  })
+
+  it('appends "（已离开）" when payer has left', () => {
+    expect(describePayerLine('expense', { hasLeft: true, nickname: 'A' })).toBe('由 A 付款（已离开）')
+    expect(describePayerLine('income', { hasLeft: true, nickname: 'B' })).toBe('由 B 入账（已离开）')
+  })
+
+  it('falls back to "成员" when nickname is empty', () => {
+    expect(describePayerLine('expense', { hasLeft: false, nickname: '' })).toBe('由 成员 付款')
+  })
+
+  it('handles null / undefined payer', () => {
+    expect(describePayerLine('expense', null)).toBe('由 成员 付款')
+    expect(describePayerLine('income', undefined)).toBe('由 成员 入账')
+  })
+})
+
+describe('describeTypeFilterOptions (PRD 008 优化 R1 双维度 chip 第二行)', () => {
+  it('returns 3 options (全部 / 支出 / 收入)', () => {
+    const opts = describeTypeFilterOptions()
+    expect(opts).toHaveLength(3)
+    expect(opts).toEqual([
+      { value: 'all', label: '全部' },
+      { value: 'expense', label: '支出' },
+      { value: 'income', label: '收入' },
+    ])
+  })
+})
+
+describe('shiftDay (PRD 008 优化 R7 按日切换)', () => {
+  it('shifts day forward / backward', () => {
+    expect(shiftDay('2026-08-15', 1)).toBe('2026-08-16')
+    expect(shiftDay('2026-08-15', -1)).toBe('2026-08-14')
+  })
+
+  it('rolls over month boundary', () => {
+    expect(shiftDay('2026-08-31', 1)).toBe('2026-09-01')
+    expect(shiftDay('2026-09-01', -1)).toBe('2026-08-31')
+  })
+
+  it('rolls over year boundary', () => {
+    expect(shiftDay('2026-12-31', 1)).toBe('2027-01-01')
+  })
+
+  it('returns empty for invalid input', () => {
+    expect(shiftDay('invalid', 1)).toBe('')
+    expect(shiftDay('2026-08-15', Number.NaN as any)).toBe('')
   })
 })
 

@@ -53,13 +53,17 @@ describe('useLedgerStore basic', () => {
     expect(store.selfMemberKey).toBe('user_self')
   })
 
-  it('setMonth / setPayerMode / setSelectedCategoryIds update filter', () => {
+  it('setMonth / setPayerMode / setTypeFilter / setSelectedDate / setSelectedCategoryIds update filter', () => {
     const store = useLedgerStore()
     store.setMonth('2026-08')
     store.setPayerMode('me')
+    store.setTypeFilter('expense')
+    store.setSelectedDate('2026-08-15')
     store.setSelectedCategoryIds(['cat_xxxxxxxxxxxxx_1'])
     expect(store.currentMonth).toBe('2026-08')
     expect(store.payerMode).toBe('me')
+    expect(store.typeFilter).toBe('expense')
+    expect(store.selectedDate).toBe('2026-08-15')
     expect(store.selectedCategoryIds).toEqual(['cat_xxxxxxxxxxxxx_1'])
   })
 })
