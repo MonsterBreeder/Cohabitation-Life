@@ -16,7 +16,7 @@
 | 状态 | Pinia 2.1 | 每个业务域一个 store，对象式 + 单飞保护 + 超时恢复 |
 | 样式 | SCSS + 品牌变量 | `src/uni.scss` 集中维护 `$brand-color-*`、`$brand-radius-*` |
 | 后端 | 微信云开发（云函数 + 云数据库） | 4 个云函数，见下表 |
-| 工具链 | Vite 5 + vue-tsc + Jest 29 | TS 严格模式、单元测试 40 套件 / 596 用例 |
+| 工具链 | Vite 5 + vue-tsc + Jest 29 | TS 严格模式、单元测试 40 套件 / 612 用例 |
 
 ## 本地运行
 
@@ -64,12 +64,13 @@
 
 ```
 src/
-├── pages/                          # 主包（启动必需）
+├── pages/                          # 主包（4 个启动必需页面）
 │   ├── login/                      # 登录入口
-│   ├── index/                      # 首页（家庭 + 事项 + 历史入口）
-│   └── profile/                    # 我的
-├── subpackages/
-│   ├── household/                  # 家庭与成员管理
+│   ├── index/                      # 首页（家庭 + 事项 + 月度账目入口）
+│   ├── profile/                    # 我的
+│   └── ledger/                     # 家庭账本首页（月度概览 + 筛选 + 列表 + FAB）
+├── subpackages/                    # 按业务域懒加载（3 个子包）
+│   ├── household/                  # 家庭与成员管理（7 个页面）
 │   │   ├── create-home/            # 创建家庭
 │   │   ├── join-home/              # 通过邀请码加入
 │   │   ├── member-management/      # 成员管理
@@ -77,31 +78,61 @@ src/
 │   │   ├── edit-household/         # 编辑家庭资料
 │   │   ├── edit-profile/           # 编辑个人资料
 │   │   └── crop-avatar/            # 头像裁剪
-│   └── task/                       # 共同事项
-│       ├── add-task/               # 新建事项
-│       ├── task-detail/            # 事项详情 / 状态机操作
-│       └── completed-tasks/        # 已完成 + 已放弃（按日期分组）
+│   ├── task/                       # 共同事项（3 个页面）
+│   │   ├── add-task/               # 新建事项
+│   │   ├── task-detail/            # 事项详情 / 状态机操作
+│   │   └── completed-tasks/        # 已完成 + 已放弃（按日期分组）
+│   └── ledger/                     # 家庭账本子包（4 个页面）
+│       ├── ledger-add/             # 记一笔（收入 / 支出 + 类目 + 凭证图）
+│       ├── ledger-detail/          # 账目详情 / 编辑 / 恢复
+│       ├── ledger-category-manager/ # 类目管理（添加 / 改名 / 隐藏 / 删除）
+│       └── ledger-stats/           # 账本统计（按月 + 按成员 + 按类目）
 ├── components/                     # 全局复用组件
 │   ├── AppTabBar.vue
-│   ├── home/HomeSummaryCard.vue
+│   ├── home/                       # 首页专用
+│   │   ├── HomeSummaryCard.vue
+│   │   └── MonthlyExpenseCard.vue  # 月度账目卡（支出 + 收入 并排）
+│   ├── ledger/                     # 账本专用
+│   │   ├── DatePickerButton.vue    # 日历选择器（wd-calendar 包装）
+│   │   ├── LedgerEntryItem.vue     # 单条账目渲染
+│   │   ├── CategoryFilterChips.vue # 类目多选 chip
+│   │   └── ReceiptThumb.vue        # 凭证图缩略图
 │   └── task/                       # TaskList / TaskSummaryCard + 共享 helper
-├── store/modules/                  # Pinia 状态
+├── store/modules/                  # Pinia 状态（5 个）
 │   ├── auth.ts
 │   ├── household.ts
+│   ├── invitation.ts
+│   ├── ledger.ts                   # 账本（entry / category / stats / filter / debounce）
 │   └── task.ts
 ├── services/                       # 与云函数一一对应的前端 service
+│   ├── auth-cloud.ts               # resolve-login
+│   ├── household-cloud.ts          # household
+│   ├── invitation-cloud.ts         # household（邀请 / 加入）
+│   ├── ledger-cloud.ts             # ledger
+│   ├── task-cloud.ts               # task
+│   ├── avatar-media.ts             # 云存储（头像 / 凭证图）
+│   └── entry-router.ts             # 账目跳转辅助
 ├── utils/                          # 通用工具
+│   ├── format.ts                   # ¥ / 月份 / 日期 格式化
+│   ├── ledger-validators.ts        # 账目 / 类目 draft 校验
+│   ├── display-text.ts             # 共享中文文案
+│   ├── image-selection.ts          # uni.chooseImage 包装
+│   ├── storage.ts                  # 本地存储（pending-* 临时态）
+│   ├── pending-household.ts
+│   ├── pending-invitation.ts
+│   ├── pending-ledger.ts
+│   └── pending-task.ts
 ├── types/                          # 跨模块类型契约
 ├── config/cloud.ts                 # 测试环境 ID
 ├── uni.scss                        # 品牌变量
 └── manifest.json
-cloudfunctions/                     # 4 个云函数源码
+cloudfunctions/                     # 4 业务云函数 + 3 清理定时任务
 docs/
-├── prd/                            # 7 份产品需求文档
+├── prd/                            # 9 份产品需求文档
 ├── plans/                          # 实施计划（按日期 + 模块名）
 └── brand/visual-standard.md        # 视觉规范
 tests/
-├── unit/                           # 40 套件 / 596 用例
+├── unit/                           # 40 套件 / 612 用例
 └── e2e/                            # 真机自动化（依赖微信开发者工具会话）
 ```
 
@@ -174,6 +205,22 @@ tests/
 - **不在 PRD 008 范围**：AA / 分摊 / 结算 / 已转 / 转账独立类型 / 预算 / 定期账 / OCR / 多币种 / 多人家庭（>2 成员）/ 与事项联动 / 私密账目 / 乐观锁 / Webhook / 推送 / 导出 / 搜索 / 年报
 - **双账号真机验证 15 条路径**（19-33，详见 `cloudfunctions/README.md`）
 
+### 7.1 账本体验增强（PRD 008 / Plan 2026-08-24-2320）
+2026-08-24 ~ 2026-08-25 在 PRD 008 基础上做了一轮体验增强（不引入新数据模型，筛选 / UI / 反馈层）：
+
+- **付款方筛选（人 + 类型 双维度）**：旧版"我付的 / 对方付的"+"支出 / 收入"两行 chip 视觉太重，合并成单按钮"全部人 · 全部类型 ⌄"+ 底部弹层。draft 本地态实现"点开不立即应用、确认才应用"，避免每次点 chip 触发云函数抖动。收入筛选用 `typeFilter` 字段从云端 `listEntries` 透传给 `findEntriesByHousehold`（之前字段被吞了——`LedgerEntryItem` 收入类型仍显示"付款"就是这个 bug）。
+- **入账文案**：`LedgerEntryItem` 收入类型显示 **入账** 而非 **付款**（U2，2026-08-25 改）。
+- **具体日期筛选**：`DatePickerButton` 包 `wd-calendar` type='date'，min=2020-01-01，max=今天 23:59:59（13位时间戳）。日期模式下 `pageSize=100, hasMore=false`（一天数据量小不分页），已删除区折叠（KTD6），下一天按钮按日期判断。
+- **首页月支出卡**：`MonthlyExpenseCard` 显示 **支出 ¥X | 收入 ¥Y** 并排，挂在 `pages/index` hero 下；收入字段从 `ledgerStats.monthIncomeCents` 读取。
+- **顶部统计跟着筛选条件走**：`loadStatsDebounced`（200ms 防抖）和 `loadEntries` 共享 `payerMode / typeFilter / categoryIds / selectedDate / currentMonth` 5 个 state，watch deep 触发重算。`getLedgerStats` 云端同样透传这 4 个筛选字段。
+- **筛选区重做**（设计稿 C）：去外层白 card 容器（用户反馈"中间双层臃肿"），主体筛选 + 类目筛选两按钮左右并排，类目展开占满整行宽度。
+- **日历 / FAB 弹层 z-index**：`wd-calendar` / `wd-popup` z-index 提到 200，超过 FAB 99；`isDatePickerOpen` / `filterSheetOpen` 状态触发 FAB `v-if` 隐藏，避免动画期间被遮。
+- **添加类目弹窗重做**：8 个色块（CATEGORY_PRESETS）一行展示 = 一次选择（合并图标 + 颜色），用色块 + 中文首字（餐/交/居/娱/医/服/教/它）替代 Wot UI iconfont 中缺失的 `fork-spoon / car / house / gamepad / first-aid / shopping-bag` 字形。
+- **金额输入框高度锁死**：`align-items: center`（was baseline）+ `height: 72rpx / min-height: 72rpx / line-height: 72rpx / padding: 0` 显式锁死，避免 flex 容器内 `<input>` 默认 min-width 太小导致金额被截断。
+- **头像加载占位**：`HomeSummaryCard` 新增 `avatarLoading` prop，自定义头像 URL 加载时显示 144rpx 加载圈，避免默认头像闪一下再替换。
+- **首页并行加载**：`loadHome` 用 `Promise.all` 并行拉 task 列表 + ledger stats + 自定义头像 URL，不再被最慢的一个串行阻塞。
+- **不引入新数据模型**：所有增强都在筛选 / UI / 反馈层；ledger 实体、类目、统计的口径完全没变，旧数据无缝兼容。
+
 ## 全站交互规范
 
 ### Loading 状态
@@ -224,7 +271,7 @@ tests/
 
 ```powershell
 npm run type-check      # vue-tsc --noEmit，0 错
-npm run test:unit       # 40 套件 / 596 用例
+npm run test:unit       # 40 套件 / 612 用例
 npm run build:mp-weixin # 微信小程序构建
 npm run build:h5        # H5 构建
 npm run test:e2e        # 依赖微信开发者工具的 automator，会话不通则跳过
@@ -250,5 +297,6 @@ npm run test:e2e        # 依赖微信开发者工具的 automator，会话不�
 - [x] 事项删除（软删 + 30 天物理清理）
 - [x] 资源体积优化（主包 1.88 MB → 601 KB）
 - [x] 家庭共同流水账（PRD 008）
+- [x] 账本体验增强：人×类型双维筛选 + 入账文案 + 日历日期筛选 + 首页月卡 + 顶部统计跟筛选走（Plan 2026-08-24-2320，详见 §7.1）
 - [x] 全站 loading 统一：去掉骨架屏 + 文案规范化（"正在加载 [模块][对象]"）
 - [ ] 下一个模块：见 `docs/prd/` 最新编号
