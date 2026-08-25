@@ -82,8 +82,20 @@ export function describeEntryAmount(type: 'expense' | 'income', amountCents: num
   return formatYuan(amountCents, { sign: type === 'expense' ? 'expense' : type === 'income' ? 'income' : 'none' })
 }
 
+/** 付款人字段描述。type 决定动词（付款 / 入账），hasLeft 决定是否追加"（已离开）"。
+ *  PRD 008 优化 R16-R19：收入账目不再统一显示"付款"，按 type 区分。 */
+export function describePayerLine(
+  type: 'expense' | 'income',
+  payer: { hasLeft?: boolean; nickname: string } | null | undefined,
+): string {
+  const name = payer?.nickname || '成员'
+  const verb = type === 'income' ? '入账' : '付款'
+  const tail = payer?.hasLeft ? '（已离开）' : ''
+  return `由 ${name} ${verb}${tail}`
+}
+
 /** 成员筛选描述。 */
-export type PayerFilter = 'all' | 'me'
+export type PayerFilter = 'all' | 'me' | 'other'
 
 export interface PayerFilterOption {
   value: PayerFilter
@@ -94,6 +106,21 @@ export function describePayerFilterOptions(selfMemberKey: string): PayerFilterOp
   return [
     { value: 'all', label: '全部' },
     { value: 'me', label: '我付的' },
+    { value: 'other', label: '对方付的' },
+  ]
+}
+
+/** 类型筛选描述。PRD 008 优化 R1：双维度 chip 第二行（支出 / 收入）。 */
+export interface TypeFilterOption {
+  value: 'all' | 'expense' | 'income'
+  label: string
+}
+
+export function describeTypeFilterOptions(): TypeFilterOption[] {
+  return [
+    { value: 'all', label: '全部' },
+    { value: 'expense', label: '支出' },
+    { value: 'income', label: '收入' },
   ]
 }
 
@@ -117,8 +144,30 @@ export function shiftMonth(month: string, delta: number): string {
   return `${ny}-${nm}`
 }
 
-/** 月份显示：2026-08 → "2026 年 8 月"。 */
+/** 日期切换：上 / 下一天。yyyy-MM-dd 字符串；delta 可正可负。
+ *  跨月 / 跨年通过 Date 自动进位（8 月 31 + 1 → 9 月 1，12 月 31 + 1 → 次年 1 月 1）。
+ *  delta 不是有限数（如 NaN）→ 返回空串。 */
+export function shiftDay(date: string, delta: number): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return ''
+  if (!Number.isFinite(delta)) return ''
+  const [y, m, d] = date.split('-').map((v) => Number.parseInt(v, 10))
+  if (!y || !m || !d) return ''
+  const dt = new Date(y, m - 1, d)
+  dt.setDate(dt.getDate() + delta)
+  if (!Number.isFinite(dt.getTime())) return ''
+  const ny = dt.getFullYear()
+  const nm = String(dt.getMonth() + 1).padStart(2, '0')
+  const nd = String(dt.getDate()).padStart(2, '0')
+  return `${ny}-${nm}-${nd}`
+}
+
+/** 日期显示：yyyy-MM → "2026 年 8 月"；yyyy-MM-dd → "2026 年 8 月 15 日"。 */
 export function describeMonthLabel(month: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(month)) {
+    const [y, m, d] = month.split('-').map((v) => Number.parseInt(v, 10))
+    if (!y || !m || !d) return ''
+    return `${y} 年 ${m} 月 ${d} 日`
+  }
   if (!/^\d{4}-\d{2}$/.test(month)) return ''
   const [y, m] = month.split('-').map((v) => Number.parseInt(v, 10))
   return `${y} 年 ${m} 月`

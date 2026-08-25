@@ -28,7 +28,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { LedgerEntrySummary } from '../../types/ledger'
-import { describeEntryAmount, type CategoryView } from '../../pages/ledger/ledger-home-view'
+import { describeEntryAmount, describePayerLine, type CategoryView } from '../../pages/ledger/ledger-home-view'
 import ReceiptThumb from './ReceiptThumb.vue'
 
 interface Props {
@@ -39,7 +39,9 @@ const props = defineProps<Props>()
 const emit = defineEmits<{ (e: 'press', entryId: string): void }>()
 
 const amountText = computed(() => describeEntryAmount(props.entry.type, props.entry.amountCents))
-const payerName = computed(() => `由 ${props.entry.payer.nickname || '成员'} 付款${props.entry.payer.hasLeft ? '（已离开）' : ''}`)
+// PRD 008 优化 R16：收入账目走 describePayerLine（"由 X 入账"），支出"由 X 付款"
+// 文案集中描述器 ledger-home-view.ts:describePayerLine，避免漂移
+const payerName = computed(() => describePayerLine(props.entry.type, props.entry.payer))
 
 function onPress(): void {
   emit('press', props.entry.id)

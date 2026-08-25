@@ -86,10 +86,12 @@ export interface LedgerCategoryView extends LedgerCategory {
 
 /** 列表筛选。 */
 export interface LedgerFilter {
-  /** yyyy-MM 字符串；'all' = 不按月筛选。 */
+  /** yyyy-MM 字符串；'all' = 不按月筛选；'yyyy-MM-dd' = 按日筛选。 */
   month: string
   /** 'all' = 全部；'me' = 仅我付的；具体 memberKey = 仅该成员。 */
   payerMode: 'all' | 'me' | string
+  /** 'all' = 不限类型；'expense' / 'income' = 仅该类型。 */
+  typeFilter: 'all' | 'expense' | 'income'
   /** 类目 id 数组；空数组 = 全部类目。 */
   categoryIds: string[]
 }
@@ -162,8 +164,10 @@ export interface RestoreLedgerEntryResult {
 }
 
 export interface ListLedgerEntriesRequest {
+  /** yyyy-MM | yyyy-MM-dd | 'all'。 */
   month: string
   payerMode: 'all' | 'me' | string
+  typeFilter?: 'all' | 'expense' | 'income'
   categoryIds: string[]
   includeDeleted?: boolean
   /** 从 1 开始的页码；已删除列表不传时保持原有完整读取。 */
@@ -228,7 +232,11 @@ export interface RemoveLedgerCategoryResult {
 }
 
 export interface GetLedgerStatsRequest {
+  /** yyyy-MM | yyyy-MM-dd | 'all'。 */
   month: string
+  payerMode?: 'all' | 'me' | string
+  typeFilter?: 'all' | 'expense' | 'income'
+  categoryIds?: string[]
 }
 
 export interface GetLedgerStatsResult {

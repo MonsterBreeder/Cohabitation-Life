@@ -2,6 +2,7 @@
 // 模式与 task store 一致：单飞保护 + 双重凭证 + 超时恢复 + 严格响应校验。
 
 import { defineStore } from 'pinia'
+import debounce from 'lodash.debounce'
 import {
   addLedgerCategoryInCloud,
   addLedgerEntryInCloud,
@@ -39,12 +40,12 @@ interface LedgerCloudClient {
   updateEntry(input: { entryId: string; operationToken: string; amountCents: number; categoryId: string; note: string; occurredAt: string; receiptMediaId: string | null }): Promise<{ status: 'UPDATED'; entry: LedgerEntrySummary }>
   deleteEntry(input: { entryId: string; operationToken: string }): Promise<{ status: 'DELETED'; entryId: string; deletedAt: string }>
   restoreEntry(input: { entryId: string; operationToken: string }): Promise<{ status: 'RESTORED'; entry: LedgerEntrySummary }>
-  listEntries(input: { month: string; payerMode: string; categoryIds: string[]; includeDeleted?: boolean; page?: number; pageSize?: number }): Promise<{ status: 'LISTED'; entries: LedgerEntrySummary[]; deletedEntries: LedgerEntrySummary[]; hasMore?: boolean }>
+  listEntries(input: { month: string; payerMode: string; typeFilter?: 'all' | 'expense' | 'income'; categoryIds: string[]; includeDeleted?: boolean; page?: number; pageSize?: number }): Promise<{ status: 'LISTED'; entries: LedgerEntrySummary[]; deletedEntries: LedgerEntrySummary[]; hasMore?: boolean }>
   getEntry(input: { entryId: string }): Promise<{ status: 'LOADED'; detail: LedgerEntryDetail }>
   addCategory(input: AddLedgerCategoryRequest): Promise<{ status: 'ADDED'; category: LedgerCategory }>
   updateCategory(input: { categoryId: string; operationToken: string; name?: string; setHiddenByMe?: boolean }): Promise<{ status: 'UPDATED'; category: LedgerCategory; hiddenByMe: boolean }>
   removeCategory(input: { categoryId: string; operationToken: string }): Promise<{ status: 'REMOVED'; categoryId: string }>
-  getStats(input: { month: string }): Promise<{ status: 'LOADED'; stats: LedgerStats }>
+  getStats(input: { month: string; payerMode?: string; typeFilter?: 'all' | 'expense' | 'income'; categoryIds?: string[] }): Promise<{ status: 'LOADED'; stats: LedgerStats }>
 }
 
 const defaultCloudClient: LedgerCloudClient = {
@@ -78,6 +79,10 @@ interface LedgerStateShape {
   stats: LedgerStats | null
   currentMonth: string
   payerMode: 'all' | 'me'
+  /** 按类型筛（'all' / 'expense' / 'income'）；PRD 008 优化 R1 双维度 chip 第二行 */
+  typeFilter: 'all' | 'expense' | 'income'
+  /** 按日筛，'yyyy-MM-dd'；空串 = 按月（R6-KTD2 / KTD4） */
+  selectedDate: string
   selectedCategoryIds: string[]
   phase: LedgerPhase
   errorMessage: string | null
@@ -89,6 +94,8 @@ interface LedgerStateShape {
   /** 当前家庭 + 当前用户；调用时由入口 store 注入 */
   householdId: string
   selfMemberKey: string
+  /** 内部持有 loadStats 防抖实例（U4 KTD3） */
+  _debouncedLoadStats: ReturnType<typeof debounce> | null
 }
 
 const initialState = (): LedgerStateShape => ({
@@ -99,6 +106,8 @@ const initialState = (): LedgerStateShape => ({
   stats: null,
   currentMonth: '',
   payerMode: 'all',
+  typeFilter: 'all',
+  selectedDate: '',
   selectedCategoryIds: [],
   phase: 'idle',
   errorMessage: null,
@@ -109,6 +118,7 @@ const initialState = (): LedgerStateShape => ({
   entryLoadVersion: 0,
   householdId: '',
   selfMemberKey: '',
+  _debouncedLoadStats: null,
 })
 
 // === 单飞 / 幂等锁 ===
@@ -119,6 +129,11 @@ const LEDGER_PAGE_SIZE = 20
 function inFlightKey(scope: string, key: string): string {
   return `${scope}:${key}`
 }
+
+// === 防抖 loadStats ===
+// U4 KTD3：5 个 setter 变化触发 200ms 防抖 loadStats；queryKey 用全部 state 拼，确保同筛选只打一次。
+// store getter 第一次访问时构造一次，复用同一个 debounced 实例。
+// resetLedgerStoreForTesting 会重置 _debouncedLoadStats 让 test 重新构造。
 
 // === store ===
 
@@ -144,8 +159,8 @@ export const useLedgerStore = defineStore('ledger', {
       for (const c of list) map[c.id] = c
       return map
     },
-    /** 当前筛选下的账目（active）。payerMode 过滤由云端在 listEntries 时完成；
-     *  前端只在 selectedCategoryIds 上做二次过滤。 */
+    /** 当前筛选下的账目（active）。payerMode / typeFilter 过滤由云端在 listEntries 时完成；
+     *  前端在 selectedCategoryIds 上做二次过滤（云端也会做；前端兜底）。 */
     monthEntries(state): LedgerEntrySummary[] {
       const entries = Array.isArray(state.entries) ? state.entries : []
       const ids = Array.isArray(state.selectedCategoryIds) ? state.selectedCategoryIds : []
@@ -160,6 +175,10 @@ export const useLedgerStore = defineStore('ledger', {
 
   actions: {
     resetLedgerStoreForTesting(): void {
+      if (this._debouncedLoadStats) {
+        // lodash.debounce 返回的 DebouncedFn 有 cancel() 方法
+        (this._debouncedLoadStats as { cancel: () => void }).cancel?.()
+      }
       Object.assign(this, initialState())
       inFlight.clear()
     },
@@ -178,6 +197,14 @@ export const useLedgerStore = defineStore('ledger', {
 
     setPayerMode(mode: 'all' | 'me'): void {
       this.payerMode = mode
+    },
+
+    setTypeFilter(type: 'all' | 'expense' | 'income'): void {
+      this.typeFilter = type
+    },
+
+    setSelectedDate(date: string): void {
+      this.selectedDate = date
     },
 
     setSelectedCategoryIds(ids: string[]): void {
@@ -211,8 +238,12 @@ export const useLedgerStore = defineStore('ledger', {
 
     async loadEntries(reset = true): Promise<void> {
       if (!this.householdId) return
-      const queryKey = `${this.currentMonth}|${this.payerMode}|${this.selectedCategoryIds.join(',')}`
+      // PRD 008 优化：queryKey 包含 typeFilter + selectedDate，KTD4 date 模式不分页
+      const effectiveMonth = this.selectedDate || this.currentMonth
+      const queryKey = `${effectiveMonth}|${this.payerMode}|${this.typeFilter}|${this.selectedCategoryIds.join(',')}`
       const nextPage = reset ? 1 : this.entriesPage + 1
+      // KTD4：date 模式不分页（pageSize 拉大；hasMore 始终 false）
+      const effectivePageSize = this.selectedDate ? 100 : LEDGER_PAGE_SIZE
       if (!reset && (!this.entriesHasMore || this.isLoadingMore)) return
       const key = inFlightKey('list', `${queryKey}|${nextPage}`)
       if (inFlight.has(key)) return
@@ -233,18 +264,20 @@ export const useLedgerStore = defineStore('ledger', {
       this.errorMessage = null
       try {
         const result = await cloudClient.listEntries({
-          month: this.currentMonth,
+          month: effectiveMonth,
           payerMode: this.payerMode,
+          typeFilter: this.typeFilter,
           categoryIds: this.selectedCategoryIds,
           page: nextPage,
-          pageSize: LEDGER_PAGE_SIZE,
+          pageSize: effectivePageSize,
         })
         if (this.activeEntryQueryKey !== queryKey || this.entryLoadVersion !== loadVersion) return
         const knownIds = new Set(reset ? [] : this.entries.map((entry) => entry.id))
         const newEntries = result.entries.filter((entry) => !knownIds.has(entry.id))
         this.entries = reset ? newEntries : [...this.entries, ...newEntries]
         this.entriesPage = nextPage
-        this.entriesHasMore = Boolean(result.hasMore)
+        // KTD4：date 模式无 hasMore（永远只有一天的账目）
+        this.entriesHasMore = this.selectedDate ? false : Boolean(result.hasMore)
         this.phase = 'idle'
       } catch (error) {
         if (this.activeEntryQueryKey === queryKey && this.entryLoadVersion === loadVersion) this.applyError(error)
@@ -276,11 +309,27 @@ export const useLedgerStore = defineStore('ledger', {
     async loadStats(month: string): Promise<void> {
       if (!this.householdId) return
       try {
-        const result = await cloudClient.getStats({ month })
+        const effectiveMonth = this.selectedDate || month
+        const result = await cloudClient.getStats({
+          month: effectiveMonth,
+          payerMode: this.payerMode,
+          typeFilter: this.typeFilter,
+          categoryIds: this.selectedCategoryIds,
+        })
         this.stats = result.stats
       } catch (error) {
         this.applyError(error)
       }
+    },
+
+    /** 触发一次 200ms 防抖的 loadStats。多次快速调用合并为一次云函数调用。 */
+    loadStatsDebounced(): void {
+      if (!this._debouncedLoadStats) {
+        this._debouncedLoadStats = debounce(() => {
+          void this.loadStats(this.currentMonth)
+        }, 200)
+      }
+      this._debouncedLoadStats()
     },
 
     async addEntry(input: AddLedgerEntryRequest): Promise<LedgerEntrySummary | null> {

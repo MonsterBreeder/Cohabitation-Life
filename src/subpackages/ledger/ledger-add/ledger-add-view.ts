@@ -157,16 +157,21 @@ export function validateCategoryDraft(draft: CategoryDraft): string | null {
   }
 }
 
-/** 8 个图标 / 8 个颜色的预设池（前端不能上传自定义，只能从这 8 选 1）。 */
-export const CATEGORY_ICON_OPTIONS: Array<{ value: string; label: string; iconName: string }> = [
-  { value: 'fork-spoon', label: '餐饮', iconName: 'fork-spoon' },
-  { value: 'car', label: '交通', iconName: 'car' },
-  { value: 'house', label: '居家', iconName: 'house' },
-  { value: 'gamepad', label: '娱乐', iconName: 'gamepad' },
-  { value: 'first-aid', label: '医疗', iconName: 'first-aid' },
-  { value: 'shopping-bag', label: '服饰', iconName: 'shopping-bag' },
-  { value: 'book', label: '教育', iconName: 'book' },
-  { value: 'tag', label: '其他', iconName: 'tag' },
+/** 8 个图标 / 8 个颜色的预设池（前端不能上传自定义，只能从这 8 选 1）。
+ *  Wot UI iconfont 里 `fork-spoon` / `car` / `house` / `gamepad` / `first-aid` /
+ *  `shopping-bag` 这 6 个字符在 ttf 里都没字形（只有 `book` 和 `tag` 有），硬塞
+ *  `<wd-icon :name="x">` 会渲染成空白——用户反馈"只有教育和其它有图标"。
+ *  改用 `firstChar` 字段显示类目首字（餐/交/居/娱/医/服/教/它），保证 8 个都能看见。
+ *  `iconName` 字段保留作历史兼容（如果将来 Wot UI 补齐字符，模板可以优先用 iconName）。 */
+export const CATEGORY_ICON_OPTIONS: Array<{ value: string; label: string; iconName: string; firstChar: string }> = [
+  { value: 'fork-spoon', label: '餐饮', iconName: 'fork-spoon', firstChar: '餐' },
+  { value: 'car', label: '交通', iconName: 'car', firstChar: '交' },
+  { value: 'house', label: '居家', iconName: 'house', firstChar: '居' },
+  { value: 'gamepad', label: '娱乐', iconName: 'gamepad', firstChar: '娱' },
+  { value: 'first-aid', label: '医疗', iconName: 'first-aid', firstChar: '医' },
+  { value: 'shopping-bag', label: '服饰', iconName: 'shopping-bag', firstChar: '服' },
+  { value: 'book', label: '教育', iconName: 'book', firstChar: '教' },
+  { value: 'tag', label: '其他', iconName: 'tag', firstChar: '它' },
 ]
 
 export const CATEGORY_COLOR_OPTIONS: Array<{ value: string; label: string; hex: string }> = [
@@ -179,6 +184,21 @@ export const CATEGORY_COLOR_OPTIONS: Array<{ value: string; label: string; hex: 
   { value: 'teal', label: '青', hex: '#4DB6AC' },
   { value: 'gray', label: '灰', hex: '#74847D' },
 ]
+
+/** 把 8 个图标选项 + 8 个颜色选项合并成 8 个"图标+颜色"组合（按 idx 对齐），
+ *  让添加类目弹窗能在一行展示所有 8 个色块——比"先选图标再选颜色"两行选择更紧凑。
+ *  用户反馈"双层页面设计太臃肿"——把"图标行 + 颜色行"两次选择合并为一次。 */
+export const CATEGORY_PRESETS: Array<{
+  iconKey: string
+  colorKey: string
+  firstChar: string
+  hex: string
+}> = CATEGORY_ICON_OPTIONS.map((icon, idx) => ({
+  iconKey: icon.value,
+  colorKey: CATEGORY_COLOR_OPTIONS[idx].value,
+  firstChar: icon.firstChar,
+  hex: CATEGORY_COLOR_OPTIONS[idx].hex,
+}))
 
 /** 时间格式：把 ISO 转成"今天"/"昨天"/"M月D日"/"yyyy-MM-dd"。PRD 008 后期决定账本不记时分，只到日期。 */
 export function describeOccurredAtShort(occurredAt: string, now: Date = new Date()): string {

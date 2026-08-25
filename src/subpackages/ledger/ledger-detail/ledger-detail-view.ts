@@ -3,6 +3,7 @@
 
 import type { LedgerEntryDetail, LedgerEntryType } from '../../../types/ledger'
 import { formatYuan } from '../../../utils/format'
+import { describePayerLine as describePayerLineByType } from '../../../pages/ledger/ledger-home-view'
 
 export type DetailAction = 'edit' | 'delete'
 
@@ -42,11 +43,11 @@ export function describeDeleteConfirmMessage(detail: LedgerEntryDetail | undefin
   return `「${note}」删除后无法在产品内恢复，30 天后系统清理。是否继续？`
 }
 
-/** 付款人显示文案。 */
+/** 付款人显示文案。PRD 008 优化 R17：按 type 区分"付款"和"入账"。
+ *  实际文案生成委托给 ledger-home-view:describePayerLine（共享描述器避免漂移）。 */
 export function describePayerLine(detail: LedgerEntryDetail | undefined): string {
   if (!detail) return ''
-  if (detail.payer.hasLeft) return `${detail.payer.nickname}（已离开）`
-  return `由 ${detail.payer.nickname} 付款`
+  return describePayerLineByType(detail.type, detail.payer)
 }
 
 /** 状态描述：当前账目所属时间窗口（今天 / 昨天 / M月D日 / yyyy-MM-dd）。PRD 008 后期决定账本不记时分，只到日期。 */
