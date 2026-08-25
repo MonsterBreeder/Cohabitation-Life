@@ -78,7 +78,7 @@ interface LedgerStateShape {
   hiddenByMeCategoryIds: string[]
   stats: LedgerStats | null
   currentMonth: string
-  payerMode: 'all' | 'me'
+  payerMode: 'all' | 'me' | 'other'
   /** 按类型筛（'all' / 'expense' / 'income'）；PRD 008 优化 R1 双维度 chip 第二行 */
   typeFilter: 'all' | 'expense' | 'income'
   /** 按日筛，'yyyy-MM-dd'；空串 = 按月（R6-KTD2 / KTD4） */
@@ -195,7 +195,7 @@ export const useLedgerStore = defineStore('ledger', {
       this.currentMonth = month
     },
 
-    setPayerMode(mode: 'all' | 'me'): void {
+    setPayerMode(mode: 'all' | 'me' | 'other'): void {
       this.payerMode = mode
     },
 
