@@ -3,9 +3,9 @@
   <view class="invite-status">
     <view class="invite-status__dot" />
     <view class="invite-status__content">
-      <image class="invite-status__logo" src="/static/brand/logo.png" mode="aspectFit" aria-label="家里有事 Logo" />
+      <image class="invite-status__logo" src="/static/brand/logo.png" mode="aspectFit" aria-label="睦录 Logo" />
       <view class="invite-status__card" data-testid="invite-status-card">
-        <text class="invite-status__eyebrow">家里有事</text>
+        <text class="invite-status__eyebrow">睦录</text>
         <text class="invite-status__title" data-testid="invite-status-title">{{ title }}</text>
         <text class="invite-status__description" data-testid="invite-status-description">{{ message }}</text>
         <view class="invite-status__tip">

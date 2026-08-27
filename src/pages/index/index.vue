@@ -17,7 +17,7 @@
 
     <view v-else-if="household && profile" class="home-content" :data-testid="household.memberCount === 1 ? 'home-single-member' : 'home-two-members'">
       <view class="hero">
-        <!-- 品牌 logo 放在 eyebrow 行（与"家里有事"同级），保持视觉但不喧宾夺主。
+        <!-- 品牌 logo 放在 eyebrow 行（与"睦录"同级），保持视觉但不喧宾夺主。
              旁边跟品牌主色文字 + 圆形描边占位，跟《品牌视觉标准》"Logo 周围应保留充足空白"对齐。 -->
         <view class="hero__brand">
           <image
@@ -26,7 +26,7 @@
             mode="aspectFit"
             aria-label="睦录品牌 logo"
           />
-          <text class="hero__eyebrow">家里有事</text>
+          <text class="hero__eyebrow">睦录</text>
         </view>
         <text class="hero__title">欢迎回家</text>
         <text class="hero__copy">家不在大小，有人惦记就好。</text>

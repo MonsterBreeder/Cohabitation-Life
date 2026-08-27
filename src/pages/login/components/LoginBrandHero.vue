@@ -8,11 +8,11 @@
         src="/static/brand/logo.png"
         mode="aspectFit"
         data-testid="login-logo"
-        aria-label="家里有事 Logo"
+        aria-label="睦录 Logo"
       />
       <view class="brand-hero__accent brand-hero__accent--coral" />
     </view>
-    <text class="brand-hero__name" data-testid="login-product-name">家里有事</text>
+    <text class="brand-hero__name" data-testid="login-product-name">睦录</text>
     <text v-if="!compact" class="brand-hero__title" data-testid="login-title">两个人的小事，一起记得</text>
     <text v-if="!compact" class="brand-hero__subtitle" data-testid="login-subtitle">一起记住、认领和完成家里的小事</text>
   </view>
