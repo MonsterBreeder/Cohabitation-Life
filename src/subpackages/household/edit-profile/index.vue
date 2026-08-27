@@ -5,15 +5,12 @@
     <view v-else class="edit-profile-page__editor" data-testid="edit-profile-page">
       <view class="edit-profile-page__hero"><text class="edit-profile-page__hero-title">选择你在家里的样子</text><text class="edit-profile-page__hero-copy">这里的选择只是昵称和形象，不会记录性别。</text></view>
       <view class="edit-profile-page__panel">
-        <text class="edit-profile-page__section-title">快捷选择</text>
-        <view class="edit-profile-page__presets">
-          <wd-button v-for="item in profilePresets" :key="item.id" size="small" :plain="preset !== item.id" @click="selectPreset(item)">{{ item.label }}</wd-button>
-          <wd-button size="small" :plain="preset !== 'random'" @click="selectRandom">随机形象</wd-button>
-        </view>
-        <text class="edit-profile-page__section-title edit-profile-page__section-title--spaced">内置形象</text>
-        <ProfileAvatarPicker v-model="avatarId" @update:model-value="markCustomAvatar" />
-        <view v-if="customPreview" class="edit-profile-page__custom-preview"><wd-avatar :src="customPreview" size="108rpx" /><text>已通过检查的自定义头像</text></view>
-        <view class="edit-profile-page__wechat-note"><text>自定义头像和微信资料稍后开放</text><text>云端访问规则完成真实验证后才会开放入口。</text></view>
+        <text class="edit-profile-page__section-title">内置形象</text>
+        <ProfileAvatarPicker
+          v-model="draftAvatar"
+          :custom-preview="customPreview"
+          @pick-custom="goToCropAvatar"
+        />
         <text class="edit-profile-page__section-title edit-profile-page__section-title--spaced">昵称</text>
         <wd-input v-model="nickname" placeholder="例如：小伙伴" clearable @input="markCustomNickname" />
         <text v-if="nicknameValidation" class="edit-profile-page__error">{{ nicknameValidation }}</text>
@@ -25,35 +22,58 @@
 </template>
 
 <script setup lang="ts">
+// 编辑个人资料页。
+// 设计要点：
+// 1) 头像用单一 draftAvatar 表达（覆盖 builtin / custom 两态），Picker 通过 v-model 与之绑定；
+// 2) 点击 Picker 第 5 格 → 跳 crop-avatar 子分包，通过 eventChannel 监听 avatarApproved 事件；
+// 3) 进入页面时若 profile 已是 custom，主动拉一次临时 URL 让 Picker 缩略图显示；拉取失败时回退到 "+" 占位但不重置草稿；
+// 4) 草稿不入 store，未保存就退出页面等价于放弃；onUnload 解绑 eventChannel 防止 stale 回调。
 import { computed, ref } from 'vue'
-import { onBackPress, onShow } from '@dcloudio/uni-app'
+import { onBackPress, onShow, onUnload } from '@dcloudio/uni-app'
 import { storeToRefs } from 'pinia'
 import { useHouseholdStore } from '../../../store/modules/household'
-import type { BuiltinProfileAvatarId, CurrentProfile, ProfileAvatar } from '../../../types/household'
+import type { CurrentProfile, ProfileAvatar } from '../../../types/household'
+import { getAvatarTemporaryUrl } from '../../../services/avatar-media'
 import ProfileAvatarPicker from '../components/ProfileAvatarPicker.vue'
-import { hasProfileChanges, nicknameChangeError, pickRandomProfileAvatar, profilePresets } from '../edit-view'
+import { hasProfileChanges, nicknameChangeError } from '../edit-view'
 
 const store = useHouseholdStore()
 const { profile, errorMessage } = storeToRefs(store)
 const nickname = ref('')
-const avatarId = ref<BuiltinProfileAvatarId>('person-neutral')
-const preset = ref<CurrentProfile['profilePreset']>('neutral')
+// draftAvatar 是页面级别的"当前选中头像"单一来源；为 null 表示尚未初始化。
+const draftAvatar = ref<ProfileAvatar | null>(null)
+// customPreview 是 Picker 第 5 格要显示的图片 URL——可能是云端临时链接，也可能是 crop-avatar 回传的本地路径。
+const customPreview = ref('')
 const loading = ref(false)
 const saving = ref(false)
 const initialized = ref(false)
-const customAvatar = ref<ProfileAvatar>(); const customPreview = ref('')
 const nicknameValidation = ref('')
-const draft = computed<CurrentProfile>(() => ({ nickname: nickname.value, avatar: customAvatar.value || { kind: 'builtin', id: avatarId.value }, profilePreset: preset.value }))
-const changed = computed(() => profile.value ? hasProfileChanges(profile.value, draft.value) : false)
+// 已注册 eventChannel 监听，便于在 onUnload 摘除避免 stale 回调。
+let channelOff: (() => void) | undefined
+
+const draft = computed<CurrentProfile | null>(() => draftAvatar.value
+  ? { nickname: nickname.value, avatar: draftAvatar.value }
+  : null)
+const changed = computed(() => profile.value && draft.value ? hasProfileChanges(profile.value, draft.value) : false)
 
 function initialise(): void {
   if (!profile.value || initialized.value) return
   nickname.value = profile.value.nickname
-  if (profile.value.avatar.kind === 'builtin') avatarId.value = profile.value.avatar.id
-  else customAvatar.value = profile.value.avatar
-  preset.value = profile.value.profilePreset
+  draftAvatar.value = profile.value.avatar
   initialized.value = true
+  // 已有自定义头像时主动拉临时 URL 显示缩略图；失败不重置草稿，让用户可以再点 "+" 重新上传。
+  if (profile.value.avatar.kind === 'custom') void refreshCustomPreview(profile.value.avatar.resourceId)
 }
+
+async function refreshCustomPreview(resourceId: string): Promise<void> {
+  try {
+    customPreview.value = await getAvatarTemporaryUrl(resourceId)
+  } catch {
+    customPreview.value = ''
+    uni.showToast({ title: '自定义头像暂时无法显示，请重新上传', icon: 'none' })
+  }
+}
+
 async function load(): Promise<void> {
   loading.value = true
   if (!profile.value) await store.loadCurrent()
@@ -61,12 +81,34 @@ async function load(): Promise<void> {
   if (!profile.value) { uni.navigateBack(); return }
   initialise()
 }
-function selectPreset(item: typeof profilePresets[number]): void { customAvatar.value = undefined; customPreview.value = ''; preset.value = item.id; nickname.value = item.nickname; nicknameValidation.value = ''; avatarId.value = item.avatarId }
-function selectRandom(): void { customAvatar.value = undefined; customPreview.value = ''; preset.value = 'random'; nickname.value = '小伙伴'; nicknameValidation.value = ''; avatarId.value = pickRandomProfileAvatar() }
-function markCustomAvatar(): void { customAvatar.value = undefined; customPreview.value = ''; if (!['xiaoshuai', 'xiaomei', 'random'].includes(preset.value)) preset.value = 'custom' }
-function markCustomNickname(): void { nicknameValidation.value = ''; preset.value = 'custom' }
+
+function markCustomNickname(): void { nicknameValidation.value = '' }
+
+function registerEventChannel(): void {
+  // 仅注册一次；onShow 多次触发时不能重复挂监听，否则会有多个 stale 回调。
+  if (channelOff) return
+  const pages = getCurrentPages()
+  const page = pages.at(-1) as (Record<string, unknown> & { getOpenerEventChannel?: () => { on: (event: string, fn: (data: { avatar: { resourceId: string; digest: string }; previewPath: string }) => void) => void; off?: (event: string) => void } | undefined }) | undefined
+  const channel = page?.getOpenerEventChannel?.()
+  if (!channel) return
+  const handler = (data: { avatar: { resourceId: string; digest: string }; previewPath: string }) => {
+    if (!data || !data.avatar || !data.avatar.resourceId || !data.avatar.digest) return
+    draftAvatar.value = { kind: 'custom', resourceId: data.avatar.resourceId, digest: data.avatar.digest }
+    customPreview.value = data.previewPath || ''
+    nicknameValidation.value = ''
+    uni.showToast({ title: '已选择新头像', icon: 'success' })
+  }
+  channel.on('avatarApproved', handler)
+  channelOff = () => { try { channel.off?.('avatarApproved') } catch { /* 旧版 eventChannel 可能没有 off，忽略 */ } }
+}
+
+function goToCropAvatar(): void {
+  registerEventChannel()
+  uni.navigateTo({ url: '/subpackages/household/crop-avatar/index?purpose=profile' })
+}
+
 async function save(): Promise<void> {
-  if (saving.value || !profile.value) return
+  if (saving.value || !profile.value || !draft.value) return
   nicknameValidation.value = nicknameChangeError(profile.value.nickname, nickname.value)
   if (nicknameValidation.value) return
   saving.value = true
@@ -82,6 +124,7 @@ function cancel(): void {
 }
 onBackPress(() => { if (!changed.value || saving.value) return false; cancel(); return true })
 onShow(() => { void load() })
+onUnload(() => { channelOff?.(); channelOff = undefined })
 </script>
 
 <style lang="scss" scoped>
@@ -136,35 +179,10 @@ onShow(() => { void load() })
   &__section-title--spaced {
     margin-top: 38rpx;
   }
-  &__presets {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 16rpx;
-  }
   &__error {
     display: block;
     margin-top: 12rpx;
     color: #d95c4f;
-    font-size: 23rpx;
-  }
-  &__wechat-note {
-    display: flex;
-    flex-direction: column;
-    gap: 8rpx;
-    margin-top: 34rpx;
-    padding: 22rpx;
-    border-radius: 20rpx;
-    background: #f7f8f7;
-    color: $brand-color-text-secondary;
-    font-size: 23rpx;
-    line-height: 1.55;
-  }
-  &__custom-preview {
-    display: flex;
-    align-items: center;
-    gap: 18rpx;
-    margin: 16rpx 0;
-    color: $brand-color-text-secondary;
     font-size: 23rpx;
   }
 }

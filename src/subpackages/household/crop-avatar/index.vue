@@ -26,7 +26,17 @@ async function choose(): Promise<void> {
     const checked = validateLocalAvatar({ path: file.tempFilePath, size: file.size, mimeType: file.fileType === 'image' ? undefined : file.fileType })
     if (!checked.ok) { uni.showToast({ title: checked.message, icon: 'none' }); return }
     sourcePath.value = file.tempFilePath; cropVisible.value = true
-  } catch { /* 用户取消选择时不改变已有资料。 */ }
+  } catch (error) {
+    // 显式露出错误：以前静默吞掉，开发者工具模拟器上常常"啥也没发生"也无从排查。
+    // 真机用户取消选择时 chooseMedia 直接 reject，不报错；模拟器可能因为权限/相册为空 fail。
+    // 微信 fail 回调传的是 { errMsg: 'chooseMedia:fail ...' }，不是 Error 实例，要把 errMsg 抽出来。
+    const errMsg = (typeof error === 'object' && error !== null && 'errMsg' in error)
+      ? String((error as { errMsg: unknown }).errMsg)
+      : (error instanceof Error ? error.message : '')
+    if (errMsg && /cancel/i.test(errMsg)) return
+    const title = errMsg ? `打开相册失败：${errMsg}` : '打开相册失败，请稍后重试'
+    uni.showToast({ title, icon: 'none' })
+  }
 }
 async function confirmCrop(event: { tempFilePath: string }): Promise<void> {
   uploading.value = true

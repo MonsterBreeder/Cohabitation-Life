@@ -54,10 +54,9 @@ function isAvatar(value: unknown, prefix: 'household' | 'person'): boolean {
 /** 首页成员列表只接受两条受限展示资料，拒绝携带身份编号或任意扩展字段的伪造结果。 */
 function isMemberDisplay(value: unknown): boolean {
   if (!value || typeof value !== 'object') return false
-  const member = value as { nickname?: unknown; avatar?: unknown; profilePreset?: unknown; isSelf?: unknown }
+  const member = value as { nickname?: unknown; avatar?: unknown; isSelf?: unknown }
   return typeof member.nickname === 'string'
     && isAvatar(member.avatar, 'person')
-    && ['neutral', 'xiaoshuai', 'xiaomei', 'random', 'custom'].includes(String(member.profilePreset))
     && typeof member.isSelf === 'boolean'
 }
 
@@ -83,7 +82,6 @@ function isHouseholdResult(value: unknown): value is HouseholdResult {
     && home.household.members.every(isMemberDisplay)
     && typeof home.profile?.nickname === 'string'
     && isAvatar(home.profile?.avatar, 'person')
-    && ['neutral', 'xiaoshuai', 'xiaomei', 'random', 'custom'].includes(home.profile?.profilePreset)
 }
 
 async function call(action: 'create' | 'confirm' | 'get' | 'updateHousehold' | 'updateProfile', input: CreateHouseholdRequest | ConfirmHouseholdRequest | UpdateHouseholdRequest | UpdateProfileRequest | Record<string, never>): Promise<HouseholdResult> {

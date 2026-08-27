@@ -48,7 +48,6 @@ const DEFAULT_HOUSEHOLD_NAME = '我们的小家'
 const DEFAULT_PROFILE_NAME = '小伙伴'
 const HOUSEHOLD_AVATARS = new Set(['household-01', 'household-02', 'household-03'])
 const PROFILE_AVATARS = new Set(['person-neutral', 'person-01', 'person-02', 'person-03', 'person-04'])
-const PROFILE_PRESETS = new Set(['neutral', 'xiaoshuai', 'xiaomei', 'random', 'custom'])
 const CREDENTIAL_PATTERN = /^[A-Za-z0-9_-]{16,128}$/
 const PROFILE_NAME_MAX_LENGTH = 10
 
@@ -93,8 +92,7 @@ function normaliseProfile(record) {
   const savedNickname = record && typeof record.nickname === 'string' ? record.nickname.trim() : ''
   const nickname = savedNickname && !/\r|\n/u.test(savedNickname) ? savedNickname : DEFAULT_PROFILE_NAME
   const avatar = safeAvatar(record, PROFILE_AVATARS, { kind: 'builtin', id: 'person-neutral' })
-  const profilePreset = record && PROFILE_PRESETS.has(record.profilePreset) ? record.profilePreset : 'neutral'
-  return { nickname, avatar, profilePreset }
+  return { nickname, avatar }
 }
 
 /** 将家庭成员资料收敛为页面仅需的昵称、头像与“我”标记，内部身份编号永不离开云端。 */
@@ -244,7 +242,7 @@ async function updateProfile(input, dependencies) {
   if (!identityKey || !repository) throw new HouseholdDomainError('INVALID_REQUEST')
   const nickname = typeof (input && input.nickname) === 'string' ? input.nickname.trim() : ''
   const avatar = input && input.avatar
-  if (!nickname || /\r|\n/u.test(nickname) || !avatar || !PROFILE_PRESETS.has(input.profilePreset)) {
+  if (!nickname || /\r|\n/u.test(nickname) || !avatar) {
     throw new HouseholdDomainError('INVALID_REQUEST')
   }
   const existing = await repository.findHouseholdsByMemberKey(identityKey)
@@ -259,7 +257,7 @@ async function updateProfile(input, dependencies) {
     ? { kind: 'builtin', id: avatar.id }
     : repository.avatarMedia ? await validateAvatarReference(avatar, 'profile', identityKey, repository.avatarMedia) : null
   if (!validAvatar) throw new HouseholdDomainError('INVALID_REQUEST')
-  const profile = { nickname, avatar: validAvatar, profilePreset: input.profilePreset, updatedAt: now() }
+  const profile = { nickname, avatar: validAvatar, updatedAt: now() }
   if (repository.swapProfileAvatar) await repository.swapProfileAvatar({ householdId: existing[0]._id, identityKey, data: profile, now: profile.updatedAt })
   else await repository.updateUser(identityKey, profile)
   return toResult(existing[0], identityKey, false, profile)

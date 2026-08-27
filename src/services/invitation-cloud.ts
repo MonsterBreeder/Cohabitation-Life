@@ -28,7 +28,7 @@ function initialize(): void {
 
 function isResult(value: unknown): value is InvitationResult {
   if (!value || typeof value !== 'object' || typeof (value as { status?: unknown }).status !== 'string' || typeof (value as { retryable?: unknown }).retryable !== 'boolean') return false
-  const result = value as { status: string; inviteToken?: unknown; expiresAt?: unknown; inviteeName?: unknown; household?: { name?: unknown; memberCount?: unknown; members?: unknown }; inviter?: { nickname?: unknown; avatar?: unknown; profilePreset?: unknown } }
+  const result = value as { status: string; inviteToken?: unknown; expiresAt?: unknown; inviteeName?: unknown; household?: { name?: unknown; memberCount?: unknown; members?: unknown }; inviter?: { nickname?: unknown; avatar?: unknown } }
   if (result.status === 'INVITE_READY') return typeof result.inviteToken === 'string' && typeof result.expiresAt === 'string' && typeof result.inviteeName === 'string'
   if (result.status === 'INVITE_PREVIEW') return typeof result.household?.name === 'string' && typeof result.household?.memberCount === 'number' && typeof result.inviter?.nickname === 'string' && Boolean(result.inviter.avatar)
   if (result.status === 'TRANSFER_CONFIRM') return true

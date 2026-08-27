@@ -141,13 +141,13 @@ describe('邀请与成员关系', () => {
     const repository = createRepository({
       households: [{ _id: 'home-1', name: '我们的小家', ownerKey: 'owner', memberKeys: ['owner'] }],
       invitations: [{ _id: 'invite_home-1', householdId: 'home-1', tokenHash: require('crypto').createHash('sha256').update(token).digest('hex'), expiresAt: '2026-08-15T12:00:00.000Z' }],
-      users: [{ _id: 'owner', nickname: '小帅', avatar: { kind: 'builtin', id: 'person-01' }, profilePreset: 'xiaoshuai' }],
+      users: [{ _id: 'owner', nickname: '小帅', avatar: { kind: 'builtin', id: 'person-01' } }],
     })
 
     await expect(previewInvitation({ inviteToken: token }, dependencies(repository, 'guest'))).resolves.toEqual({
       status: 'INVITE_PREVIEW', retryable: false,
       household: { name: '我们的小家', avatar: { kind: 'builtin', id: 'household-01' }, memberCount: 1 },
-      inviter: { nickname: '小帅', avatar: { kind: 'builtin', id: 'person-01' }, profilePreset: 'xiaoshuai' },
+      inviter: { nickname: '小帅', avatar: { kind: 'builtin', id: 'person-01' } },
     })
     expect(JSON.stringify(await previewInvitation({ inviteToken: token }, dependencies(repository, 'guest')))).not.toContain('owner')
   })

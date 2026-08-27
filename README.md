@@ -16,7 +16,7 @@
 | 状态 | Pinia 2.1 | 每个业务域一个 store，对象式 + 单飞保护 + 超时恢复 |
 | 样式 | SCSS + 品牌变量 | `src/uni.scss` 集中维护 `$brand-color-*`、`$brand-radius-*` |
 | 后端 | 微信云开发（云函数 + 云数据库） | 4 个云函数，见下表 |
-| 工具链 | Vite 5 + vue-tsc + Jest 29 | TS 严格模式、单元测试 40 套件 / 612 用例 |
+| 工具链 | Vite 5 + vue-tsc + Jest 29 | TS 严格模式、单元测试 41 套件 / 626 用例 |
 
 ## 本地运行
 
@@ -25,6 +25,7 @@
 3. 启动开发：`npm run dev:mp-weixin`
 4. 微信开发者工具 → 导入项目 → 选择**项目根目录**（不要直接选 `dist/dev/mp-weixin`）。`project.config.json` 已经把 `miniprogramRoot` 指向 `dist/build/mp-weixin/`，`cloudfunctionRoot` 指向 `cloudfunctions/`。
 5. 微信开发者工具里点"云开发" → 创建/选择测试环境 → 记下环境 ID（用来填 `src/config/cloud.ts`）。
+6. **隐私协议声明（必做，否则 `chooseMedia` / `chooseImage` 会报 `api scope is not declared in the privacy agreement`）**：登录 https://mp.weixin.qq.com → **设置 → 基本设置 → 服务内容声明 → 用户隐私保护指引**，声明 `chooseMedia` / `chooseImage` 的使用目的（如"用于上传个人头像"），保存并发布后**重新扫码进模拟器**（不是热重载，隐私协议状态变更要冷启动）。
 
 > 注意：根目录 `project.config.json` 的 `miniprogramRoot` 指向 **`dist/build/mp-weixin/`**（生产构建产物），不是 `dist/dev/mp-weixin/`（dev watch 半成品）。开发时改完代码需要 `npm run build:mp-weixin` 让微信开发者工具拿到最新版本——这是 5f86bd5 修的坑。
 
@@ -130,9 +131,10 @@ cloudfunctions/                     # 4 业务云函数 + 3 清理定时任务
 docs/
 ├── prd/                            # 9 份产品需求文档
 ├── plans/                          # 实施计划（按日期 + 模块名）
+├── brainstorms/                    # 头脑风暴输出（ce:brainstorm 落盘）
 └── brand/visual-standard.md        # 视觉规范
 tests/
-├── unit/                           # 40 套件 / 612 用例
+├── unit/                           # 41 套件 / 626 用例
 └── e2e/                            # 真机自动化（依赖微信开发者工具会话）
 ```
 
@@ -221,6 +223,20 @@ tests/
 - **首页并行加载**：`loadHome` 用 `Promise.all` 并行拉 task 列表 + ledger stats + 自定义头像 URL，不再被最慢的一个串行阻塞。
 - **不引入新数据模型**：所有增强都在筛选 / UI / 反馈层；ledger 实体、类目、统计的口径完全没变，旧数据无缝兼容。
 
+### 8. 自定义个人头像 + 清理快捷选择（Plan 2026-08-27-001）
+2026-08-27 上线个人资料编辑的自定义头像入口，并把视觉冗余的"快捷选择"按钮去掉：
+
+- **入口形态**：`ProfileAvatarPicker` 改成 5 列等宽网格（4 个内置 + 第 5 格"+ 上传"或自定义缩略图）。"+"格子变身：上传成功后变成用户头像缩略图，被标记为选中；再点可重新上传。
+- **裁剪 + 安全检查 + 云端**：复用既有的 `crop-avatar` 子包、`avatar-media` service、云函数 `prepareAvatar` / `checkAvatar` / `getAvatarUrl` 链路；**没有新增云函数动作**（`household` 仍然 13 个动作）。
+- **草稿独立**：进入编辑页若 `profile.avatar.kind === 'custom'`，主动调 `getAvatarTemporaryUrl` 拉一次临时 URL 显示；拉取失败降级为"+"占位但草稿不重置（用户可再点"+"重传）。未保存就退出等价于放弃。
+- **eventChannel 桥接**：`edit-profile` 跳 `crop-avatar` 时通过 `getOpenerEventChannel` 监听 `avatarApproved` 事件，拿到 `{ avatar: { resourceId, digest }, previewPath }`；`onUnload` 摘除监听避免 stale 回调。
+- **`profilePreset` 字段彻底删除**：以前"小帅/小美/随机/custom"5 个值由 `CurrentProfile.profilePreset` 维护，现在 UI 不再需要这些快捷选择、`avatar.kind` 本身已能表达"是否自定义"；同步从 `HouseholdMemberDisplay` / `UpdateProfileRequest` / 前端 services / 云函数 `household-domain.js`（`PROFILE_PRESETS` 常量 + `normaliseProfile` 返回值 + `updateProfile` 读写）/ 6 处 fixture 测试全栈清干净。**老数据 `profilePreset: 'xiaoshuai' | 'xiaomei'` 不主动迁移**——云函数不再读这个字段，留着也不会触发 `INVALID_REQUEST`。
+- **保留的内容安全豁免**：云函数 `updateProfile` 里 `['小帅', '小美']` 在改昵称时的内容安全跳过名单**保留**（与 `profilePreset` 字段无关，删了会导致用户改昵称为"小帅/小美"时被 `checkText` 误拒）。
+- **隐私协议依赖**：`chooseMedia` 必须在微信小程序后台"用户隐私保护指引"里声明（见上文本地运行第 6 步），否则会报 `chooseMedia:fail api scope is not declared in the privacy agreement`。
+- **crop-avatar 错误可观测性增强**：`choose` 函数以前把 `uni.chooseMedia` 的 `fail` 回调静默吞掉（"用户取消"和"权限拒绝"都无声），现在区分 `cancel` 与其他错误，后者用 toast 露出微信原始 `errMsg`，方便排查。
+- **小帅/小美的内容安全豁免**为什么没删：云函数 `updateProfile` 里 `if (isRenaming && ![DEFAULT_PROFILE_NAME, '小帅', '小美'].includes(nickname) && ...)` 这条豁免是**改昵称**用的，跟 `profilePreset` 字段没关系。删了会让"用户把昵称改成 小帅/小美"走 `checkText` 误判，所以保留。
+- **不在本期范围**：微信资料同步 / 家庭资料自定义头像 / 多张自定义头像 / 历史头像切换 / 裁剪参数自定义 / 老数据主动迁移 / 头像 URL 跨页面缓存。
+
 ## 全站交互规范
 
 ### Loading 状态
@@ -271,7 +287,7 @@ tests/
 
 ```powershell
 npm run type-check      # vue-tsc --noEmit，0 错
-npm run test:unit       # 40 套件 / 612 用例
+npm run test:unit       # 41 套件 / 626 用例
 npm run build:mp-weixin # 微信小程序构建
 npm run build:h5        # H5 构建
 npm run test:e2e        # 依赖微信开发者工具的 automator，会话不通则跳过
@@ -299,4 +315,5 @@ npm run test:e2e        # 依赖微信开发者工具的 automator，会话不�
 - [x] 家庭共同流水账（PRD 008）
 - [x] 账本体验增强：人×类型双维筛选 + 入账文案 + 日历日期筛选 + 首页月卡 + 顶部统计跟筛选走（Plan 2026-08-24-2320，详见 §7.1）
 - [x] 全站 loading 统一：去掉骨架屏 + 文案规范化（"正在加载 [模块][对象]"）
+- [x] 自定义个人头像：5 格 Picker 接入 + 裁剪链路接通 + 删 `profilePreset` 全栈字段（Plan 2026-08-27-001，详见 §8）
 - [ ] 下一个模块：见 `docs/prd/` 最新编号

@@ -23,7 +23,7 @@ describe('auth store', () => {
     useHouseholdStore().applyHome({
       status: 'HOME', retryable: false, created: true,
       household: { id: 'home_1', name: '我们的小家', avatar: { kind: 'builtin', id: 'household-01' }, memberCount: 1, currentMemberRole: 'owner' },
-      profile: { nickname: '小伙伴', avatar: { kind: 'builtin', id: 'person-neutral' }, profilePreset: 'neutral' },
+      profile: { nickname: '小伙伴', avatar: { kind: 'builtin', id: 'person-neutral' } },
     })
     finish({ status: 'CREATE_HOME', retryable: false })
     await restoring

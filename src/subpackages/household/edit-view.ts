@@ -1,22 +1,34 @@
-import type { BuiltinProfileAvatarId, CurrentProfile } from '../../types/household'
+import type { BuiltinProfileAvatarId, CurrentProfile, ProfileAvatar } from '../../types/household'
 import { normaliseDisplayText, PROFILE_NAME_MAX_LENGTH, validateDisplayText } from '../../utils/display-text'
-
-export const profilePresets = [
-  { id: 'xiaoshuai' as const, label: '小帅', nickname: '小帅', avatarId: 'person-01' as const },
-  { id: 'xiaomei' as const, label: '小美', nickname: '小美', avatarId: 'person-02' as const },
-]
 
 export function hasHouseholdChanges(savedName: string, savedAvatarId: string, draftName: string, draftAvatarId: string): boolean {
   return savedName !== draftName || savedAvatarId !== draftAvatarId
 }
 
 export function hasProfileChanges(saved: CurrentProfile, draft: CurrentProfile): boolean {
-  return saved.nickname !== draft.nickname || JSON.stringify(saved.avatar) !== JSON.stringify(draft.avatar) || saved.profilePreset !== draft.profilePreset
+  return saved.nickname !== draft.nickname || JSON.stringify(saved.avatar) !== JSON.stringify(draft.avatar)
 }
 
-export function pickRandomProfileAvatar(random = Math.random): BuiltinProfileAvatarId {
-  const ids: BuiltinProfileAvatarId[] = ['person-01', 'person-02', 'person-03', 'person-04']
-  return ids[Math.min(ids.length - 1, Math.floor(random() * ids.length))]
+/** 把 Picker 的"哪一格高亮、第 5 格显示什么"这些视觉状态从模板里抽出来，便于单测。 */
+export interface ProfilePickerState {
+  activeBuiltinId: BuiltinProfileAvatarId | null
+  isCustomSelected: boolean
+  hasCustomPreview: boolean
+  customLabel: '我的头像' | '上传'
+  customAriaLabel: '我的自定义头像，点击重新上传' | '上传自定义头像'
+}
+
+export function describeProfilePickerState(modelValue: ProfileAvatar | null, customPreview?: string): ProfilePickerState {
+  const isBuiltin = modelValue?.kind === 'builtin'
+  const isCustomSelected = modelValue?.kind === 'custom'
+  const hasCustomPreview = typeof customPreview === 'string' && customPreview.length > 0
+  return {
+    activeBuiltinId: isBuiltin ? modelValue.id : null,
+    isCustomSelected,
+    hasCustomPreview,
+    customLabel: isCustomSelected ? '我的头像' : '上传',
+    customAriaLabel: isCustomSelected ? '我的自定义头像，点击重新上传' : '上传自定义头像',
+  }
 }
 
 export function householdNameError(value: string): string {

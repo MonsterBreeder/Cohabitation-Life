@@ -35,7 +35,7 @@ describe('household cloud service', () => {
     await confirmHouseholdInCloud(request)
     await getCurrentHouseholdInCloud()
     await updateHouseholdInCloud({ name: '新家庭', avatar: { kind: 'builtin', id: 'household-02' } })
-    await updateProfileInCloud({ nickname: '小帅', avatar: { kind: 'builtin', id: 'person-01' }, profilePreset: 'xiaoshuai' })
+    await updateProfileInCloud({ nickname: '小帅', avatar: { kind: 'builtin', id: 'person-01' } })
     expect(callFunction.mock.calls.map(([value]) => value.data.action)).toEqual(['create', 'confirm', 'get', 'updateHousehold', 'updateProfile'])
     expect(callFunction.mock.calls[2][0].data).toEqual({ action: 'get' })
   })

@@ -24,14 +24,12 @@ export interface HouseholdSummary {
 export interface HouseholdMemberDisplay {
   nickname: string
   avatar: ProfileAvatar
-  profilePreset: CurrentProfile['profilePreset']
   isSelf: boolean
 }
 
 export interface CurrentProfile {
   nickname: string
   avatar: ProfileAvatar
-  profilePreset: 'neutral' | 'xiaoshuai' | 'xiaomei' | 'random' | 'custom'
 }
 
 export interface UpdateHouseholdRequest {
@@ -42,7 +40,6 @@ export interface UpdateHouseholdRequest {
 export interface UpdateProfileRequest {
   nickname: string
   avatar: ProfileAvatar
-  profilePreset: CurrentProfile['profilePreset']
 }
 
 export interface CreateHouseholdRequest {

@@ -11,7 +11,7 @@ const draft = { name: '我们的小家', avatar: { kind: 'builtin' as const, id:
 const home = {
   status: 'HOME' as const, retryable: false as const, created: true,
   household: { id: 'home_1', name: '我们的小家', avatar: draft.avatar, memberCount: 1, currentMemberRole: 'owner' as const },
-  profile: { nickname: '小伙伴', avatar: { kind: 'builtin' as const, id: 'person-neutral' as const }, profilePreset: 'neutral' as const },
+  profile: { nickname: '小伙伴', avatar: { kind: 'builtin' as const, id: 'person-neutral' as const } },
 }
 
 describe('household store', () => {

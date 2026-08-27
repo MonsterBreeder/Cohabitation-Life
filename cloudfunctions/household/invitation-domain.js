@@ -30,7 +30,6 @@ function safeProfile(user) {
   return {
     nickname: typeof user?.nickname === 'string' && user.nickname.trim() ? user.nickname.trim() : '小伙伴',
     avatar: user?.avatar?.kind === 'builtin' ? user.avatar : DEFAULT_PROFILE_AVATAR,
-    profilePreset: user?.profilePreset || 'neutral',
   }
 }
 

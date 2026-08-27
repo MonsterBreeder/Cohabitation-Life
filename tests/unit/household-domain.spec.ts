@@ -80,9 +80,9 @@ describe('createHousehold', () => {
       status: 'HOME', retryable: false, created: true,
       household: {
         id: 'home-first', name: DEFAULT_HOUSEHOLD_NAME, avatar: { kind: 'builtin', id: 'household-01' }, memberCount: 1, currentMemberRole: 'owner',
-        members: [{ nickname: DEFAULT_PROFILE_NAME, avatar: { kind: 'builtin', id: 'person-neutral' }, profilePreset: 'neutral', isSelf: true }],
+        members: [{ nickname: DEFAULT_PROFILE_NAME, avatar: { kind: 'builtin', id: 'person-neutral' }, isSelf: true }],
       },
-      profile: { nickname: DEFAULT_PROFILE_NAME, avatar: { kind: 'builtin', id: 'person-neutral' }, profilePreset: 'neutral' },
+      profile: { nickname: DEFAULT_PROFILE_NAME, avatar: { kind: 'builtin', id: 'person-neutral' } },
     })
     expect(repository.households.get('home-first')).toMatchObject({ ownerKey: 'trusted-user', memberKeys: ['trusted-user'] })
     expect(typeof result.household.name).toBe('string')
@@ -179,31 +179,31 @@ describe('profile editing', () => {
     const repository = createRepository([{ _id: 'home-1', name: '旧名称', memberKeys: ['trusted-user'], ownerKey: 'trusted-user' }])
     const deps = dependencies(repository)
     await expect(updateHousehold({ name: '  新家庭  ', avatar: { kind: 'builtin', id: 'household-03' } }, deps)).resolves.toMatchObject({ household: { name: '新家庭', avatar: { id: 'household-03' } } })
-    await expect(updateProfile({ nickname: '小帅', avatar: { kind: 'builtin', id: 'person-01' }, profilePreset: 'xiaoshuai' }, deps)).resolves.toMatchObject({ profile: { nickname: '小帅', avatar: { id: 'person-01' }, profilePreset: 'xiaoshuai' } })
+    await expect(updateProfile({ nickname: '小帅', avatar: { kind: 'builtin', id: 'person-01' } }, deps)).resolves.toMatchObject({ profile: { nickname: '小帅', avatar: { id: 'person-01' } } })
     expect(repository.users.get('trusted-user')).not.toHaveProperty('gender')
   })
 
   it('keeps an existing long nickname unchanged until the user actually renames it', async () => {
     const legacyNickname = '旧昵称'.repeat(4)
     const repository = createRepository([{ _id: 'home-1', name: '旧名称', memberKeys: ['trusted-user'], ownerKey: 'trusted-user' }])
-    repository.users.set('trusted-user', { _id: 'trusted-user', nickname: legacyNickname, avatar: { kind: 'builtin', id: 'person-01' }, profilePreset: 'custom' })
+    repository.users.set('trusted-user', { _id: 'trusted-user', nickname: legacyNickname, avatar: { kind: 'builtin', id: 'person-01' } })
     const deps = dependencies(repository)
 
     await expect(getCurrentHousehold(deps)).resolves.toMatchObject({ profile: { nickname: legacyNickname } })
-    await expect(updateProfile({ nickname: legacyNickname, avatar: { kind: 'builtin', id: 'person-02' }, profilePreset: 'custom' }, deps))
+    await expect(updateProfile({ nickname: legacyNickname, avatar: { kind: 'builtin', id: 'person-02' } }, deps))
       .resolves.toMatchObject({ profile: { nickname: legacyNickname, avatar: { id: 'person-02' } } })
-    await expect(updateProfile({ nickname: '新昵称'.repeat(4), avatar: { kind: 'builtin', id: 'person-02' }, profilePreset: 'custom' }, deps))
+    await expect(updateProfile({ nickname: '新昵称'.repeat(4), avatar: { kind: 'builtin', id: 'person-02' } }, deps))
       .rejects.toMatchObject({ code: 'INVALID_REQUEST' })
   })
 
   it('rejects invalid text, forged avatars and non-members without overwriting old data', async () => {
     const repository = createRepository([{ _id: 'home-1', name: '旧名称', avatar: { kind: 'builtin', id: 'household-01' }, memberKeys: ['trusted-user'] }])
     const deps = dependencies(repository)
-    await expect(updateProfile({ nickname: '昵称'.repeat(6), avatar: { kind: 'builtin', id: 'person-01' }, profilePreset: 'custom' }, deps)).rejects.toMatchObject({ code: 'INVALID_REQUEST' })
+    await expect(updateProfile({ nickname: '昵称'.repeat(6), avatar: { kind: 'builtin', id: 'person-01' } }, deps)).rejects.toMatchObject({ code: 'INVALID_REQUEST' })
     await expect(updateHousehold({ name: '家庭'.repeat(11), avatar: { kind: 'builtin', id: 'household-02' } }, deps)).rejects.toMatchObject({ code: 'INVALID_REQUEST' })
-    await expect(updateProfile({ nickname: '昵称', avatar: { kind: 'custom', id: 'unsafe' }, profilePreset: 'custom' }, deps)).rejects.toMatchObject({ code: 'INVALID_REQUEST' })
+    await expect(updateProfile({ nickname: '昵称', avatar: { kind: 'custom', id: 'unsafe' } }, deps)).rejects.toMatchObject({ code: 'INVALID_REQUEST' })
     expect(repository.households.get('home-1').name).toBe('旧名称')
-    await expect(updateProfile({ nickname: '昵称', avatar: { kind: 'builtin', id: 'person-01' }, profilePreset: 'custom' }, { ...deps, identityKey: 'other' })).rejects.toMatchObject({ code: 'NO_HOME' })
+    await expect(updateProfile({ nickname: '昵称', avatar: { kind: 'builtin', id: 'person-01' } }, { ...deps, identityKey: 'other' })).rejects.toMatchObject({ code: 'NO_HOME' })
   })
 })
 
@@ -242,8 +242,8 @@ describe('getCurrentHousehold', () => {
       _id: 'home-pair', ownerKey: 'trusted-user', memberKeys: ['trusted-user', 'other-user'],
       name: '两个人的家', avatar: { kind: 'builtin', id: 'household-01' },
     }])
-    repository.users.set('trusted-user', { _id: 'trusted-user', nickname: '小帅', avatar: { kind: 'builtin', id: 'person-01' }, profilePreset: 'xiaoshuai' })
-    repository.users.set('other-user', { _id: 'other-user', nickname: '小美', avatar: { kind: 'builtin', id: 'person-02' }, profilePreset: 'xiaomei' })
+    repository.users.set('trusted-user', { _id: 'trusted-user', nickname: '小帅', avatar: { kind: 'builtin', id: 'person-01' } })
+    repository.users.set('other-user', { _id: 'other-user', nickname: '小美', avatar: { kind: 'builtin', id: 'person-02' } })
 
     await expect(getCurrentHousehold(dependencies(repository))).resolves.toMatchObject({
       household: {
