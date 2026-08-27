@@ -231,7 +231,13 @@ async function reload(): Promise<void> {
 
 async function onClaim(): Promise<void> {
   if (!taskId.value) return
-  await taskStore.claim(taskId.value)
+  const ok = await taskStore.claim(taskId.value)
+  // 认领成功后回到首页：与 onComplete / onAbandon / onDelete 行为一致。
+  // 之前只 await 不跳转，事项状态从 pending 变 claimed 后用户仍停留在
+  // 详情页，"我处理"按钮消失（v-if 条件不再满足）但页面无任何反馈，像是 bug。
+  if (ok) {
+    uni.reLaunch({ url: '/pages/index/index' })
+  }
 }
 
 function onEdit(): void {

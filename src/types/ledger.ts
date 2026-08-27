@@ -64,6 +64,12 @@ export interface LedgerEntryDetail extends LedgerEntrySummary {
   canEdit?: boolean
   /** 服务端基于 identityKey 计算的"当前用户能否软删"。PRD 008：只创建者可软删。 */
   canDelete?: boolean
+  /**
+   * 服务端基于 identityKey 计算的"当前这条账目的付款人是否是当前用户"。
+   * 编辑页 loadForEdit 用这个把 loaded.payer.memberKey 反推为 'self' / 'other' 字面量，
+   * 让付款人 chip 的 active 高亮能正确反映原始值（前端不持有 identityKey，无法自己判断）。
+   */
+  isCurrentUserPayer?: boolean
 }
 
 /** 类目。 */
@@ -129,9 +135,17 @@ export interface AddLedgerEntryResult {
 export interface UpdateLedgerEntryRequest {
   entryId: string
   operationToken: string
-  /** MVP 不允许改 type / payer；这两个字段即便传了也会被服务端拒绝。 */
+  /** MVP 不允许改 type；云端会忽略此字段。 */
   amountCents: number
   categoryId: string
+  /**
+   * 修改付款人（可选）：
+   * - 'self'  → 当前用户（云端映射到 identityKey）
+   * - 'other' → 家庭中另一位成员（云端按 memberKeys 查找）
+   * - 其他    → 必须是家庭成员的真实 memberKey（编辑表单 loadForEntry 时已存进草稿）
+   * 不传 / null / undefined 表示保持原 payer 不变。
+   */
+  payerMemberKey?: string | null
   note: string
   occurredAt: string
   receiptMediaId: string | null

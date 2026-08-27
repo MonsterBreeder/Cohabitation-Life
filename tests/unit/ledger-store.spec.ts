@@ -225,6 +225,40 @@ describe('addEntry / updateEntry / deleteEntry / restoreEntry', () => {
     expect(store.entries[0].amountCents).toBe(8000)
   })
 
+  // Bug 2：编辑付款人必须透传给 cloud client（云端才能把 'self'/'other' 映射为真实 memberKey）。
+  it('updateEntry forwards payerMemberKey to the cloud client (bug 2 regression)', async () => {
+    const entry = makeEntry()
+    const updateSpy = jest.fn(async () => ({ status: 'UPDATED' as const, entry }))
+    setLedgerStoreCloudClientForTesting({
+      initCategories: jest.fn(),
+      addEntry: jest.fn(),
+      updateEntry: updateSpy,
+      deleteEntry: jest.fn(),
+      restoreEntry: jest.fn(),
+      listEntries: jest.fn(),
+      getEntry: jest.fn(),
+      addCategory: jest.fn(),
+      updateCategory: jest.fn(),
+      removeCategory: jest.fn(),
+      getStats: jest.fn(),
+    })
+    const store = useLedgerStore()
+    store.setHouseholdContext('home_xxxxxxxx', 'user_self')
+    store.entries = [makeEntry()]
+    await store.updateEntry({
+      entryId: 'ledger_xxxxxxxxxxxxx_1',
+      operationToken: 'op_xxxxxxxxxxxxx_1',
+      amountCents: 5000,
+      categoryId: 'cat_xxxxxxxxxxxxx_1',
+      payerMemberKey: 'other',
+      note: '',
+      occurredAt: '2026-08-17T10:00:00.000Z',
+      receiptMediaId: null,
+    })
+    expect(updateSpy).toHaveBeenCalledTimes(1)
+    expect(updateSpy.mock.calls[0][0].payerMemberKey).toBe('other')
+  })
+
   it('deleteEntry removes from entries on success', async () => {
     setLedgerStoreCloudClientForTesting({
       initCategories: jest.fn(),

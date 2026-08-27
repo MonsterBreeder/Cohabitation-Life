@@ -266,7 +266,13 @@ async function addEntry(input, dependencies) {
   return { status: 'ADDED', retryable: false, entry: normaliseEntry(record) }
 }
 
-/** 编辑账目。仅创建者可改；type / payerMemberKey 不可改。 */
+/** 编辑账目。仅创建者可改；type 不可改。
+ *  payerMemberKey 可选：
+ *  - 不传 / null / ''  → 保持原 payer 不变
+ *  - 'self' / 'other' / 真实 memberKey → 校验后覆盖；
+ *    'self' 映射为 identityKey；'other' 取 household.memberKeys 中除自己的另一位；
+ *    其他值必须在 household.memberKeys 里
+ */
 async function updateEntry(input, dependencies) {
   validateId(input && input.entryId, 'entryId')
   validateCredential(input && input.operationToken, 'operationToken')
@@ -303,6 +309,37 @@ async function updateEntry(input, dependencies) {
   if (!category) throw new LedgerDomainError('LEDGER_CATEGORY_NOT_FOUND', false)
   if (category.householdId !== dependencies.householdId) throw new LedgerDomainError('LEDGER_CATEGORY_NOT_FOUND', false)
 
+  // 解析 payerMemberKey（可选）。保持 addEntry 的 'self'/'other' 字面量映射，
+  // 这样编辑表单不需要持有真实 memberKey 也能表达"切给对方"。
+  let resolvedPayerMemberKey = existing.payerMemberKey
+  let payerChanged = false
+  if (input.payerMemberKey != null && input.payerMemberKey !== '') {
+    if (typeof input.payerMemberKey !== 'string') {
+      throw new LedgerDomainError('LEDGER_INVALID_REQUEST', false)
+    }
+    const household = await repo.getHousehold(dependencies.householdId)
+    if (!household) throw new LedgerDomainError('LEDGER_FORBIDDEN', false)
+    let candidate = input.payerMemberKey
+    if (candidate === 'self') {
+      candidate = dependencies.identityKey
+    } else if (candidate === 'other') {
+      const others = Array.isArray(household.memberKeys)
+        ? household.memberKeys.filter((k) => k !== dependencies.identityKey)
+        : []
+      if (others.length === 0) {
+        throw new LedgerDomainError('LEDGER_PAYER_NOT_MEMBER', false)
+      }
+      candidate = others[0]
+    }
+    if (!Array.isArray(household.memberKeys) || !household.memberKeys.includes(candidate)) {
+      throw new LedgerDomainError('LEDGER_PAYER_NOT_MEMBER', false)
+    }
+    if (candidate !== existing.payerMemberKey) {
+      resolvedPayerMemberKey = candidate
+      payerChanged = true
+    }
+  }
+
   const now = dependencies.now().toISOString()
   const updates = {
     amountCents,
@@ -311,6 +348,17 @@ async function updateEntry(input, dependencies) {
     occurredAt,
     receiptMediaId,
     updatedAt: now,
+  }
+  // payer 改了：重新拉取 profile、构建 payer 展示；同步把 payerMemberKey 也写进去。
+  let newPayer = existing.payer
+  if (payerChanged) {
+    const household = await repo.getHousehold(dependencies.householdId)
+    const payerProfile = await repo.getProfileForMember(resolvedPayerMemberKey)
+    const stillInHousehold = Array.isArray(household.memberKeys)
+      && household.memberKeys.includes(resolvedPayerMemberKey)
+    newPayer = buildPayerDisplay(resolvedPayerMemberKey, payerProfile, !stillInHousehold)
+    updates.payerMemberKey = resolvedPayerMemberKey
+    updates.payer = newPayer
   }
   await repo.runTransaction(async (tx) => {
     await tx.updateEntry(input.entryId, updates)
@@ -435,14 +483,18 @@ async function getEntry(input, dependencies) {
   // 服务端算 canEdit / canDelete 一起返回（前端拿不到 identityKey，自己算不了）。
   // PRD 008：编辑和软删都只允许创建者（payerMemberKey === identityKey）。
   // 撤销删除（restoreEntry）任何成员都可做——所以 canDelete 跟 PRD 一致、不放开。
+  // isCurrentUserPayer：当前账目付款人是否是当前用户，供编辑页把 payer.memberKey
+  // 反推为 'self' / 'other' 字面量（前端不持有 identityKey）。
   const [detail] = await attachReceiptUrls([normaliseEntryDetail(record)], dependencies)
+  const isCurrentUserPayer = record.payerMemberKey === dependencies.identityKey
   return {
     status: 'LOADED',
     retryable: false,
     detail: {
       ...detail,
-      canEdit: record.payerMemberKey === dependencies.identityKey,
-      canDelete: record.payerMemberKey === dependencies.identityKey,
+      canEdit: isCurrentUserPayer,
+      canDelete: isCurrentUserPayer,
+      isCurrentUserPayer,
     },
   }
 }

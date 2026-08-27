@@ -37,7 +37,7 @@ type LedgerPhase = 'idle' | 'loading' | 'adding' | 'updating' | 'deleting' | 're
 interface LedgerCloudClient {
   initCategories(input: { requestId: string }): Promise<{ status: 'INITED'; categories: LedgerCategory[] }>
   addEntry(input: AddLedgerEntryRequest): Promise<{ status: 'ADDED'; entry: LedgerEntrySummary }>
-  updateEntry(input: { entryId: string; operationToken: string; amountCents: number; categoryId: string; note: string; occurredAt: string; receiptMediaId: string | null }): Promise<{ status: 'UPDATED'; entry: LedgerEntrySummary }>
+  updateEntry(input: { entryId: string; operationToken: string; amountCents: number; categoryId: string; payerMemberKey?: string | null; note: string; occurredAt: string; receiptMediaId: string | null }): Promise<{ status: 'UPDATED'; entry: LedgerEntrySummary }>
   deleteEntry(input: { entryId: string; operationToken: string }): Promise<{ status: 'DELETED'; entryId: string; deletedAt: string }>
   restoreEntry(input: { entryId: string; operationToken: string }): Promise<{ status: 'RESTORED'; entry: LedgerEntrySummary }>
   listEntries(input: { month: string; payerMode: string; typeFilter?: 'all' | 'expense' | 'income'; categoryIds: string[]; includeDeleted?: boolean; page?: number; pageSize?: number }): Promise<{ status: 'LISTED'; entries: LedgerEntrySummary[]; deletedEntries: LedgerEntrySummary[]; hasMore?: boolean }>
@@ -358,7 +358,7 @@ export const useLedgerStore = defineStore('ledger', {
       }
     },
 
-    async updateEntry(input: { entryId: string; operationToken: string; amountCents: number; categoryId: string; note: string; occurredAt: string; receiptMediaId: string | null }): Promise<LedgerEntrySummary | null> {
+    async updateEntry(input: { entryId: string; operationToken: string; amountCents: number; categoryId: string; payerMemberKey?: string | null; note: string; occurredAt: string; receiptMediaId: string | null }): Promise<LedgerEntrySummary | null> {
       const key = inFlightKey('update', input.entryId + input.operationToken)
       if (inFlight.has(key)) return null
       inFlight.add(key)

@@ -318,6 +318,98 @@ describe('updateEntry / deleteEntry / restoreEntry', () => {
     await expect(updateEntry({ entryId: 'entry_xxxxxxxxxxxx_1', operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxup_1', amountCents: 8000, categoryId: 'cat_xxxxxxxxxxxxx_dining', note: '', occurredAt: NOW.toISOString(), receiptMediaId: null }, deps)).rejects.toThrow(/LEDGER_NOT_FOUND/)
   })
 
+  // Bug 2：编辑记账时，付款人修改为对方时，保存后必须生效。
+  // 前端 onSave 把 'other' 透传给 updateEntry；云端负责 'self'/'other' 映射 + 家庭成员校验。
+  it('updateEntry with payerMemberKey="other" reassigns payer to the other member', async () => {
+    const repo = createRepository({
+      households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF, OTHER] }],
+      categories: [baseCategory],
+      entries: [baseEntry],  // baseEntry 的 payerMemberKey 是 SELF
+      users: [{ _id: OTHER, nickname: '对方', avatar: { kind: 'builtin', id: 'person-neutral' } }],
+    })
+    const deps = makeDependencies({ repository: repo })
+    const result = await updateEntry({
+      entryId: 'entry_xxxxxxxxxxxx_1',
+      operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxup_other',
+      amountCents: 5000,
+      categoryId: 'cat_xxxxxxxxxxxxx_dining',
+      payerMemberKey: 'other',
+      note: '买菜',
+      occurredAt: NOW.toISOString(),
+      receiptMediaId: null,
+    }, deps)
+    expect(result.status).toBe('UPDATED')
+    expect(result.entry.payer.memberKey).toBe(OTHER)
+    expect(result.entry.payer.nickname).toBe('对方')
+  })
+
+  // 编辑时把"对方"切回"我"：payerMemberKey='self' 映射为 identityKey。
+  // 必须是创建者本人编辑（updateEntry 的权限闸），所以用 OTHER 视角去编辑 OTHER 记的账。
+  it('updateEntry with payerMemberKey="self" reassigns payer to the current user', async () => {
+    const entryByOther = { ...baseEntry, payerMemberKey: OTHER, payer: { memberKey: OTHER, nickname: '对方', avatar: { kind: 'builtin', id: 'person-neutral' } } }
+    const repo = createRepository({
+      households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF, OTHER] }],
+      categories: [baseCategory],
+      entries: [entryByOther],
+    })
+    const deps = { ...makeDependencies({ repository: repo }), identityKey: OTHER }
+    const result = await updateEntry({
+      entryId: 'entry_xxxxxxxxxxxx_1',
+      operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxup_self',
+      amountCents: 5000,
+      categoryId: 'cat_xxxxxxxxxxxxx_dining',
+      payerMemberKey: 'self',
+      note: '买菜',
+      occurredAt: NOW.toISOString(),
+      receiptMediaId: null,
+    }, deps)
+    expect(result.status).toBe('UPDATED')
+    expect(result.entry.payer.memberKey).toBe(OTHER)  // OTHER 视角调用，'self' → OTHER
+  })
+
+  // 编辑时把 payerMemberKey 设为不在家庭里的陌生人：必须被 LEDGER_PAYER_NOT_MEMBER 拒绝。
+  it('updateEntry rejects payerMemberKey that is not a household member', async () => {
+    const repo = createRepository({
+      households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF, OTHER] }],
+      categories: [baseCategory],
+      entries: [baseEntry],
+    })
+    const deps = makeDependencies({ repository: repo })
+    await expect(updateEntry({
+      entryId: 'entry_xxxxxxxxxxxx_1',
+      operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxup_stranger',
+      amountCents: 5000,
+      categoryId: 'cat_xxxxxxxxxxxxx_dining',
+      payerMemberKey: 'user_stranger',
+      note: '买菜',
+      occurredAt: NOW.toISOString(),
+      receiptMediaId: null,
+    }, deps)).rejects.toThrow(/LEDGER_PAYER_NOT_MEMBER/)
+  })
+
+  // 编辑时不传 payerMemberKey：保持原 payer 不变（兼容旧调用）。
+  it('updateEntry without payerMemberKey keeps original payer', async () => {
+    const repo = createRepository({
+      households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF, OTHER] }],
+      categories: [baseCategory],
+      entries: [baseEntry],  // payerMemberKey === SELF
+    })
+    const deps = makeDependencies({ repository: repo })
+    const result = await updateEntry({
+      entryId: 'entry_xxxxxxxxxxxx_1',
+      operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxup_keep',
+      amountCents: 6000,
+      categoryId: 'cat_xxxxxxxxxxxxx_dining',
+      // 不传 payerMemberKey
+      note: '买菜改金额',
+      occurredAt: NOW.toISOString(),
+      receiptMediaId: null,
+    }, deps)
+    expect(result.status).toBe('UPDATED')
+    expect(result.entry.payer.memberKey).toBe(SELF)
+    expect(result.entry.amountCents).toBe(6000)
+  })
+
   it('deleteEntry is idempotent on repeated operationToken', async () => {
     const repo = createRepository({
       households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF] }],
@@ -494,6 +586,42 @@ describe('listEntries / getEntry', () => {
     expect(result.status).toBe('LOADED')
     expect(result.detail.canEdit).toBe(false)
     expect(result.detail.canDelete).toBe(false)
+  })
+
+  // Bug 2 配套：编辑页需要知道 loaded.payer.memberKey 是不是当前用户，从而把真实
+  // memberKey 翻译为 'self' / 'other' 字面量（前端不持有 identityKey）。
+  it('getEntry sets isCurrentUserPayer=true when entry payer is the current user', async () => {
+    const repo = createRepository({
+      households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF, OTHER] }],
+      entries: [{
+        _id: 'entry_xxxxxxxxxxxx_active',
+        householdId: HOUSEHOLD_ID,
+        type: 'expense', amountCents: 1000, categoryId: 'cat_xxxxxxxxxxxxx_dining',
+        payerMemberKey: SELF, note: '', occurredAt: NOW.toISOString(), receiptMediaId: null,
+        payer: { memberKey: SELF, nickname: '我', avatar: { kind: 'builtin', id: 'person-neutral' } },
+        createdAt: NOW.toISOString(), updatedAt: NOW.toISOString(), deletedAt: null,
+      }],
+    })
+    const deps = makeDependencies({ repository: repo })
+    const result = await getEntry({ entryId: 'entry_xxxxxxxxxxxx_active' }, deps)
+    expect(result.detail.isCurrentUserPayer).toBe(true)
+  })
+
+  it('getEntry sets isCurrentUserPayer=false when entry payer is the other member', async () => {
+    const repo = createRepository({
+      households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF, OTHER] }],
+      entries: [{
+        _id: 'entry_xxxxxxxxxxxx_other',
+        householdId: HOUSEHOLD_ID,
+        type: 'expense', amountCents: 1000, categoryId: 'cat_xxxxxxxxxxxxx_dining',
+        payerMemberKey: OTHER, note: '', occurredAt: NOW.toISOString(), receiptMediaId: null,
+        payer: { memberKey: OTHER, nickname: '对方', avatar: { kind: 'builtin', id: 'person-neutral' } },
+        createdAt: NOW.toISOString(), updatedAt: NOW.toISOString(), deletedAt: null,
+      }],
+    })
+    const deps = makeDependencies({ repository: repo })
+    const result = await getEntry({ entryId: 'entry_xxxxxxxxxxxx_other' }, deps)
+    expect(result.detail.isCurrentUserPayer).toBe(false)
   })
 })
 

@@ -306,7 +306,17 @@ async function loadForEdit(entryId: string): Promise<void> {
     // 然后解构出 undefined、调用时抛 "_e is not a function"。
     const loaded = await ledgerStore.loadEntry(entryId)
     if (loaded) {
-      Object.assign(draft, draftFromEntry({
+      // 把真实 memberKey 翻译成 'self' / 'other' 字面量：
+      // 前端不持有 identityKey（云端从 APPID+OPENID 算出来），selfMemberKey 一直是空串；
+      // 不能在 chip 渲染时用真实 key 与 'self'/'other' 直接比较。
+      // 服务端在 getEntry 响应里通过 isCurrentUserPayer 告诉我们这条账目是不是当前用户付的。
+      // 单成员家庭只有 'self' 选项（payerOptions 不会渲染 '对方' chip），落到 'other' 会无效。
+      const loadedPayerKey: 'self' | 'other' = loaded.isCurrentUserPayer
+        ? 'self'
+        : (memberCount.value >= 2 ? 'other' : 'self')
+      // 注意：直接覆盖 draft.payerMemberKey，而不是用 draftFromEntry 的 memberKey 默认逻辑，
+      // 那样会写入真实 memberKey（user_xxx），导致 chip 永远不亮。
+      const fallbackDraft = draftFromEntry({
         type: loaded.type,
         amountCents: loaded.amountCents,
         categoryId: loaded.categoryId,
@@ -314,7 +324,8 @@ async function loadForEdit(entryId: string): Promise<void> {
         note: loaded.note,
         occurredAt: loaded.occurredAt,
         receiptMediaId: loaded.receiptMediaId,
-      }))
+      })
+      Object.assign(draft, { ...fallbackDraft, payerMemberKey: loadedPayerKey })
     } else if (ledgerStore.errorMessage) {
       uni.showToast({ title: ledgerStore.errorMessage, icon: 'none' })
     }
@@ -410,6 +421,10 @@ async function onSave(): Promise<void> {
         operationToken: editingOperationToken.value || `op_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         amountCents: draft.amountCents,
         categoryId: draft.categoryId as string,
+        // 把 'self' / 'other' 字面量透传给云端做映射；如果用户没动过付款人 chip，
+        // loadForEntry 写入的就是 'self' / 'other'，与 addEntry 走同一条映射逻辑，
+        // 不会再出现"编辑时 payer 不生效"的问题。
+        payerMemberKey: draft.payerMemberKey,
         note: draft.note,
         occurredAt: draft.occurredAt,
         receiptMediaId: mediaId,

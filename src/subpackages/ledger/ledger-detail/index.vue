@@ -102,7 +102,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useHouseholdStore } from '../../../store/modules/household'
 import { useLedgerStore } from '../../../store/modules/ledger'
 import {
@@ -156,6 +156,21 @@ onLoad(async (options: any) => {
     if (householdId.value) ledgerStore.setHouseholdContext(householdId.value, '')
     await reload()
   }
+})
+
+// 编辑页 navigateBack 回来时主动重新拉取：详情页 detail 是页面局部 ref，
+// 没有跟 store.entries 双向绑定，编辑后 store 里的 summary 已经更新
+// （ledgerStore.updateEntry 会替换 entries 数组里的同 id 条目），但页面 detail 不会
+// 自动响应——所以必须在 onShow 显式 reload 一次。
+// firstShow 标志位：uni-app 首次进入页面会先触发 onLoad 再触发 onShow，
+// 这里跳过首次 onShow，避免和 onLoad 重复请求。
+let firstShow = true
+onShow(() => {
+  if (firstShow) {
+    firstShow = false
+    return
+  }
+  if (entryId.value) void reload()
 })
 
 async function reload(): Promise<void> {
