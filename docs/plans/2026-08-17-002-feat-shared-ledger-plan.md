@@ -67,7 +67,7 @@ PRD 008 补一个**家庭共同流水账**：两人共享一本账，每笔都�
   - `InitLedgerCategoriesRequest` / `InitLedgerCategoriesResult`
   - `LedgerPendingKind` (`'add' | 'update' | 'delete' | 'restore' | 'addCategory' | 'updateCategory' | 'removeCategory'`)
 - `src/utils/ledger-validators.ts`（**新文件**）
-  - `validateAmountCents(input: string | number): number` — 接受 "12.5" 返回 1250；非数字 / 负数 / 0 / > 9999999 抛错
+  - `validateAmountCents(input: string | number): number` — 接受 "12.5" 返回 1250；非数字 / 负数 / 0 / > 999999999 抛错
   - `validateLedgerNote(input: string): string` — 0-100 字；trim 前后空白
   - `validateLedgerOccurredAt(input: Date | string): Date` — 不可晚于今天+1 天，不可早于 2020-01-01
   - `validateLedgerCategoryName(input: string): string` — 2-8 个汉字 / 4-16 个字符

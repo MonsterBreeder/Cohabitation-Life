@@ -200,13 +200,14 @@
     </view>
 
     <!-- ④ FAB 记一笔：日期选择器打开时隐藏（避免 FAB 浮在日历弹层之上，挡住日期/确定按钮）。
-         即便日历 z-index 已经提到 200，FAB 仍可能在日历关闭动画期间短暂可见，所以用 v-if 最稳。 -->
+         即便日历 z-index 已经提到 200，FAB 仍可能在日历关闭动画期间短暂可见，所以用 v-if 最稳；
+         底部距离与首页快速添加按钮保持一致。 -->
     <wd-fab
       v-if="householdId && !isDatePickerOpen && !filterSheetOpen"
       type="primary"
       position="right-bottom"
       :expandable="false"
-      :gap="{ right: 32, bottom: 180 }"
+      :gap="{ right: 32, bottom: 104 }"
       :loading="isAdding"
       :aria-busy="isAdding"
       data-testid="ledger-home-fab"

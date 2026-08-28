@@ -45,7 +45,7 @@ PRD 005 共同事项是"单笔 + 列表"就上线，PRD 006 加了编辑和多�
 | `householdId` | string | 是 | 家庭内部键 | 索引 + RLS 范围 |
 | `payerId` | string | 是 | 必须是当前家庭成员 key | 谁付的钱；不引用外部 user 编号 |
 | `type` | `'expense' \| 'income'` | 是 | 二选一 | 支出 / 收入 |
-| `amountCents` | number (int) | 是 | 1 ~ 9,999,999（≤ ¥99,999.99）；整数 | 单位是分；负数 / 0 / 浮点全部拒绝 |
+| `amountCents` | number (int) | 是 | 1 ~ 999,999,999（≤ ¥9,999,999.99）；整数 | 单位是分；负数 / 0 / 浮点全部拒绝 |
 | `categoryId` | string | 是 | 必须属于该家庭类目集 | 引用 LedgerCategory |
 | `note` | string | 否 | 0 ~ 100 字 | 首尾去空；不填则存空串 |
 | `occurredAt` | Date | 是 | 不可晚于"今天 + 1 天"；不可早于 2020-01-01 | 账目发生时间，可与 createdAt 不同（补记） |

@@ -2,7 +2,7 @@
 // 模式：纯函数 + 不持有状态。负责表单初始草稿、校验、tab 切换文案。
 
 import type { LedgerEntryType, LedgerCategory } from '../../../types/ledger'
-import { validateAmountCents, validateLedgerNote, validateLedgerCategoryName, toLedgerMonthString } from '../../../utils/ledger-validators'
+import { LEDGER_AMOUNT_MAX_CENTS, validateLedgerNote, validateLedgerCategoryName, toLedgerMonthString } from '../../../utils/ledger-validators'
 
 /** 草稿：所有字段都是原始输入（金额是分、occurredAt 是 ISO 字符串）。 */
 export interface AddEntryDraft {
@@ -65,12 +65,11 @@ export function validateDraft(draft: AddEntryDraft): DraftErrors {
   const errors: DraftErrors = {}
   if (!draft.amountCents || draft.amountCents <= 0) {
     errors.amount = '请输入金额'
-  } else {
-    try {
-      validateAmountCents(draft.amountCents)
-    } catch (err) {
-      errors.amount = err instanceof Error ? err.message : '金额格式不正确'
-    }
+  } else if (!Number.isInteger(draft.amountCents)) {
+    errors.amount = '金额格式不正确'
+  } else if (draft.amountCents > LEDGER_AMOUNT_MAX_CENTS) {
+    // 草稿里的金额已经是“分”，不能再交给“元转分”方法重复乘 100。
+    errors.amount = '单笔金额最多为 ¥9,999,999.99'
   }
   if (!draft.categoryId) {
     errors.category = '请选择类目'

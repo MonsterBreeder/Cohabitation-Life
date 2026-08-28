@@ -216,6 +216,27 @@ describe('addEntry', () => {
     expect(result.entry.note).toBe('买菜')
   })
 
+  // 保护图中这类七位数收入：客户端放行后，云端也必须按同一上限接受。
+  it('creates a seven-digit income entry', async () => {
+    const repo = createRepository({
+      households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF, OTHER] }],
+      categories: [{ _id: 'cat_xxxxxxxxxxxxx_dining', householdId: HOUSEHOLD_ID, key: 'dining', name: '餐饮', iconKey: 'fork-spoon', colorKey: 'amber', isCustom: false, sortOrder: 0 }],
+    })
+    const deps = makeDependencies({ repository: repo })
+    const result = await addEntry({
+      requestId: 'req_xxxxxxxxxxx_income_7_digits',
+      type: 'income',
+      amountCents: 555_584_100,
+      categoryId: 'cat_xxxxxxxxxxxxx_dining',
+      payerMemberKey: SELF,
+      note: '大额收入',
+      occurredAt: NOW.toISOString(),
+      receiptMediaId: null,
+    }, deps)
+    expect(result.status).toBe('ADDED')
+    expect(result.entry.amountCents).toBe(555_584_100)
+  })
+
   // 回归测试：addEntry 是"创建类"action，幂等锁只用 requestId（creationLockId），
   // 不需要 operationToken。前端 AddLedgerEntryRequest 也没有这个字段。
   it('succeeds without operationToken (creation-lock uses requestId)', async () => {

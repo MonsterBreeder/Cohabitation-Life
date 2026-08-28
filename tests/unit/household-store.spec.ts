@@ -114,6 +114,28 @@ describe('household store', () => {
     expect(store.profile).toBeUndefined()
   })
 
+  // 保护返回首页的静默刷新：请求未完成时继续展示已确认资料，不闪回整页加载态。
+  it('keeps confirmed household content while refreshing in the background', async () => {
+    let finish!: (value: typeof home) => void
+    const refreshedHome = {
+      ...home,
+      household: { ...home.household, name: '刷新后的小家' },
+    }
+    const get = jest.fn(() => new Promise<typeof home>((resolve) => { finish = resolve }))
+    setHouseholdCloudClientForTesting({ create: jest.fn(), confirm: jest.fn(), get })
+    const store = useHouseholdStore()
+    store.applyHome(home)
+
+    const refresh = store.loadCurrent({ preserveExisting: true })
+    expect(store.phase).toBe('checking')
+    expect(store.household?.name).toBe('我们的小家')
+
+    finish(refreshedHome)
+    await refresh
+    expect(store.phase).toBe('loaded')
+    expect(store.household?.name).toBe('刷新后的小家')
+  })
+
   it('returns to creation state when the trusted account has no household', async () => {
     setHouseholdCloudClientForTesting({
       create: jest.fn(), confirm: jest.fn(), get: jest.fn().mockResolvedValue({ status: 'NO_HOME', retryable: false }),

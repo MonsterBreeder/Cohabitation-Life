@@ -47,10 +47,9 @@
           test-id="ledger-add-amount"
           @error="onAmountError"
         />
-        <!-- 错误提示延后显示：用户打开记账页时如果 modelValue=0，validateDraft 会立刻报"请输入金额"，
-             加上 AmountInput 自带 placeholder "请输入金额" 就会双重红字，体验很差。
-             submitAttempted 在第一次点保存时置 true，错误信息才浮现。 -->
-        <text v-if="submitAttempted && errors.amount" class="ledger-add-page__validation" data-testid="ledger-add-amount-error">
+        <!-- 空表单错误延后到首次保存时显示，避免页面刚打开就出现红字；
+             用户已经输入但格式不合法时立即说明原因，不能只让保存按钮变灰。 -->
+        <text v-if="(submitAttempted || amountInputError) && errors.amount" class="ledger-add-page__validation" data-testid="ledger-add-amount-error">
           {{ errors.amount }}
         </text>
       </view>
@@ -247,6 +246,8 @@ const isSaving = ref(false)
 // 错误信息延后显示：用户首次尝试保存时才浮现"金额/类目"等验证文案，
 // 避免页面一打开就一片红字，干扰录入节奏。
 const submitAttempted = ref(false)
+// 输入组件会保留用户正在输入的原文；若原文不合法，单独记录原因，避免误保存上一次合法金额。
+const amountInputError = ref('')
 const isAddingCategory = ref(false)
 
 const draft = reactive<AddEntryDraft>(defaultAddDraft())
@@ -277,7 +278,11 @@ const maxDate = computed(() => {
 })
 const occurredAtLabel = computed(() => describeOccurredAtShort(draft.occurredAt))
 
-const errors = computed(() => validateDraft(draft))
+const errors = computed(() => {
+  const draftErrors = validateDraft(draft)
+  // 原始输入不合法时覆盖草稿校验结果；否则可能误把上一次合法金额提交出去。
+  return amountInputError.value ? { ...draftErrors, amount: amountInputError.value } : draftErrors
+})
 const saveState = computed(() => describeSaveButton(errors.value, isSaving.value, isEditMode.value))
 
 const isEditMode = ref(false)
@@ -340,8 +345,8 @@ function onTypeChange(type: LedgerEntryType): void {
   draft.type = type
 }
 
-function onAmountError(_msg: string): void {
-  // 错误由 errors 派生显示
+function onAmountError(message: string): void {
+  amountInputError.value = message
 }
 
 function onDateChange(e: any): void {

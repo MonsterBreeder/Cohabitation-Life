@@ -18,7 +18,8 @@ const NOTE_MAX_LENGTH = 100
 const CATEGORY_NAME_MIN = 2
 const CATEGORY_NAME_MAX = 8
 const AMOUNT_MIN_CENTS = 1
-const AMOUNT_MAX_CENTS = 9_999_999
+// 与客户端一致支持七位数金额，避免前端可录入但云端拒绝。
+const AMOUNT_MAX_CENTS = 999_999_999
 const OCCURRED_AT_MIN = '2020-01-01'
 
 class LedgerDomainError extends Error {

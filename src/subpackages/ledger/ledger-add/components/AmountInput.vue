@@ -60,6 +60,8 @@ function onInput(e: any): void {
   const raw = (e && e.detail && typeof e.detail.value === 'string') ? e.detail.value : ''
   if (raw === '') {
     emit('update:modelValue', 0)
+    // 清空输入时同步清掉上一条格式错误，父页面会改为展示“请输入金额”。
+    emit('error', '')
     return
   }
   try {

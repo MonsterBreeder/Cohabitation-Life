@@ -84,7 +84,7 @@
       type="primary"
       position="right-bottom"
       :expandable="false"
-      :gap="{ right: 32, bottom: 180 }"
+      :gap="{ right: 32, bottom: 104 }"
       :loading="isQuickAdd"
       :aria-busy="isQuickAdd"
       data-testid="home-quick-add"
@@ -121,7 +121,8 @@ const { phase, household, profile, errorMessage: householdError } = storeToRefs(
 const { current: taskCurrent, errorMessage: taskError } = storeToRefs(taskStore)
 const { stats: ledgerStats, phase: ledgerPhase, errorMessage: ledgerError } = storeToRefs(ledgerStore)
 
-const isLoading = computed(() => phase.value === 'checking')
+// 首次进入且没有可展示资料时才显示整页加载；返回首页刷新时继续展示已确认内容，避免闪屏。
+const isLoading = computed(() => phase.value === 'checking' && !(household.value && profile.value))
 const loadError = computed(() => authError.value || householdError.value)
 const homeError = computed(() => taskError.value || '')
 // 自定义头像 URL 由云端异步签发；sign 'empty' 期间不要让组件显示默认头像。
@@ -239,7 +240,8 @@ async function loadHome(): Promise<void> {
     return
   }
 
-  const result = await householdStore.loadCurrent()
+  // 返回首页时保留已确认内容，远端结果在后台更新；首次进入仍走完整加载态。
+  const result = await householdStore.loadCurrent({ preserveExisting: true })
   if (result?.status === 'HOME') {
     ledgerStore.setHouseholdContext(result.household.id, '')
     const month = formatLedgerMonth(new Date())

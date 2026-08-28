@@ -2,8 +2,8 @@
 // 范围：金额 / 备注 / 发生时间 / 类目名。所有抛错都使用自定义错误类型，便于 service / store 区分。
 // 设计原则：与 task-validators 风格一致；不可静默纠正，必须由调用方决定是否提示。
 
-/** 金额上限：9999999 分 = ¥99,999.99。 */
-export const LEDGER_AMOUNT_MAX_CENTS = 9_999_999
+/** 金额上限：999999999 分 = ¥9,999,999.99，覆盖七位数收入和大额共同支出。 */
+export const LEDGER_AMOUNT_MAX_CENTS = 999_999_999
 
 /** 备注最大长度（与 PRD 008 §"字段"表一致）。 */
 export const LEDGER_NOTE_MAX_LENGTH = 100

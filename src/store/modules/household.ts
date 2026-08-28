@@ -55,11 +55,16 @@ export const useHouseholdStore = defineStore('household', {
       this.profile = undefined
       return true
     },
-    /** 首页每次显示都重新读取当前家庭，失败时清空旧资料，避免把缓存误当成真实结果。 */
-    async loadCurrent() {
+    /** 首页每次显示都重新读取当前家庭。
+     *  返回首页时允许保留已确认资料，避免远端请求期间整页闪回加载态；
+     *  云端返回无家庭或失败后仍会进入对应状态，不会把缓存继续当成最终结果。 */
+    async loadCurrent(options: { preserveExisting?: boolean } = {}) {
+      const preserveExisting = Boolean(options.preserveExisting && this.household && this.profile)
       this.phase = 'checking'
-      this.household = undefined
-      this.profile = undefined
+      if (!preserveExisting) {
+        this.household = undefined
+        this.profile = undefined
+      }
       this.errorMessage = undefined
       try {
         const result = await cloudClient.get()

@@ -64,6 +64,17 @@ describe('validateDraft', () => {
     expect(errors.category).toBeUndefined()
   })
 
+  // 保护七位数收入：草稿已经以“分”保存，校验时不能再次乘 100。
+  it('passes for a seven-digit income amount stored in cents', () => {
+    const draft = defaultAddDraft({
+      type: 'income',
+      amountCents: 555_584_100,
+      categoryId: 'cat_xxxxxxxxxxxxx_1',
+    })
+    expect(validateDraft(draft).amount).toBeUndefined()
+    expect(describeSaveButton(validateDraft(draft), false, false).enabled).toBe(true)
+  })
+
   it('rejects future time', () => {
     const future = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString()
     const errors = validateDraft(defaultAddDraft({ amountCents: 100, categoryId: 'cat_xxxxxxxxxxxxx_1', occurredAt: future }))
