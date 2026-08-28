@@ -1,10 +1,20 @@
 <template>
-  <!-- 首页事项分组：priority + 三个 type groups。 -->
+  <!-- 首页事项分组：优先处理仍置顶；其他事项按快到期、快没了、待处理排列。 -->
   <view class="task-list">
     <view v-if="current.priority.length" class="task-list__section" data-testid="task-priority-section">
       <text class="task-list__section-title">优先处理</text>
       <TaskSummaryCard
         v-for="task in current.priority"
+        :key="task.id"
+        :task="task"
+        @press="emit('press', task.id)"
+      />
+    </view>
+
+    <view v-if="current.groups.expiring.length" class="task-list__section" data-testid="task-group-expiring">
+      <text class="task-list__section-title">快到期</text>
+      <TaskSummaryCard
+        v-for="task in current.groups.expiring"
         :key="task.id"
         :task="task"
         @press="emit('press', task.id)"
@@ -25,16 +35,6 @@
       <text class="task-list__section-title">待处理</text>
       <TaskSummaryCard
         v-for="task in current.groups.to_handle"
-        :key="task.id"
-        :task="task"
-        @press="emit('press', task.id)"
-      />
-    </view>
-
-    <view v-if="current.groups.expiring.length" class="task-list__section" data-testid="task-group-expiring">
-      <text class="task-list__section-title">快到期</text>
-      <TaskSummaryCard
-        v-for="task in current.groups.expiring"
         :key="task.id"
         :task="task"
         @press="emit('press', task.id)"
