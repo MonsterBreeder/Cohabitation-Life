@@ -31,6 +31,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { describeImageSelectionFailure } from '../../../../utils/image-selection'
 import { deleteReceiptFile, generateReceiptTempId, uploadReceipt } from './ledger-cloud-uploader'
 
 interface Props {
@@ -71,7 +72,11 @@ function onChoose(): void {
       // 不立即上传；保存时由父级统一调 uploadReceipt 拿 fileID
       tempId.value = generateReceiptTempId()
     },
-    fail: () => undefined,
+    fail: (error: unknown) => {
+      // 用户主动取消不提示；权限、隐私配置或设备错误必须反馈，避免入口看起来毫无反应。
+      const message = describeImageSelectionFailure(error)
+      if (message) emit('error', message)
+    },
   })
 }
 

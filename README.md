@@ -25,7 +25,7 @@
 3. 启动开发：`npm run dev:mp-weixin`
 4. 微信开发者工具 → 导入项目 → 选择**项目根目录**（不要直接选 `dist/dev/mp-weixin`）。`project.config.json` 已经把 `miniprogramRoot` 指向 `dist/build/mp-weixin/`，`cloudfunctionRoot` 指向 `cloudfunctions/`。
 5. 微信开发者工具里点"云开发" → 创建/选择测试环境 → 记下环境 ID（用来填 `src/config/cloud.ts`）。
-6. **隐私协议声明（必做，否则 `chooseMedia` / `chooseImage` 会报 `api scope is not declared in the privacy agreement`）**：登录 https://mp.weixin.qq.com → **设置 → 基本设置 → 服务内容声明 → 用户隐私保护指引**，声明 `chooseMedia` / `chooseImage` 的使用目的（如"用于上传个人头像"），保存并发布后**重新扫码进模拟器**（不是热重载，隐私协议状态变更要冷启动）。
+6. **隐私协议声明（必做，否则 `chooseMedia` / `chooseImage` 会报 `api scope is not declared in the privacy agreement`）**：登录 https://mp.weixin.qq.com → **设置 → 基本设置 → 服务内容声明 → 用户隐私保护指引**，声明“选中的照片或视频信息”（用于上传个人/家庭头像和记账凭证）；如需拍照，再补充相机相关用途。保存并发布后**重新扫码进模拟器**（不是热重载，隐私协议状态变更要冷启动）。
 
 > 注意：根目录 `project.config.json` 的 `miniprogramRoot` 指向 **`dist/build/mp-weixin/`**（生产构建产物），不是 `dist/dev/mp-weixin/`（dev watch 半成品）。开发时改完代码需要 `npm run build:mp-weixin` 让微信开发者工具拿到最新版本——这是 5f86bd5 修的坑。
 
