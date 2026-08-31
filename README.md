@@ -16,7 +16,7 @@
 | 状态 | Pinia 2.1 | 每个业务域一个 store，对象式 + 单飞保护 + 超时恢复 |
 | 样式 | SCSS + 品牌变量 | `src/uni.scss` 集中维护 `$brand-color-*`、`$brand-radius-*` |
 | 后端 | 微信云开发（云函数 + 云数据库） | 4 个云函数，见下表 |
-| 工具链 | Vite 5 + vue-tsc + Jest 29 | TS 严格模式、单元测试 41 套件 / 626 用例 |
+| 工具链 | Vite 5 + vue-tsc + Jest 29 | TS 严格模式、单元测试 41 套件 / 636 用例 |
 
 ## 本地运行
 
@@ -201,7 +201,7 @@ tests/
 - **按成员 / 月份 / 类目筛选**：筛选全部由云端 `listEntries` 完成，前端只做二次过滤
 - **凭证图云存储**（`receipts/{householdId}/{entryId}.jpg`）：30 天物理删除账目时连带删
 - **软删除 + 30 天清理**（`cleanup-deleted-ledger-entries`）：30 天内任何成员都能恢复
-- **纯 inline SVG 饼图 + 纯 CSS 柱状图**（不引第三方图表库）
+- **微信原生画布环形图 + 柱状图**（不引第三方图表库；环形图支持点击查看类目、金额和占比）
 - **8 个类目图标直接用 Wot UI 内置 SVG**（`fork-spoon` / `car` / `house` / `gamepad` / `first-aid` / `shopping-bag` / `book` / `tag`）— 不创建 PNG 资源，节省 60KB
 - **底部 tab 入口**（账本作为第二个 tab：首页 / 账本 / 我的；Wot UI `wd-tabbar` 实现，icon `book` 线稿风——Wot UI 的 `wallet` iconfont 字形缺失，用语义最贴的 `book` 替代）
 - **不在 PRD 008 范围**：AA / 分摊 / 结算 / 已转 / 转账独立类型 / 预算 / 定期账 / OCR / 多币种 / 多人家庭（>2 成员）/ 与事项联动 / 私密账目 / 乐观锁 / Webhook / 推送 / 导出 / 搜索 / 年报

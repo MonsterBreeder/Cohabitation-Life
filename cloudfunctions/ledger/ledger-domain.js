@@ -174,7 +174,8 @@ async function initCategories(input, dependencies) {
       isHiddenBy: [],
       createdAt: dependencies.now().toISOString(),
     }
-    await repo.addCategory(withoutDocumentId(record))
+    // repository 负责把 _id 用作文档编号；领域层必须保留它，确保返回编号可直接查询。
+    await repo.addCategory(record)
     created.push(record)
   }
 
@@ -256,7 +257,7 @@ async function addEntry(input, dependencies) {
     deletedBy: null,
   }
   await repo.runTransaction(async (tx) => {
-    await tx.addEntry(withoutDocumentId(record))
+    await tx.addEntry(record)
     await tx.addOperation({
       _id: lockId,
       kind: 'add',
@@ -538,7 +539,7 @@ async function addCategory(input, dependencies) {
     createdAt: now,
   }
   await repo.runTransaction(async (tx) => {
-    await tx.addCategory(withoutDocumentId(record))
+    await tx.addCategory(record)
     await tx.addOperation({
       _id: lockId,
       kind: 'addCategory',
@@ -642,7 +643,9 @@ async function getStats(input, dependencies) {
     const c = byCategoryMap.get(r.categoryId)
     if (r.type === 'expense') c.expenseCents += r.amountCents
     else c.incomeCents += r.amountCents
-    const payerKey = r.payerMemberKey || (r.payer && r.payer.memberKey) || 'unknown'
+    const rawPayerKey = r.payerMemberKey || (r.payer && r.payer.memberKey) || 'unknown'
+    // 统计结果只返回当前用户可理解的“我 / 对方”标识，既便于前端映射实时昵称，也避免暴露云端成员编号。
+    const payerKey = rawPayerKey === (dependencies.selfMemberKey || dependencies.identityKey) ? 'self' : 'other'
     if (!byPayerMap.has(payerKey)) byPayerMap.set(payerKey, { payerMemberKey: payerKey, expenseCents: 0, incomeCents: 0 })
     const p = byPayerMap.get(payerKey)
     if (r.type === 'expense') p.expenseCents += r.amountCents

@@ -674,6 +674,40 @@ describe('addCategory / updateCategory / removeCategory', () => {
     }, deps)
     expect(result.status).toBe('ADDED')
     expect(result.category.name).toBe('宠物')
+    // 保护真机链路：返回给记账页的编号必须就是数据库中可查询的编号。
+    await expect(repo.findCategoryById(result.category.id)).resolves.toMatchObject({
+      _id: result.category.id,
+      name: '宠物',
+    })
+  })
+
+  it('new custom category can be used to create an entry immediately', async () => {
+    const repo = createRepository({
+      households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF] }],
+      categories: [baseCategory],
+      users: [{ _id: SELF, nickname: '我' }],
+    })
+    const deps = makeDependencies({ repository: repo })
+    const categoryResult = await addCategory({
+      requestId: 'r_xxxxxxxxxxxxxx_new_cat',
+      name: '追星',
+      iconKey: 'tag',
+      colorKey: 'gray',
+    }, deps)
+
+    const entryResult = await addEntry({
+      requestId: 'r_xxxxxxxxxxxxxx_new_entry',
+      type: 'expense',
+      amountCents: 33700,
+      categoryId: categoryResult.category.id,
+      payerMemberKey: 'self',
+      note: '周边',
+      occurredAt: NOW.toISOString(),
+      receiptMediaId: null,
+    }, deps)
+
+    expect(entryResult.status).toBe('ADDED')
+    expect(entryResult.entry.categoryId).toBe(categoryResult.category.id)
   })
 
   it('updateCategory can hide preset', async () => {
@@ -748,6 +782,11 @@ describe('getStats', () => {
     expect(result.stats.netCents).toBe(2000)
     expect(result.stats.byCategory).toHaveLength(2)
     expect(result.stats.byPayer).toHaveLength(2)
+    // 统计结果用安全别名区分付款人，页面才能映射真实昵称且不会拿到成员编号。
+    expect(result.stats.byPayer).toEqual(expect.arrayContaining([
+      expect.objectContaining({ payerMemberKey: 'self', expenseCents: 5000 }),
+      expect.objectContaining({ payerMemberKey: 'other', expenseCents: 3000 }),
+    ]))
   })
 
   it('PRD 008 优化 R5: typeFilter=expense 只算支出', async () => {

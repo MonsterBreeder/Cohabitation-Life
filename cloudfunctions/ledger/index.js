@@ -17,6 +17,7 @@ const {
   getStats,
   LedgerDomainError,
 } = require('./ledger-domain')
+const { withoutDocumentId } = require('./repository-data')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
@@ -108,16 +109,18 @@ function createRepository() {
       if (!memberKey || !memberKey.startsWith('user_')) return null
       return getDocument(users, memberKey)
     },
-    addCategory: (data) => categories.add({ data }),
+    // 创建类记录必须使用领域层生成的编号；否则 add() 自动编号与返回给前端的编号不一致。
+    addCategory: (data) => categories.doc(data._id).set({ data: withoutDocumentId(data) }),
     updateCategory: (id, data) => categories.doc(id).update({ data }),
     removeCategory: (id) => categories.doc(id).remove(),
     runTransaction(work) {
       return db.runTransaction(async (transaction) => {
         const tx = {
-          addEntry: (data) => transaction.collection('ledgerEntries').add({ data }),
+          // 创建记录统一以领域层编号落库，保证返回编号、幂等锁和后续查询指向同一条数据。
+          addEntry: (data) => transaction.collection('ledgerEntries').doc(data._id).set({ data: withoutDocumentId(data) }),
           updateEntry: (id, data) => transaction.collection('ledgerEntries').doc(id).update({ data }),
-          addCategory: (data) => transaction.collection('ledgerCategories').add({ data }),
-          addOperation: (data) => transaction.collection('ledgerOperations').add({ data }),
+          addCategory: (data) => transaction.collection('ledgerCategories').doc(data._id).set({ data: withoutDocumentId(data) }),
+          addOperation: (data) => transaction.collection('ledgerOperations').doc(data._id).set({ data: withoutDocumentId(data) }),
         }
         return work(tx)
       })

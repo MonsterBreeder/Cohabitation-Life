@@ -76,7 +76,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, shallowRef, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import StatsPieChart from './components/StatsPieChart.vue'
@@ -94,13 +94,15 @@ import {
 const householdStore = useHouseholdStore()
 const ledgerStore = useLedgerStore()
 const { household, profile } = storeToRefs(householdStore)
-const { categories, stats, phase, errorMessage: storeError } = storeToRefs(ledgerStore)
+const { categories, stats, errorMessage: storeError } = storeToRefs(ledgerStore)
 
 const householdId = computed(() => household.value?.id || '')
 
 const currentMonth = ref<string>('')
-const isLoading = computed(() => phase.value === 'loading' && !stats.value)
+// 统计页单独管理请求状态，不能依赖账本列表共用的 phase，也不能因保留了旧数据而跳过 loading。
+const isLoading = shallowRef(true)
 const loadError = computed(() => storeError.value)
+let statsLoadRevision = 0
 
 const todayMonth = computed(() => formatLedgerMonth(new Date()))
 const canGoNext = computed(() => !currentMonth.value || currentMonth.value < todayMonth.value)
@@ -111,10 +113,11 @@ const payerBars = computed(() => describePayerBars(stats.value, payerNamesByKey.
 
 const payerNamesByKey = computed<Record<string, string>>(() => {
   const map: Record<string, string> = {}
-  if (profile.value) map[''] = profile.value.nickname || '我'
+  // 云端统计只返回 self / other，页面用当前家庭资料补上实时昵称。
+  if (profile.value) map.self = profile.value.nickname || '我'
   if (household.value && Array.isArray(household.value.members)) {
     for (const m of household.value.members) {
-      if (m.nickname) map[m.isSelf ? '' : 'other'] = m.nickname
+      if (m.nickname) map[m.isSelf ? 'self' : 'other'] = m.nickname
     }
   }
   return map
@@ -123,7 +126,6 @@ const payerNamesByKey = computed<Record<string, string>>(() => {
 onLoad(() => {
   if (householdId.value) ledgerStore.setHouseholdContext(householdId.value, '')
   if (!currentMonth.value) currentMonth.value = formatLedgerMonth(new Date())
-  void reload()
 })
 
 onShow(async () => {
@@ -136,13 +138,21 @@ onShow(async () => {
 
 async function reload(): Promise<void> {
   if (!currentMonth.value) return
-  await ledgerStore.loadStats(currentMonth.value)
+  const revision = ++statsLoadRevision
+  isLoading.value = true
+  try {
+    await ledgerStore.loadStats(currentMonth.value)
+  } finally {
+    // 快速切月时只允许最后一次请求关闭 loading，避免旧请求先完成造成页面闪烁。
+    if (revision === statsLoadRevision) isLoading.value = false
+  }
 }
 
 function onShift(delta: number): void {
   const next = shiftMonthView(currentMonth.value, delta)
   if (!next) return
   currentMonth.value = next
+  void reload()
 }
 
 watch(

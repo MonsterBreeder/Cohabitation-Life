@@ -3,6 +3,7 @@ import {
   describeMonthComparison,
   describeMonthOverview,
   describePayerBars,
+  findPieSliceIndex,
   shiftMonth as shiftMonthView,
 } from '../../src/subpackages/ledger/ledger-stats/ledger-stats-view'
 import type { LedgerCategory, LedgerStats } from '../../src/types/ledger'
@@ -55,6 +56,23 @@ describe('describeCategorySlices', () => {
       [],
     )
     expect(slices[0].categoryName).toBe('已删除类目')
+  })
+})
+
+describe('findPieSliceIndex', () => {
+  const slices = [
+    { categoryId: 'cat_a', categoryName: '餐饮', colorHex: '#F2BD45', expenseCents: 6000, percent: 0.6 },
+    { categoryId: 'cat_b', categoryName: '交通', colorHex: '#4D9DE0', expenseCents: 4000, percent: 0.4 },
+  ]
+
+  // 环形图从正上方开始，点在顶部应命中第一块。
+  it('returns the matching slice for a ring point', () => {
+    expect(findPieSliceIndex(slices, { x: 100, y: 30 }, { width: 200, height: 200 })).toBe(0)
+  })
+
+  it('ignores the hollow center and outside area', () => {
+    expect(findPieSliceIndex(slices, { x: 100, y: 100 }, { width: 200, height: 200 })).toBeNull()
+    expect(findPieSliceIndex(slices, { x: 100, y: 5 }, { width: 200, height: 200 })).toBeNull()
   })
 })
 

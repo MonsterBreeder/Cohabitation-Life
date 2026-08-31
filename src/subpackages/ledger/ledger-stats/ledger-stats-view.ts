@@ -27,6 +27,41 @@ export interface MonthComparison {
   direction: 'up' | 'down' | 'flat'
 }
 
+export interface PieChartPoint {
+  x: number
+  y: number
+}
+
+export interface PieChartSize {
+  width: number
+  height: number
+}
+
+/** 根据点击位置找到环形图切片；点击内圆或图形外部时不选中任何类目。 */
+export function findPieSliceIndex(slices: CategorySlice[], point: PieChartPoint, size: PieChartSize): number | null {
+  const total = slices.reduce((sum, slice) => sum + Math.max(slice.percent, 0), 0)
+  if (total <= 0 || size.width <= 0 || size.height <= 0) return null
+
+  const centerX = size.width / 2
+  const centerY = size.height / 2
+  const outerRadius = Math.min(size.width, size.height) * 0.4
+  const innerRadius = outerRadius * 0.6
+  const deltaX = point.x - centerX
+  const deltaY = point.y - centerY
+  const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY)
+  if (distance < innerRadius || distance > outerRadius) return null
+
+  // 绘制从正上方顺时针开始，把点击角度换算成同样的 0~2PI 区间。
+  const angle = (Math.atan2(deltaY, deltaX) + Math.PI / 2 + Math.PI * 2) % (Math.PI * 2)
+  const target = (angle / (Math.PI * 2)) * total
+  let accumulated = 0
+  for (let index = 0; index < slices.length; index += 1) {
+    accumulated += Math.max(slices[index].percent, 0)
+    if (target <= accumulated) return index
+  }
+  return slices.length > 0 ? slices.length - 1 : null
+}
+
 /** 把 stats.byCategory 转换为饼图切片。 */
 export function describeCategorySlices(stats: LedgerStats | null, categories: LedgerCategory[]): CategorySlice[] {
   if (!stats) return []
