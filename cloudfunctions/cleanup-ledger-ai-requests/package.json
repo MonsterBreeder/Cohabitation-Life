@@ -1,0 +1,7 @@
+{
+  "name": "cleanup-ledger-ai-requests",
+  "version": "1.0.0",
+  "description": "清理过期的问账本临时记录",
+  "main": "index.js",
+  "dependencies": { "wx-server-sdk": "~2.6.3" }
+}

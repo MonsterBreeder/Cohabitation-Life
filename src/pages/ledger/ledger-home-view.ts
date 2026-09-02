@@ -222,3 +222,46 @@ export function describeDeletedEntryHint(deletedAt: string | null, now: Date = n
   if (remaining === 0) return '今天清理'
   return `还剩 ${remaining} 天可恢复`
 }
+
+/** 账本统计页入口描述（PRD 008 优化 / brainstorm 2026-08-30）。
+ *  集中入口文本和目标 url，避免在 component 里硬编码字符串。
+ *  跟 describeHomeActions 同款"纯函数返回 UI 元数据"模式。 */
+export const STATS_ENTRY_URL = '/subpackages/ledger/ledger-stats/index'
+export const STATS_ENTRY_DATA_TEST_ID = 'ledger-home-stats-entry'
+
+export interface StatsEntry {
+  /** 入口按钮上显示的文本。 */
+  label: string
+  /** uni.navigateTo 用的目标路径。 */
+  targetUrl: string
+  /** e2e / 手测用的 data-testid。 */
+  dataTestId: string
+}
+
+export function describeStatsEntry(): StatsEntry {
+  return {
+    label: '统计',
+    targetUrl: STATS_ENTRY_URL,
+    dataTestId: STATS_ENTRY_DATA_TEST_ID,
+  }
+}
+
+/** “问账本”独立页面入口，集中管理目标地址和测试标识。 */
+export const LEDGER_AI_ENTRY_URL = '/subpackages/ledger/ledger-ai/index'
+export const LEDGER_AI_ENTRY_DATA_TEST_ID = 'ledger-home-ai-entry'
+
+export interface LedgerAiEntry {
+  label: string
+  description: string
+  targetUrl: string
+  dataTestId: string
+}
+
+export function describeLedgerAiEntry(): LedgerAiEntry {
+  return {
+    label: '问账本',
+    description: '说出金额、用途或时间，帮你找回那笔账',
+    targetUrl: LEDGER_AI_ENTRY_URL,
+    dataTestId: LEDGER_AI_ENTRY_DATA_TEST_ID,
+  }
+}

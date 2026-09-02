@@ -1,7 +1,7 @@
 <!--
-  家庭共同流水账首页（PRD 008 / Plan U4）。
+  家庭共同流水账首页（PRD 008 / Plan U4 + brainstorm 2026-08-30）。
   按 frontend-design skill Module C 走，沿用项目品牌色 + Wot UI 组件。
-  区块：①月度概览 ②筛选条 ③按日期分组的列表 ④FAB 记一笔 ⑤已删除区。
+  区块：①月度概览(含"统计"入口) ②筛选条 ③按日期分组的列表 ④FAB 记一笔 ⑤已删除区。
   位置：作为底部 tab 入口页面放在主包（src/pages/ledger/），
   其他 ledger 子页面（add/detail/category-manager/stats）保留在 subpackages/ledger/ 按需加载。
 -->
@@ -30,7 +30,33 @@
     <view v-else class="ledger-home__content" data-testid="ledger-home-content">
       <!-- ① 月度概览 -->
       <view class="ledger-home__overview">
-        <text class="ledger-home__month-label">{{ monthLabel }}</text>
+        <!-- 月标签 + 统计入口同一行（space-between）：右侧"统计 ›"是跳 subpackages/ledger/ledger-stats 的导航入口，
+             由 describeStatsEntry() 描述，跟 R7 "不传参" 原则保持一致；点击区域 ≥ 88rpx × 64rpx 满足 Wot UI 触区。 -->
+        <view class="ledger-home__overview-header">
+          <text class="ledger-home__month-label">{{ monthLabel }}</text>
+          <view class="ledger-home__overview-actions">
+            <view
+              class="ledger-home__ai-entry"
+              :data-testid="aiEntry.dataTestId"
+              role="button"
+              :aria-label="aiEntry.description"
+              @click="onPressLedgerAi"
+            >
+              <wd-icon name="message" size="30rpx" color="#FFFFFF" />
+              <text class="ledger-home__ai-entry-text">{{ aiEntry.label }}</text>
+            </view>
+            <view
+              class="ledger-home__stats-entry"
+              :data-testid="statsEntry.dataTestId"
+              role="button"
+              :aria-label="`查看${statsEntry.label}`"
+              @click="onPressStats"
+            >
+              <text class="ledger-home__stats-entry-text">{{ statsEntry.label }}</text>
+              <wd-icon name="arrow-right" size="28rpx" color="#267A5A" />
+            </view>
+          </view>
+        </view>
         <view class="ledger-home__numbers">
           <view class="ledger-home__number-block">
             <text class="ledger-home__number-label">支出</text>
@@ -303,10 +329,14 @@ import {
   describeEntryMonth,
   describeMonthLabel,
   describePayerFilterOptions,
+  describeStatsEntry,
+  describeLedgerAiEntry,
   describeTypeFilterOptions,
   groupEntriesByDate,
   shiftMonth,
   shiftDay,
+  STATS_ENTRY_URL,
+  LEDGER_AI_ENTRY_URL,
   type CategoryView,
   type PayerFilter,
 } from './ledger-home-view'
@@ -401,6 +431,12 @@ const payerOptions = computed(() => {
 const typeOptions = computed(() => describeTypeFilterOptions())
 const memberCount = computed(() => household.value?.memberCount || 1)
 
+// 统计入口描述（brainstorm 2026-08-30）：集中入口文本和目标 url，
+// 跟 ledger-stats 子页的 STATS_ENTRY_URL 常量对齐，避免 component 里硬编码字符串。
+const statsEntry = describeStatsEntry()
+// 问账本和统计共用顶部操作区，进入任一页面都不会改动当前筛选。
+const aiEntry = describeLedgerAiEntry()
+
 // 筛选弹层按钮文字：单按钮显示"我付的 · 支出"这种组合，默认"全部人 · 全部类型"。
 // 至少有一个维度被设成非 all 时，按钮高亮（active 色）让用户知道筛选生效。
 const isFilterActive = computed(() => payerMode.value !== 'all' || typeFilter.value !== 'all')
@@ -437,6 +473,17 @@ function goAdd(): void {
   isAdding.value = true
   uni.navigateTo({ url: '/subpackages/ledger/ledger-add/index' })
   setTimeout(() => { isAdding.value = false }, 500)
+}
+
+/** 跳到账本统计页（PRD 008 / brainstorm 2026-08-30）。
+ *  跟 onPressEntry 跳 ledger-detail 同款写法，R7 "不传参"：目标页自带 currentMonth 默认 = 当月。 */
+function onPressStats(): void {
+  uni.navigateTo({ url: STATS_ENTRY_URL })
+}
+
+/** 进入独立问账页，不清空当前月份、日期和其他筛选。 */
+function onPressLedgerAi(): void {
+  uni.navigateTo({ url: LEDGER_AI_ENTRY_URL })
 }
 
 function onShiftMonth(delta: number): void {
@@ -606,6 +653,59 @@ onReachBottom(() => {
     font-size: 24rpx;
     font-weight: 500;
     letter-spacing: 2rpx;
+  }
+  /* 月度概览头部行：左月标签 + 右"统计"入口（brainstorm 2026-08-30）。
+     用 space-between 而不是 absolute 定位，避免压到下面的数字 / 类目分布条。 */
+  &__overview-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12rpx;
+  }
+  &__overview-actions {
+    display: flex;
+    align-items: center;
+    gap: 8rpx;
+    flex-shrink: 0;
+  }
+  &__ai-entry {
+    display: flex;
+    min-height: 64rpx;
+    align-items: center;
+    gap: 6rpx;
+    padding: 8rpx 16rpx;
+    border-radius: 999rpx;
+    background: $brand-color-action;
+    transition: transform .12s ease, opacity .15s ease;
+    &:active { transform: scale(.98); opacity: .78; }
+  }
+  &__ai-entry-text {
+    color: #fff;
+    font-size: 24rpx;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  /* 统计入口：图标 + 文字 + arrow-right；点击区域 ≥ 88rpx × 64rpx 满足 Wot UI 触区。
+     active 状态跟 MonthlyExpenseCard 同款（scale .99 + #effbf5 背景）。 */
+  &__stats-entry {
+    display: flex;
+    align-items: center;
+    gap: 4rpx;
+    min-width: 88rpx;
+    min-height: 64rpx;
+    padding: 8rpx 12rpx;
+    border-radius: 16rpx;
+    transition: transform .12s ease, background .15s ease;
+    &:active {
+      transform: scale(.99);
+      background: #effbf5;
+    }
+  }
+  &__stats-entry-text {
+    color: $brand-color-primary;
+    font-size: 26rpx;
+    font-weight: 600;
+    line-height: 1;
   }
   &__numbers {
     display: flex;

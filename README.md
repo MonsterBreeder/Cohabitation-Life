@@ -110,6 +110,7 @@ src/
 │   ├── household-cloud.ts          # household
 │   ├── invitation-cloud.ts         # household（邀请 / 加入）
 │   ├── ledger-cloud.ts             # ledger
+│   ├── ledger-ai-cloud.ts          # 问账本
 │   ├── task-cloud.ts               # task
 │   ├── avatar-media.ts             # 云存储（头像 / 凭证图）
 │   └── entry-router.ts             # 账目跳转辅助
@@ -123,11 +124,11 @@ src/
 │   ├── pending-invitation.ts
 │   ├── pending-ledger.ts
 │   └── pending-task.ts
-├── types/                          # 跨模块类型契约
+├── types/                          # 跨模块类型契约（含问账本受控回答）
 ├── config/cloud.ts                 # 测试环境 ID
 ├── uni.scss                        # 品牌变量
 └── manifest.json
-cloudfunctions/                     # 4 业务云函数 + 3 清理定时任务
+cloudfunctions/                     # 业务云函数与清理定时任务（含 ledger-ai）
 docs/
 ├── prd/                            # 9 份产品需求文档
 ├── plans/                          # 实施计划（按日期 + 模块名）
@@ -236,6 +237,15 @@ tests/
 - **crop-avatar 错误可观测性增强**：`choose` 函数以前把 `uni.chooseMedia` 的 `fail` 回调静默吞掉（"用户取消"和"权限拒绝"都无声），现在区分 `cancel` 与其他错误，后者用 toast 露出微信原始 `errMsg`，方便排查。
 - **小帅/小美的内容安全豁免**为什么没删：云函数 `updateProfile` 里 `if (isRenaming && ![DEFAULT_PROFILE_NAME, '小帅', '小美'].includes(nickname) && ...)` 这条豁免是**改昵称**用的，跟 `profilePreset` 字段没关系。删了会让"用户把昵称改成 小帅/小美"走 `checkText` 误判，所以保留。
 - **不在本期范围**：微信资料同步 / 家庭资料自定义头像 / 多张自定义头像 / 历史头像切换 / 裁剪参数自定义 / 老数据主动迁移 / 头像 URL 跨页面缓存。
+
+### 9. 问账本（PRD 010）
+
+- 账本顶部提供“问账本”入口，进入独立聊天页面。
+- 支持按大概金额、用途、类目和时间模糊找账，最多先展示 5 笔候选及匹配原因，并可分页查看全部。
+- 支持简单金额汇总、两名成员金额比较，以及“第一笔/第二笔”连续追问。
+- 多月份趋势继续跳转现有统计页，不重复消耗问答次数。
+- 家庭每天共享 10 次；体验额度不可用时只停止问账本，不自动付费。
+- 首次使用前说明数据用途，凭证图片和内部编号不会发送给模型；页面退出后不保留聊天历史。
 
 ## 全站交互规范
 

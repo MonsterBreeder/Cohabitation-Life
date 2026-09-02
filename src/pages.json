@@ -62,7 +62,8 @@
 				{ "path": "ledger-add/index", "style": { "navigationBarTitleText": "记一笔" } },
 				{ "path": "ledger-detail/index", "style": { "navigationBarTitleText": "账目详情" } },
 				{ "path": "ledger-category-manager/index", "style": { "navigationBarTitleText": "类目管理" } },
-				{ "path": "ledger-stats/index", "style": { "navigationBarTitleText": "账本统计" } }
+				{ "path": "ledger-stats/index", "style": { "navigationBarTitleText": "账本统计" } },
+				{ "path": "ledger-ai/index", "style": { "navigationBarTitleText": "问账本" } }
 			]
 		}
 	],

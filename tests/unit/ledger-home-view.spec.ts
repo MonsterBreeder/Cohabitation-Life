@@ -8,12 +8,17 @@ import {
   describeMonthLabel,
   describePayerFilterOptions,
   describePayerLine,
+  describeStatsEntry,
+  describeLedgerAiEntry,
   describeTypeFilterOptions,
   groupEntriesByDate,
   LEDGER_CATEGORY_COLOR_MAP,
   LEDGER_CATEGORY_ICON_MAP,
   shiftDay,
   shiftMonth,
+  STATS_ENTRY_DATA_TEST_ID,
+  STATS_ENTRY_URL,
+  LEDGER_AI_ENTRY_URL,
 } from '../../src/pages/ledger/ledger-home-view'
 import type { LedgerCategory, LedgerEntrySummary } from '../../src/types/ledger'
 
@@ -56,6 +61,17 @@ describe('describeCategory', () => {
   it('falls back to gray / tag for unknown keys', () => {
     const view = describeCategory(makeCategory({ colorKey: 'amber', iconKey: 'tag' }))
     expect(view.colorHex).toBe(LEDGER_CATEGORY_COLOR_MAP.amber)
+  })
+})
+
+describe('describeLedgerAiEntry', () => {
+  it('points to the independent ledger AI page', () => {
+    expect(describeLedgerAiEntry()).toEqual({
+      label: '问账本',
+      description: '说出金额、用途或时间，帮你找回那笔账',
+      targetUrl: LEDGER_AI_ENTRY_URL,
+      dataTestId: 'ledger-home-ai-entry',
+    })
   })
 })
 
@@ -229,5 +245,28 @@ describe('describeDeletedEntryHint', () => {
 
   it('returns empty for null', () => {
     expect(describeDeletedEntryHint(null, now)).toBe('')
+  })
+})
+
+// brainstorm 2026-08-30 把账本统计页的入口接出来。
+// 测试覆盖：返回值结构、常量与函数一致性、幂等（无随机 / 时间依赖）。
+describe('describeStatsEntry (brainstorm 2026-08-30 把统计入口接出来)', () => {
+  it('returns label / targetUrl / dataTestId for the stats entry', () => {
+    const entry = describeStatsEntry()
+    expect(entry.label).toBe('统计')
+    expect(entry.targetUrl).toBe('/subpackages/ledger/ledger-stats/index')
+    expect(entry.dataTestId).toBe('ledger-home-stats-entry')
+  })
+
+  it('keeps STATS_ENTRY_URL / STATS_ENTRY_DATA_TEST_ID consistent with describeStatsEntry()', () => {
+    const entry = describeStatsEntry()
+    expect(entry.targetUrl).toBe(STATS_ENTRY_URL)
+    expect(entry.dataTestId).toBe(STATS_ENTRY_DATA_TEST_ID)
+  })
+
+  it('returns the same shape on every call (no randomness / time dependence)', () => {
+    const a = describeStatsEntry()
+    const b = describeStatsEntry()
+    expect(a).toEqual(b)
   })
 })
