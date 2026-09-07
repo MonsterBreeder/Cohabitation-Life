@@ -33,6 +33,14 @@
 				"navigationBarBackgroundColor": "#FFF9F2",
 				"navigationBarTextStyle": "black"
 			}
+		},
+		{
+			"path": "pages/footprint/index",
+			"style": {
+				"navigationBarTitleText": "我们的足迹",
+				"navigationBarBackgroundColor": "#FFF9F2",
+				"navigationBarTextStyle": "black"
+			}
 		}
 	],
 	"subPackages": [
@@ -64,6 +72,13 @@
 				{ "path": "ledger-category-manager/index", "style": { "navigationBarTitleText": "类目管理" } },
 				{ "path": "ledger-stats/index", "style": { "navigationBarTitleText": "账本统计" } },
 				{ "path": "ledger-ai/index", "style": { "navigationBarTitleText": "问账本" } }
+			]
+		},
+		{
+			"root": "subpackages/footprint",
+			"pages": [
+				{ "path": "footprint-form/index", "style": { "navigationBarTitleText": "记录足迹" } },
+				{ "path": "footprint-detail/index", "style": { "navigationBarTitleText": "足迹详情" } }
 			]
 		}
 	],

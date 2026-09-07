@@ -102,6 +102,53 @@
 
 发布前在自动化测试报告里确认所有可自动化项都通过，并把真机验收记录（截图或录像链接）附在版本说明里。
 
+## 011 我们的足迹：发布与验收
+
+足迹使用微信原生地图和地点选择，不需要高德密钥。记录、照片和操作凭证只能由云函数访问；位置权限只在主动选择地点时申请。
+
+### 集合与索引
+
+创建 `footprintEntries`、`footprintMedia`、`footprintOperations`、`footprintUploadLocks`，全部设置为“所有用户不可读写”。成员归属沿用 `households` 与 `householdCreationLocks`。不要为了让页面运行而开放数据库权限。
+
+建议创建以下复合索引，并在测试环境实际执行对应查询后确认有效：
+
+| 集合 | 字段顺序 | 用途 |
+| --- | --- | --- |
+| footprintEntries | householdId 升序、deletedAt 升序、visitedAt 降序、createdAt 降序、_id 降序 | 时间列表与首页最近记录 |
+| footprintEntries | householdId 升序、deletedAt 升序、placeKey 升序、visitedAt 降序、createdAt 降序、_id 降序 | 同一地点历史与地图分组 |
+| footprintEntries | householdId 升序、deletedAt 升序、createdAt 升序 | 加入前历史提示 |
+| footprintEntries | deletedAt 升序 | 30 天清理 |
+| footprintMedia | expiresAt 升序 | 过期照片清理 |
+| footprintMedia | state 升序、createdAt 升序 | 已保存照片的临时文件清理 |
+
+分页按日期、创建时间、记录编号稳定倒序；地图按地点指纹顺序分页。照片预约锁保留最近 24 小时的预约记录，事务内限制最多 30 次预约和 6 张未关联照片。
+
+### 照片与隐私
+
+- `footprint-staging/` 只供已登录上传者写入自己的预约文件；不允许客户端列举、读取或覆盖其他人的照片。
+- `footprint-private/` 禁止客户端直接读取和写入；只有云函数可保存正式照片、确认家庭权限并签发临时地址。上线前必须用非成员账号验证直接访问被拒绝。
+- 本地使用实际挂载的微信 2D 画布重绘，导出最长边 1600 像素、质量 0.82 的 JPEG；不使用离屏画布不存在的 `toDataURL`。云端再次检查格式、尺寸和 EXIF/XMP/注释段，最多 3 MB。
+- 每条最多 3 张。只有全部照片审核成功才提交记录；原文件与正式文件编号在上传前登记。未关联照片 2 小时后过期，由每日任务处理；已保存照片的临时上传文件也会清理。
+- 删除记录立即禁止再次签发照片地址，30 天后物理清理。已经下载到设备或已经签发且尚未过期的地址无法即时收回，不应承诺“删除后所有副本立即消失”。
+- 在微信公众平台隐私说明里配置位置、相册/相机与云存储用途，并确认 `chooseLocation` 接口使用资格。照片存储和流量按实际云环境额度计费，不能承诺永久免费。
+
+### 云函数配置与上线顺序
+
+1. 确认以上集合、索引和文件权限；先部署兼容云端，再启用前端入口。
+2. 部署 `footprint`、`cleanup-footprint-data` 和包含加入时间字段更新的 `household`。`footprint` 需要文字与图片安全检查权限。
+3. `footprint` 建议超时设为 30 秒，清理函数建议 60 秒；客户端等待超时后保留相同请求凭证重试，云端不会重复创建。不能沿用默认 3 秒作为图片审核的正式配置。
+4. `cleanup-footprint-data` 配置每日 03:00 触发；文件删除任一项失败时保留清理记录和失败次数，下一次继续。只清理已过期且尚未关联的照片，不能删除正在保存的照片。
+5. 用两名测试成员验证创建、共同修改、共同删除、新成员历史提示、旧成员失权、冲突恢复及三张照片中途失败；用真机验证位置授权、拒绝、再次开启和返回草稿保护。
+
+2026-09-03 检查与修复：已下载备份并核对 `footprint`、`cleanup-footprint-data`、`household` 的业务源码，修复前与本地一致。随后修正微信 SDK 聚合返回值误读问题，成功增量上传 `footprint/repository-data.js`。足迹与清理函数均为 Active、Nodejs16.13、3 秒超时；本次未修改线上权限、超时或触发器，仍须完成上述配置核验及实际读取测试。
+
+### 验证与观察
+
+- 本地完整检查：`pnpm run verify:mp-weixin`。
+- 微信入口自动检查：先启用开发者工具自动化并由用户在测试小程序完成登录，再设置 `FOOTPRINT_E2E=1` 和本机 `MINIPROGRAM_AUTOMATOR_PATH`，运行 `pnpm run test:e2e -- --runInBand tests/e2e/footprint-flow.spec.js`。未启用时会跳过，跳过不能作为验收证据。
+- 上线后首个工作日观察足迹保存成功率、图片审核超时、未关联照片数量及 `footprint action failed`、`footprint staging cleanup failed` 日志。预期保存请求可重试且无重复记录，过期资源随每日任务下降。
+- 若出现越权访问、重复记录、照片意外删除或清理持续失败，停止足迹写入并隐藏入口，保留云端记录和照片排查；不得通过删库或删除家庭数据回滚。
+
 ## 部署前检查清单（共同事项）
 
 共同事项功能上线前必须按顺序完成以下步骤；任一项未确认前，不要发布新版本小程序或新版本 `task` 云函数。

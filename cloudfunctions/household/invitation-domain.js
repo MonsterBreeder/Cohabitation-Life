@@ -138,10 +138,12 @@ async function joinInvitation(input, dependencies) {
     if (membershipLock && membershipLock.householdId !== currentHomeId) return inviteFailure('ALREADY_IN_HOME')
     if (currentHomeId && (!current || current.ownerKey !== identityKey || current.memberKeys?.length !== 1 || input.mode !== 'transfer')) return inviteFailure('ALREADY_IN_HOME')
 
-    const updatedTarget = { ...target, memberKeys: [...target.memberKeys, identityKey], updatedAt: now() }
+    const joinedAt = now()
+    const updatedTarget = { ...target, memberKeys: [...target.memberKeys, identityKey], updatedAt: joinedAt }
     await transaction.setHousehold(updatedTarget)
     if (current) await transaction.deleteHousehold(current._id)
-    await transaction.setMembershipLock({ _id: membershipLockId(identityKey), householdId: targetHomeId, updatedAt: now() })
+    // 加入时间供足迹模块判断“加入前历史”提示；使用云端时间，不能信任页面传值。
+    await transaction.setMembershipLock({ _id: membershipLockId(identityKey), householdId: targetHomeId, joinedAt, updatedAt: joinedAt })
     await transaction.setInvitation({ ...invitation, usedAt: now(), usedByKey: identityKey })
     return homeResult(updatedTarget, identityKey, transaction.getUser)
   })

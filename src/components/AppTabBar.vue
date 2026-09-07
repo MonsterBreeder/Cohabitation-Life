@@ -12,20 +12,23 @@
     <wd-tabbar-item name="home" title="首页" icon="home" />
     <!-- 账本 tab：用 Wot UI 的 'book' 图标（线稿风，与 home / mine 风格一致） -->
     <wd-tabbar-item name="ledger" title="账本" icon="book" />
+    <!-- 足迹使用已确认有字形的 location 线稿图标，保持四个入口风格一致。 -->
+    <wd-tabbar-item name="footprint" title="足迹" icon="location" />
     <wd-tabbar-item name="mine" title="我的" icon="user" />
   </wd-tabbar>
 </template>
 
 <script setup lang="ts">
-type TabName = 'home' | 'ledger' | 'mine'
+type TabName = 'home' | 'ledger' | 'footprint' | 'mine'
 
 interface Props { active: TabName }
 const props = defineProps<Props>()
 
-/** 三个主入口 tab 路径表。ledger 主入口在主包 /pages/ledger/，其他 ledger 子页面在 subpackages/ledger/。 */
+/** 四个主入口路径表；完整业务编辑页继续放入对应分包。 */
 const TAB_PATHS: Record<TabName, string> = {
   home: '/pages/index/index',
   ledger: '/pages/ledger/index',
+  footprint: '/pages/footprint/index',
   mine: '/pages/profile/index',
 }
 

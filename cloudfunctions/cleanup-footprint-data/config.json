@@ -1,0 +1,4 @@
+{
+  "permissions": { "openapi": [] },
+  "triggers": [{ "name": "cleanup-footprint-data-daily", "type": "timer", "config": "0 0 3 * * * *" }]
+}

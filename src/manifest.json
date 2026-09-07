@@ -52,6 +52,14 @@
     "mp-weixin" : {
         "appid" : "wxd40af14967fa64fa",
         "cloudfunctionRoot" : "cloudfunctions/",
+        "permission" : {
+            "scope.userLocation" : {
+                "desc" : "用于在你主动记录足迹或发起导航时搜索和选择地点"
+            }
+        },
+        "requiredPrivateInfos" : [
+            "chooseLocation"
+        ],
         "optimization" : {
             "subPackages" : true
         },

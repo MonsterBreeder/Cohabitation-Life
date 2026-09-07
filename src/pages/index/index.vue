@@ -50,6 +50,15 @@
         @retry="reloadLedgerStats"
       />
 
+      <!-- 足迹摘要与首页其它模块独立加载；读取失败时保留入口，不阻塞事项和账本。 -->
+      <HomeFootprintCard
+        :summary="footprintSummary"
+        :loading="footprintLoading"
+        :error-message="footprintError"
+        :cover-url="footprintCoverUrl"
+        @press="goFootprint"
+      />
+
       <!-- 事项区：单成员 / 双成员家庭都用同一套——只是单成员没有 "完成记录" 链接。
            不再把单成员锁在外面"等邀请另一半"——一个人也能记下自己的事。 -->
       <view v-if="taskCurrent" class="home-tasks">
@@ -101,12 +110,14 @@ import { storeToRefs } from 'pinia'
 import { onShow } from '@dcloudio/uni-app'
 import HomeSummaryCard from '../../components/home/HomeSummaryCard.vue'
 import MonthlyExpenseCard from '../../components/home/MonthlyExpenseCard.vue'
+import HomeFootprintCard from './components/HomeFootprintCard.vue'
 import AppTabBar from '../../components/AppTabBar.vue'
 import TaskList from '../../components/task/TaskList.vue'
 import { useAuthStore } from '../../store/modules/auth'
 import { useHouseholdStore } from '../../store/modules/household'
 import { useTaskStore } from '../../store/modules/task'
 import { useLedgerStore } from '../../store/modules/ledger'
+import { useFootprintStore } from '../../store/modules/footprint'
 import { formatLedgerMonth } from '../../utils/format'
 import { householdAvatarSource, resolveHomeLoadDestination } from './home-view'
 import { getAvatarTemporaryUrl } from '../../services/avatar-media'
@@ -116,10 +127,12 @@ const authStore = useAuthStore()
 const householdStore = useHouseholdStore()
 const taskStore = useTaskStore()
 const ledgerStore = useLedgerStore()
+const footprintStore = useFootprintStore()
 const { hasCompletedLogin, errorMessage: authError } = storeToRefs(authStore)
 const { phase, household, profile, errorMessage: householdError } = storeToRefs(householdStore)
 const { current: taskCurrent, errorMessage: taskError } = storeToRefs(taskStore)
 const { stats: ledgerStats, phase: ledgerPhase, errorMessage: ledgerError } = storeToRefs(ledgerStore)
+const { summary: footprintSummary, pending: footprintPending, summaryError: footprintStoreError } = storeToRefs(footprintStore)
 
 // 首次进入且没有可展示资料时才显示整页加载；返回首页刷新时继续展示已确认内容，避免闪屏。
 const isLoading = computed(() => phase.value === 'checking' && !(household.value && profile.value))
@@ -129,6 +142,7 @@ const homeError = computed(() => taskError.value || '')
 // 用 avatarLoading 单独控制占位状态，householdAvatarUrl 仅在拿到真实 URL 时才赋值。
 const householdAvatarUrl = ref('')
 const avatarLoading = ref(false)
+const footprintCoverUrl = ref('')
 const isQuickAdd = ref(false)
 
 const hasAnyOpenTask = computed(() => {
@@ -154,6 +168,8 @@ const monthlyExpenseCents = computed(() => ledgerStats.value?.monthExpenseCents 
 const monthlyIncomeCents = computed(() => ledgerStats.value?.monthIncomeCents ?? null)
 const ledgerStatsLoading = computed(() => ledgerPhase.value === 'loading' && ledgerStats.value === null)
 const ledgerStatsError = computed(() => (ledgerError.value && ledgerStats.value === null ? ledgerError.value : null))
+const footprintLoading = computed(() => footprintPending.value.summary && footprintSummary.value === null)
+const footprintError = computed(() => (footprintStoreError.value && footprintSummary.value === null ? footprintStoreError.value : null))
 
 /** 给 HomeSummaryCard 喂头像 src。
  *  - 内置头像：直接本地路径
@@ -193,6 +209,24 @@ function goCompleted(): void {
  *  不会出现"假 tabBar 叠加"问题。 */
 function goLedger(): void {
   uni.reLaunch({ url: '/pages/ledger/index' })
+}
+
+/** 首页卡片和底部入口统一进入同一个足迹主页。 */
+function goFootprint(): void {
+  uni.reLaunch({ url: '/pages/footprint/index' })
+}
+
+/** 足迹摘要成功后只为首张封面申请短期地址，避免首页预取无关照片。 */
+async function loadFootprintSummary(householdId: string): Promise<void> {
+  footprintStore.setHouseholdContext(householdId)
+  const version = footprintStore.contextVersion
+  footprintCoverUrl.value = ''
+  await footprintStore.loadSummary()
+  if (version !== footprintStore.contextVersion) return
+  const cover = footprintStore.summary?.latestEntry?.coverPhoto
+  if (!cover) { footprintCoverUrl.value = ''; return }
+  const urls = await footprintStore.hydratePhotoUrls([cover])
+  if (version === footprintStore.contextVersion) footprintCoverUrl.value = urls[cover.resourceId] || ''
 }
 
 /** 重试加载账本统计。 */
@@ -248,6 +282,7 @@ async function loadHome(): Promise<void> {
     const tasks: Array<Promise<unknown>> = [
       taskStore.loadCurrent(),
       ledgerStore.loadStats(month),
+      loadFootprintSummary(result.household.id),
     ]
     if (result.household.avatar.kind === 'custom') {
       tasks.push(loadCustomAvatarUrl(result.household.avatar.resourceId))
@@ -258,6 +293,7 @@ async function loadHome(): Promise<void> {
     }
     await Promise.all(tasks)
   } else {
+    if (result?.status === 'NO_HOME') { footprintStore.resetFootprintStore(); footprintCoverUrl.value = '' }
     // 非 HOME（如 NO_HOME）清空头像相关状态
     householdAvatarUrl.value = ''
     avatarLoading.value = false

@@ -1,11 +1,13 @@
 # 睦录
 
-一个面向同居情侣和年轻夫妻的微信小程序，让两个人一起把家里的琐事记下来、认领、完成、放下。
+一个面向同居情侣和年轻夫妻的微信小程序，让两个人共同管理家里的事情、账本与旅行回忆。
 
 - 两人共享同一个"家"，共同维护家里的待办事项
 - 事项按"快到期 / 快没了 / 待处理"分类，按"今天 + 逾期"单独置顶
 - 完成或放弃的事项永久保留，事后可以回看
-- 不做提醒、不做统计、不做积分
+- 共同记录家庭收支，并通过“问账本”查找和汇总账目
+- 用地图与时间列表保存一起去过的地方、照片和回忆
+- 不做事项提醒和积分体系
 
 ## 技术栈
 
@@ -15,8 +17,8 @@
 | UI 组件 | Wot UI v2 | 通用界面必须用 Wot UI；只在"项目独有的品牌组合"（如 3 张色带类型卡）才允许自排版 |
 | 状态 | Pinia 2.1 | 每个业务域一个 store，对象式 + 单飞保护 + 超时恢复 |
 | 样式 | SCSS + 品牌变量 | `src/uni.scss` 集中维护 `$brand-color-*`、`$brand-radius-*` |
-| 后端 | 微信云开发（云函数 + 云数据库） | 4 个云函数，见下表 |
-| 工具链 | Vite 5 + vue-tsc + Jest 29 | TS 严格模式、单元测试 41 套件 / 636 用例 |
+| 后端 | 微信云开发（云函数 + 云数据库） | 11 个云函数目录，见下表 |
+| 工具链 | Vite 5 + vue-tsc + Jest 29 | TS 严格模式、单元测试 58 套件 / 728 用例 |
 
 ## 本地运行
 
@@ -25,7 +27,7 @@
 3. 启动开发：`npm run dev:mp-weixin`
 4. 微信开发者工具 → 导入项目 → 选择**项目根目录**（不要直接选 `dist/dev/mp-weixin`）。`project.config.json` 已经把 `miniprogramRoot` 指向 `dist/build/mp-weixin/`，`cloudfunctionRoot` 指向 `cloudfunctions/`。
 5. 微信开发者工具里点"云开发" → 创建/选择测试环境 → 记下环境 ID（用来填 `src/config/cloud.ts`）。
-6. **隐私协议声明（必做，否则 `chooseMedia` / `chooseImage` 会报 `api scope is not declared in the privacy agreement`）**：登录 https://mp.weixin.qq.com → **设置 → 基本设置 → 服务内容声明 → 用户隐私保护指引**，声明“选中的照片或视频信息”（用于上传个人/家庭头像和记账凭证）；如需拍照，再补充相机相关用途。保存并发布后**重新扫码进模拟器**（不是热重载，隐私协议状态变更要冷启动）。
+6. **隐私协议声明（必做，否则选择照片或地点会失败）**：登录 https://mp.weixin.qq.com → **设置 → 基本设置 → 服务内容声明 → 用户隐私保护指引**，声明“选中的照片或视频信息”（用于头像、记账凭证和足迹照片）以及位置信息（仅用于用户主动选择足迹地点或发起导航）；如需拍照，再补充相机相关用途。保存并发布后**重新扫码进入小程序**，隐私协议状态变更不能只依赖热重载。
 
 > 注意：根目录 `project.config.json` 的 `miniprogramRoot` 指向 **`dist/build/mp-weixin/`**（生产构建产物），不是 `dist/dev/mp-weixin/`（dev watch 半成品）。开发时改完代码需要 `npm run build:mp-weixin` 让微信开发者工具拿到最新版本——这是 5f86bd5 修的坑。
 
@@ -39,6 +41,10 @@
 | `households` | 客户端读/写均**拒绝**，仅云函数访问 | 家庭基本信息、成员键 |
 | `invitations` | 客户端读/写均**拒绝**，仅云函数访问 | 邀请码、过期时间、满员状态 |
 | `tasks` | 客户端读/写均**拒绝**，仅云函数访问 | 事项本体 + 事件流 + 终止态 |
+| `ledgerEntries` / `ledgerCategories` | 客户端读/写均**拒绝**，仅云函数访问 | 家庭账目、类目与统计来源 |
+| `ledgerAiDailyUsage` / `ledgerAiSessions` | 客户端读/写均**拒绝**，仅云函数访问 | 问账本每日额度与短时会话 |
+| `footprintEntries` | 客户端读/写均**拒绝**，仅云函数访问 | 足迹地点、日期、回忆与软删除状态 |
+| `footprintMedia` / `footprintOperations` / `footprintUploadLocks` | 客户端读/写均**拒绝**，仅云函数访问 | 足迹照片、操作凭证与上传预约 |
 
 云函数（在 `cloudfunctions/`）：
 
@@ -48,9 +54,13 @@
 | `household` | 13 | 家庭 CRUD、邀请、加入、个人资料、头像、成员管理 |
 | `task` | 7 | 事项的创建、认领、完成、放弃、详情、首页列表、已完成分页 |
 | `ledger` | 11 | 账目的记、查、改、删、恢复、列表、详情、类目 CRUD、统计 |
+| `ledger-ai` | 4 | 问账本状态、受控问答、来源定位与候选分页 |
+| `footprint` | 13 | 足迹摘要、地图、列表、详情、增删改、照片和历史提示 |
 | `cleanup-avatar-media` | 1 | 清理被替换/删除的临时头像文件 |
 | `cleanup-deleted-tasks` | 0 | 每日 03:00 清理 30 天前软删的事项 |
 | `cleanup-deleted-ledger-entries` | 0 | 每日 03:00 清理 30 天前软删的账目 |
+| `cleanup-ledger-ai-requests` | 0 | 清理过期的问账本短时会话 |
+| `cleanup-footprint-data` | 0 | 清理足迹无主照片与 30 天前软删记录 |
 
 每个云函数都遵循同样的边界：
 
@@ -65,12 +75,13 @@
 
 ```
 src/
-├── pages/                          # 主包（4 个启动必需页面）
+├── pages/                          # 主包（5 个主要入口页面）
 │   ├── login/                      # 登录入口
 │   ├── index/                      # 首页（家庭 + 事项 + 月度账目入口）
 │   ├── profile/                    # 我的
-│   └── ledger/                     # 家庭账本首页（月度概览 + 筛选 + 列表 + FAB）
-├── subpackages/                    # 按业务域懒加载（3 个子包）
+│   ├── ledger/                     # 家庭账本首页（月度概览 + 筛选 + 列表 + FAB）
+│   └── footprint/                  # 足迹首页（地图 + 时间列表 + 导航）
+├── subpackages/                    # 按业务域懒加载（4 个子包）
 │   ├── household/                  # 家庭与成员管理（7 个页面）
 │   │   ├── create-home/            # 创建家庭
 │   │   ├── join-home/              # 通过邀请码加入
@@ -83,11 +94,15 @@ src/
 │   │   ├── add-task/               # 新建事项
 │   │   ├── task-detail/            # 事项详情 / 状态机操作
 │   │   └── completed-tasks/        # 已完成 + 已放弃（按日期分组）
-│   └── ledger/                     # 家庭账本子包（4 个页面）
-│       ├── ledger-add/             # 记一笔（收入 / 支出 + 类目 + 凭证图）
-│       ├── ledger-detail/          # 账目详情 / 编辑 / 恢复
-│       ├── ledger-category-manager/ # 类目管理（添加 / 改名 / 隐藏 / 删除）
-│       └── ledger-stats/           # 账本统计（按月 + 按成员 + 按类目）
+│   ├── ledger/                     # 家庭账本子包（5 个页面）
+│   │   ├── ledger-add/             # 记一笔（收入 / 支出 + 类目 + 凭证图）
+│   │   ├── ledger-detail/          # 账目详情 / 编辑 / 恢复
+│   │   ├── ledger-category-manager/ # 类目管理（添加 / 改名 / 隐藏 / 删除）
+│   │   ├── ledger-stats/           # 账本统计（按月 + 按成员 + 按类目）
+│   │   └── ledger-ai/              # 问账本（受控检索 + 证据来源）
+│   └── footprint/                  # 足迹子包（新增/编辑 + 详情）
+│       ├── footprint-form/         # 选择地点、日期、照片和回忆
+│       └── footprint-detail/       # 足迹详情、导航、共同编辑和删除
 ├── components/                     # 全局复用组件
 │   ├── AppTabBar.vue
 │   ├── home/                       # 首页专用
@@ -99,11 +114,12 @@ src/
 │   │   ├── CategoryFilterChips.vue # 类目多选 chip
 │   │   └── ReceiptThumb.vue        # 凭证图缩略图
 │   └── task/                       # TaskList / TaskSummaryCard + 共享 helper
-├── store/modules/                  # Pinia 状态（5 个）
+├── store/modules/                  # Pinia 状态（6 个）
 │   ├── auth.ts
 │   ├── household.ts
 │   ├── invitation.ts
 │   ├── ledger.ts                   # 账本（entry / category / stats / filter / debounce）
+│   ├── footprint.ts                # 足迹摘要、地点、时间列表与详情
 │   └── task.ts
 ├── services/                       # 与云函数一一对应的前端 service
 │   ├── auth-cloud.ts               # resolve-login
@@ -111,6 +127,7 @@ src/
 │   ├── invitation-cloud.ts         # household（邀请 / 加入）
 │   ├── ledger-cloud.ts             # ledger
 │   ├── ledger-ai-cloud.ts          # 问账本
+│   ├── footprint-cloud.ts          # 足迹与照片访问
 │   ├── task-cloud.ts               # task
 │   ├── avatar-media.ts             # 云存储（头像 / 凭证图）
 │   └── entry-router.ts             # 账目跳转辅助
@@ -123,6 +140,8 @@ src/
 │   ├── pending-household.ts
 │   ├── pending-invitation.ts
 │   ├── pending-ledger.ts
+│   ├── footprint-location.ts       # 主动选择地点与权限恢复
+│   ├── footprint-navigation.ts     # 主动选择目的地并打开微信地图
 │   └── pending-task.ts
 ├── types/                          # 跨模块类型契约（含问账本受控回答）
 ├── config/cloud.ts                 # 测试环境 ID
@@ -130,12 +149,12 @@ src/
 └── manifest.json
 cloudfunctions/                     # 业务云函数与清理定时任务（含 ledger-ai）
 docs/
-├── prd/                            # 9 份产品需求文档
+├── prd/                            # 13 份产品需求文档
 ├── plans/                          # 实施计划（按日期 + 模块名）
 ├── brainstorms/                    # 头脑风暴输出（ce:brainstorm 落盘）
 └── brand/visual-standard.md        # 视觉规范
 tests/
-├── unit/                           # 41 套件 / 626 用例
+├── unit/                           # 58 套件 / 728 用例
 └── e2e/                            # 真机自动化（依赖微信开发者工具会话）
 ```
 
@@ -247,6 +266,16 @@ tests/
 - 家庭每天共享 10 次；体验额度不可用时只停止问账本，不自动付费。
 - 首次使用前说明数据用途，凭证图片和内部编号不会发送给模型；页面退出后不保留聊天历史。
 
+### 10. 我们的足迹（PRD 011 / 012 / 013）
+
+- 首页新增“我们的足迹”卡片，底部新增“足迹”入口；首页、账本、足迹、我的组成四个主要入口。
+- 足迹首页支持地图和时间列表两种查看方式；没有记录时仍保留完整地图，引导信息位于地图下方。
+- 同一地点可以多次记录，地图合并展示游玩次数，时间列表保留每一次独立回忆。
+- 每条足迹包含地点、游玩日期、最多 3 张照片和 300 字回忆；当前家庭成员可以共同新增、修改和删除。
+- 支持从空足迹、地图选中地点和足迹详情发起微信地图导航；导航与足迹记录相互独立，不会自动标记为“去过”。
+- 位置只在用户主动选择地点或导航时使用，不在页面打开时定位，不持续记录移动路线。
+- 照片经过重绘和安全检查后保存；未关联照片和软删除满 30 天的记录由清理任务处理。
+
 ## 全站交互规范
 
 ### Loading 状态
@@ -270,7 +299,7 @@ tests/
 
 ### 底部 tab icon
 
-- 3 个 tab 全部用 Wot UI iconfont（线稿风）：home / `book`（账本）/ `user`
+- 4 个 tab 全部用 Wot UI iconfont（线稿风）：`home` / `book`（账本）/ `location`（足迹）/ `user`
 - Wot UI 有些 iconfont 名字（`wallet` / `notes` 等）虽然在 CSS 里定义但 iconfont 文件没字形，不能用；改用语义最贴的替代（账本用 `book`）
 
 ## 资源 / 体积优化
@@ -297,7 +326,7 @@ tests/
 
 ```powershell
 npm run type-check      # vue-tsc --noEmit，0 错
-npm run test:unit       # 41 套件 / 626 用例
+npm run test:unit       # 58 套件 / 728 用例
 npm run build:mp-weixin # 微信小程序构建
 npm run build:h5        # H5 构建
 npm run test:e2e        # 依赖微信开发者工具的 automator，会话不通则跳过
@@ -326,4 +355,6 @@ npm run test:e2e        # 依赖微信开发者工具的 automator，会话不�
 - [x] 账本体验增强：人×类型双维筛选 + 入账文案 + 日历日期筛选 + 首页月卡 + 顶部统计跟筛选走（Plan 2026-08-24-2320，详见 §7.1）
 - [x] 全站 loading 统一：去掉骨架屏 + 文案规范化（"正在加载 [模块][对象]"）
 - [x] 自定义个人头像：5 格 Picker 接入 + 裁剪链路接通 + 删 `profilePreset` 全栈字段（Plan 2026-08-27-001，详见 §8）
+- [x] 问账本：受控查找、汇总、比较与来源回看（PRD 010）
+- [x] 我们的足迹：地图、时间列表、共同回忆、照片与地点导航（PRD 011 / 012 / 013）
 - [ ] 下一个模块：见 `docs/prd/` 最新编号
