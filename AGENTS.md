@@ -5,6 +5,7 @@
 - 本项目使用 VS Code、微信开发者工具、uni-app、Vue 3 和 TypeScript，不依赖 HBuilderX。
 - 按 PRD 和实施计划逐个模块交付，不一次生成大而全的功能。
 - 每一项新需求先在 `docs/prd/` 留下中文 PRD，再进入开发。
+- `docs/solutions/` 保存已验证的历史解决方案与实践，按类别及 `module`、`tags`、`problem_type` 等信息整理，适合在相关功能开发、排错或决策时检索参考。
 - 文件夹和代码文件使用英文名称，产品文档使用中文。
 
 ## Vue 文件顺序
