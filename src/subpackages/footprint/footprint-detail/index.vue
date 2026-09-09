@@ -33,6 +33,12 @@
         <wd-button block round variant="plain" @click="deleteOpen = false">取消</wd-button>
       </view>
     </wd-popup>
+
+    <!-- 删除确认和删除执行期间隐藏公共入口，避免两个操作层竞争。 -->
+    <GlobalQuickAdd
+      :visible="Boolean(detail && householdStore.household) && !loading && !errorMessage"
+      :blocked="deleteOpen || deleting"
+    />
   </view>
 </template>
 
@@ -41,6 +47,7 @@ import { ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import FootprintPhotoGallery from '../components/FootprintPhotoGallery.vue'
 import FootprintNavigationButton from '../../../components/FootprintNavigationButton.vue'
+import GlobalQuickAdd from '../../../components/GlobalQuickAdd.vue'
 import { useAuthStore } from '../../../store/modules/auth'
 import { useHouseholdStore } from '../../../store/modules/household'
 import { useFootprintStore } from '../../../store/modules/footprint'

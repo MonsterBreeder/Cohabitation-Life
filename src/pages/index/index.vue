@@ -86,19 +86,8 @@
       </view>
     </view>
 
-    <!-- 悬浮"快速添加"按钮：有家庭时一直显示（单成员也允许加自己的事）。
-         用 Wot UI 的 wd-fab 组件，避开 tab bar。 -->
-    <wd-fab
-      v-if="household"
-      type="primary"
-      position="right-bottom"
-      :expandable="false"
-      :gap="{ right: 32, bottom: 104 }"
-      :loading="isQuickAdd"
-      :aria-busy="isQuickAdd"
-      data-testid="home-quick-add"
-      @click="goAdd"
-    />
+    <!-- 首页只提供是否可用的家庭状态，菜单顺序、遮罩和跳转由公共入口统一处理。 -->
+    <GlobalQuickAdd :visible="Boolean(household && profile) && !isLoading && !loadError" with-tab-bar />
 
     <AppTabBar active="home" />
   </view>
@@ -112,6 +101,7 @@ import HomeSummaryCard from '../../components/home/HomeSummaryCard.vue'
 import MonthlyExpenseCard from '../../components/home/MonthlyExpenseCard.vue'
 import HomeFootprintCard from './components/HomeFootprintCard.vue'
 import AppTabBar from '../../components/AppTabBar.vue'
+import GlobalQuickAdd from '../../components/GlobalQuickAdd.vue'
 import TaskList from '../../components/task/TaskList.vue'
 import { useAuthStore } from '../../store/modules/auth'
 import { useHouseholdStore } from '../../store/modules/household'
@@ -143,7 +133,6 @@ const homeError = computed(() => taskError.value || '')
 const householdAvatarUrl = ref('')
 const avatarLoading = ref(false)
 const footprintCoverUrl = ref('')
-const isQuickAdd = ref(false)
 
 const hasAnyOpenTask = computed(() => {
   const c = taskCurrent.value as CurrentTasks | undefined
@@ -188,14 +177,6 @@ function relaunch(url: string): void {
 
 function onPressTask(taskId: string): void {
   uni.navigateTo({ url: `/subpackages/task/task-detail/index?taskId=${taskId}` })
-}
-
-function goAdd(): void {
-  if (isQuickAdd.value) return
-  isQuickAdd.value = true
-  uni.navigateTo({ url: '/subpackages/task/add-task/index' })
-  // 简单防护，避免连续点
-  setTimeout(() => { isQuickAdd.value = false }, 500)
 }
 
 function goCompleted(): void {

@@ -72,6 +72,9 @@
         <StatsBarChart :bars="payerBars" />
       </view>
     </view>
+
+    <!-- 统计读取完成后可从当前月份直接发起任一种记录。 -->
+    <GlobalQuickAdd :visible="Boolean(householdId) && !isLoading && !loadError" />
   </view>
 </template>
 
@@ -81,6 +84,7 @@ import { storeToRefs } from 'pinia'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import StatsPieChart from './components/StatsPieChart.vue'
 import StatsBarChart from './components/StatsBarChart.vue'
+import GlobalQuickAdd from '../../../components/GlobalQuickAdd.vue'
 import { useHouseholdStore } from '../../../store/modules/household'
 import { useLedgerStore } from '../../../store/modules/ledger'
 import { formatLedgerMonth } from '../../../utils/format'
@@ -129,6 +133,8 @@ onLoad(() => {
 })
 
 onShow(async () => {
+  // 统计页可能被直接打开，缺少家庭时由页面补读，公共入口只消费结果。
+  if (!householdId.value) await householdStore.loadCurrent({ preserveExisting: true })
   if (householdId.value) {
     ledgerStore.setHouseholdContext(householdId.value, '')
     if (!currentMonth.value) currentMonth.value = formatLedgerMonth(new Date())

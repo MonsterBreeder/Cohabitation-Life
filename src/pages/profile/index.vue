@@ -56,6 +56,8 @@
     <view v-else class="profile-error">
       <text class="profile-error__copy">暂时无法读取资料，请回到首页后重试。</text>
     </view>
+    <!-- 我的页完成家庭确认后也可直接新增三类内容。 -->
+    <GlobalQuickAdd :visible="Boolean(household && profile) && !isLoading" with-tab-bar />
     <AppTabBar active="mine" />
   </view>
 </template>
@@ -65,6 +67,7 @@ import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { storeToRefs } from 'pinia'
 import AppTabBar from '../../components/AppTabBar.vue'
+import GlobalQuickAdd from '../../components/GlobalQuickAdd.vue'
 import HomeSummaryCard from '../../components/home/HomeSummaryCard.vue'
 import { getAvatarTemporaryUrl } from '../../services/avatar-media'
 import { useHouseholdStore } from '../../store/modules/household'

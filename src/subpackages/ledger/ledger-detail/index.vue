@@ -96,6 +96,12 @@
         <text class="ledger-detail-page__readonly-text">只有记账人可以编辑或删除</text>
       </view>
     </view>
+
+    <!-- 删除确认、编辑跳转和删除执行期间不允许叠加快速新增。 -->
+    <GlobalQuickAdd
+      :visible="Boolean(detail && householdId) && !loadError"
+      :blocked="isBusy || confirmingDelete"
+    />
   </view>
 </template>
 
@@ -105,6 +111,7 @@ import { storeToRefs } from 'pinia'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useHouseholdStore } from '../../../store/modules/household'
 import { useLedgerStore } from '../../../store/modules/ledger'
+import GlobalQuickAdd from '../../../components/GlobalQuickAdd.vue'
 import {
   describeActions,
   describeAmountColor,
@@ -129,6 +136,7 @@ const detail = ref<LedgerEntryDetail | null>(null)
 const isDeleting = ref(false)
 const isEditing = ref(false)
 const receiptUrl = ref<string>('')
+const confirmingDelete = ref(false)
 
 const householdId = computed(() => household.value?.id || '')
 
@@ -153,6 +161,8 @@ const loadError = computed(() => storeError.value)
 onLoad(async (options: any) => {
   if (options && options.entryId) {
     entryId.value = options.entryId
+    // 详情页可被直接打开；缺少家庭资料时先补读，再建立账本上下文。
+    if (!householdId.value) await householdStore.loadCurrent({ preserveExisting: true })
     if (householdId.value) ledgerStore.setHouseholdContext(householdId.value, '')
     await reload()
   }
@@ -227,6 +237,7 @@ function onEdit(): void {
 
 function onDelete(): void {
   if (!detail.value) return
+  confirmingDelete.value = true
   uni.showModal({
     title: '删除账目',
     content: describeDeleteConfirmMessage(detail.value),
@@ -245,6 +256,7 @@ function onDelete(): void {
         uni.showToast({ title: ledgerStore.errorMessage || '删除失败', icon: 'none' })
       }
     },
+    complete: () => { confirmingDelete.value = false },
   })
 }
 </script>

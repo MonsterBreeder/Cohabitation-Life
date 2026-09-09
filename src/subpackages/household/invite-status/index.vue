@@ -14,14 +14,23 @@
         </view>
       </view>
     </view>
+    <!-- 邀请无效页只在登录且仍有已确认家庭时提供快速新增。 -->
+    <GlobalQuickAdd :visible="auth.hasCompletedLogin && Boolean(household) && !checkingHousehold" />
   </view>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, shallowRef } from 'vue'
+import { storeToRefs } from 'pinia'
+import { onShow } from '@dcloudio/uni-app'
+import GlobalQuickAdd from '../../../components/GlobalQuickAdd.vue'
 import { useAuthStore } from '../../../store/modules/auth'
+import { useHouseholdStore } from '../../../store/modules/household'
 
 const auth = useAuthStore()
+const householdStore = useHouseholdStore()
+const { household } = storeToRefs(householdStore)
+const checkingHousehold = shallowRef(true)
 
 // 页面文案完全由本地有限提示编号生成。
 const content = computed(() => {
@@ -45,6 +54,19 @@ const content = computed(() => {
 
 const title = computed(() => content.value.title)
 const message = computed(() => content.value.message)
+
+/** 未登录用户不额外请求；已登录时只确认是否仍有家庭，不改变邀请错误内容。 */
+async function loadHousehold(): Promise<void> {
+  checkingHousehold.value = true
+  try {
+    if (!auth.hasCompletedLogin) return
+    await householdStore.loadCurrent({ preserveExisting: true })
+  } finally {
+    checkingHousehold.value = false
+  }
+}
+
+onShow(() => { void loadHousehold() })
 </script>
 
 <style lang="scss" scoped>

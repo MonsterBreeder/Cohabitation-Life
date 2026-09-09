@@ -10,12 +10,12 @@ describe('家庭首页', () => {
 
     const home = await page.$('[data-testid="home-single-member"]')
     const household = await page.$('[data-testid="household-profile"]')
-    const quickAdd = await page.$('[data-testid="home-quick-add"]')
+    const quickAdd = await page.$('[data-testid="global-quick-add"]')
     const text = await home.text()
 
     expect(home).toBeTruthy()
     expect(household).toBeTruthy()
-    // 单人状态现在也允许使用记事功能：必须显示"快速添加"按钮 + 事项区空状态
+    // 单人状态也必须显示全局快速新增入口和事项区空状态。
     expect(quickAdd).toBeTruthy()
     expect(text).toContain('先记下一件事')
     // 单人状态不预先展示第二位成员的昵称或头像

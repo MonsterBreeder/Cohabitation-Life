@@ -79,6 +79,12 @@
 
       <LedgerAiComposer v-if="serviceReady" v-model="question" :submitting="submitting" @submit="submitQuestion" />
     </view>
+
+    <!-- 提问和查看更多正在进行时暂时锁住入口，已有问题与消息在返回后继续保留。 -->
+    <GlobalQuickAdd
+      :visible="Boolean(householdId) && !loadingStatus"
+      :blocked="submitting || Boolean(loadingMoreMessageId)"
+    />
   </view>
 </template>
 
@@ -88,6 +94,7 @@ import { storeToRefs } from 'pinia'
 import { onLoad } from '@dcloudio/uni-app'
 import LedgerAiCandidateCard from './components/LedgerAiCandidateCard.vue'
 import LedgerAiComposer from './components/LedgerAiComposer.vue'
+import GlobalQuickAdd from '../../../components/GlobalQuickAdd.vue'
 import { useHouseholdStore } from '../../../store/modules/household'
 import { askLedgerAi, getLedgerAiStatus, LedgerAiCloudError, loadLedgerAiSources, resolveLedgerAiSource, setLedgerAiCloudContext } from '../../../services/ledger-ai-cloud'
 import { formatYuan } from '../../../utils/format'

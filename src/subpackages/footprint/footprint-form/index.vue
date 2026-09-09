@@ -102,6 +102,7 @@ import { useAuthStore } from '../../../store/modules/auth'
 import { useHouseholdStore } from '../../../store/modules/household'
 import { useFootprintStore } from '../../../store/modules/footprint'
 import { chooseFootprintLocation, openFootprintLocationSetting } from '../../../utils/footprint-location'
+import { returnAfterQuickCreate } from '../../../utils/quick-add'
 import { abandonFootprintPhotosInCloud, humaniseFootprintError, uploadAndReviewFootprintPhoto, type FootprintUploadProgress } from '../../../services/footprint-cloud'
 import { reencodeFootprintPhoto, validateFootprintPhotoCount } from '../utils/footprint-image'
 import { canSaveFootprintDraft, footprintCharacterCount, footprintToday, hasFootprintDraftChanges } from './footprint-form-view'
@@ -276,8 +277,13 @@ async function save(): Promise<void> {
     }
     bypassBackGuard.value = true
     syncNativeBackGuard(false)
-    toast.success(isEdit.value ? '足迹已更新' : '足迹已保存')
-    setTimeout(() => uni.navigateBack(), 300)
+    if (isEdit.value) {
+      // 编辑流程保持原有反馈和返回节奏，不套用新建提示。
+      toast.success('足迹已更新')
+      setTimeout(() => uni.navigateBack(), 300)
+    } else {
+      await returnAfterQuickCreate('足迹已保存')
+    }
   } catch (error) { errorMessage.value = humaniseFootprintError(error) }
   finally { saving.value = false }
 }

@@ -99,6 +99,9 @@
         <wd-divider custom-class="completed-page__end-divider">已经到底了</wd-divider>
       </view>
     </view>
+
+    <!-- 空列表也允许继续记录，只要当前家庭已经确认且历史读取完成。 -->
+    <GlobalQuickAdd :visible="Boolean(householdStore.household) && isReady && !storeError" />
   </view>
 </template>
 
@@ -106,6 +109,8 @@
 import { computed, ref } from 'vue'
 import { onShow, onReachBottom } from '@dcloudio/uni-app'
 import { useTaskStore } from '../../../store/modules/task'
+import { useHouseholdStore } from '../../../store/modules/household'
+import GlobalQuickAdd from '../../../components/GlobalQuickAdd.vue'
 import {
   describeTerminalDateLabel,
   describeTerminalLabel,
@@ -118,6 +123,7 @@ import {
 import type { CompletedTaskItem } from '../../../types/task'
 
 const taskStore = useTaskStore()
+const householdStore = useHouseholdStore()
 // 软锁：避免 onReachBottom 高频触发时同时发起多个加载请求
 const isAutoLoading = ref(false)
 
@@ -167,6 +173,8 @@ function formatTimeOfDay(iso: string): string {
 }
 
 onShow(() => {
+  // 直接进入历史页时补读家庭状态，与历史列表并行，互不阻塞。
+  if (!householdStore.household) void householdStore.loadCurrent({ preserveExisting: true })
   void load(true)
 })
 

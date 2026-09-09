@@ -173,6 +173,12 @@
         :disabled="Boolean(detail.terminalKind)"
       />
     </view>
+
+    <!-- 详情有效且家庭已确认时开放快速新增；确认框和写操作期间暂时隐藏。 -->
+    <GlobalQuickAdd
+      :visible="Boolean(detail && householdStore.household) && !loadError"
+      :blocked="isAnyBusy || confirmingAction"
+    />
   </view>
 </template>
 
@@ -180,6 +186,7 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow, onUnload } from '@dcloudio/uni-app'
 import { useTaskStore } from '../../../store/modules/task'
+import { useHouseholdStore } from '../../../store/modules/household'
 import {
   describeAbandonConfirmMessage,
   describeActions,
@@ -192,11 +199,14 @@ import { todayIso } from '../add-task/add-task-view'
 // TASK_TYPES_DISPLAY 来自主包 task-shared：分包可引用主包，反向引用会在主包编译时丢失路径。
 import { TASK_TYPES_DISPLAY } from '../../../components/task/task-shared'
 import TaskComments from '../components/TaskComments.vue'
+import GlobalQuickAdd from '../../../components/GlobalQuickAdd.vue'
 
 const taskStore = useTaskStore()
+const householdStore = useHouseholdStore()
 const taskId = ref('')
 const loadError = ref('')
 const errorMessage = ref('')
+const confirmingAction = ref(false)
 const isLoading = computed(() => taskStore.phase === 'checking')
 const isClaiming = computed(() => taskStore.phase === 'claiming')
 const isCompleting = computed(() => taskStore.phase === 'completing')
@@ -256,33 +266,43 @@ async function onComplete(): Promise<void> {
 async function onAbandon(): Promise<void> {
   if (!taskId.value) return
   // 二次确认（PRD 005 R14）
-  const confirmed = await uni.showModal({
-    title: '放弃这件事',
-    content: describeAbandonConfirmMessage(detail.value),
-    confirmText: '继续',
-    confirmColor: '#d66b55',
-  })
-  if (!confirmed.confirm) return
-  await taskStore.abandon(taskId.value)
-  uni.reLaunch({ url: '/pages/index/index' })
+  confirmingAction.value = true
+  try {
+    const confirmed = await uni.showModal({
+      title: '放弃这件事',
+      content: describeAbandonConfirmMessage(detail.value),
+      confirmText: '继续',
+      confirmColor: '#d66b55',
+    })
+    if (!confirmed.confirm) return
+    await taskStore.abandon(taskId.value)
+    uni.reLaunch({ url: '/pages/index/index' })
+  } finally {
+    confirmingAction.value = false
+  }
 }
 
 async function onDelete(): Promise<void> {
   if (!taskId.value) return
   // 二次确认（PRD 007 R3/R4）
-  const confirmed = await uni.showModal({
-    title: '删除这件事',
-    content: describeDeleteConfirmMessage(detail.value),
-    confirmText: '继续',
-    confirmColor: '#c5684d',
-  })
-  if (!confirmed.confirm) return
-  const ok = await taskStore.delete(taskId.value)
-  if (ok) {
-    // PRD 007 R23/R5：删除成功直接 reLaunch 回首页（不留历史栈）
-    uni.reLaunch({ url: '/pages/index/index' })
-  } else {
-    errorMessage.value = taskStore.errorMessage || '暂时无法删除，请稍后重试'
+  confirmingAction.value = true
+  try {
+    const confirmed = await uni.showModal({
+      title: '删除这件事',
+      content: describeDeleteConfirmMessage(detail.value),
+      confirmText: '继续',
+      confirmColor: '#c5684d',
+    })
+    if (!confirmed.confirm) return
+    const ok = await taskStore.delete(taskId.value)
+    if (ok) {
+      // PRD 007 R23/R5：删除成功直接 reLaunch 回首页（不留历史栈）
+      uni.reLaunch({ url: '/pages/index/index' })
+    } else {
+      errorMessage.value = taskStore.errorMessage || '暂时无法删除，请稍后重试'
+    }
+  } finally {
+    confirmingAction.value = false
   }
 }
 
@@ -301,6 +321,8 @@ onLoad((options) => {
   const id = (options as { taskId?: string })?.taskId || ''
   taskId.value = id
   if (id) {
+    // 分包页可能被直接打开，页面自行补齐家庭状态，公共组件不发业务请求。
+    if (!householdStore.household) void householdStore.loadCurrent({ preserveExisting: true })
     void load(id).then(() => {
       // 详情加载完后再订阅实时评论推送
       if (id === taskId.value && taskStore.detail) {

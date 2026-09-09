@@ -211,6 +211,7 @@ import ReceiptUploader from './components/ReceiptUploader.vue'
 import { useHouseholdStore } from '../../../store/modules/household'
 import { useLedgerStore } from '../../../store/modules/ledger'
 import { formatDateYMD } from '../../../utils/format'
+import { returnAfterQuickCreate } from '../../../utils/quick-add'
 import {
   CATEGORY_COLOR_OPTIONS,
   CATEGORY_ICON_OPTIONS,
@@ -435,7 +436,8 @@ async function onSave(): Promise<void> {
         receiptMediaId: mediaId,
       })
       if (result) {
-        uni.navigateBack({ delta: 1 })
+        // 新建成功后返回真正的发起页面，并在返回完成后显示统一提示。
+        await returnAfterQuickCreate('已记账')
       } else if (ledgerStore.errorMessage) {
         uni.showToast({ title: ledgerStore.errorMessage, icon: 'none', duration: 2500 })
       }

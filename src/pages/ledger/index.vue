@@ -225,19 +225,11 @@
       </view>
     </view>
 
-    <!-- ④ FAB 记一笔：日期选择器打开时隐藏（避免 FAB 浮在日历弹层之上，挡住日期/确定按钮）。
-         即便日历 z-index 已经提到 200，FAB 仍可能在日历关闭动画期间短暂可见，所以用 v-if 最稳；
-         底部距离与首页快速添加按钮保持一致。 -->
-    <wd-fab
-      v-if="householdId && !isDatePickerOpen && !filterSheetOpen"
-      type="primary"
-      position="right-bottom"
-      :expandable="false"
-      :gap="{ right: 32, bottom: 104 }"
-      :loading="isAdding"
-      :aria-busy="isAdding"
-      data-testid="ledger-home-fab"
-      @click="goAdd"
+    <!-- 日期和筛选弹层出现时由页面阻塞公共入口，避免两个操作层同时可用。 -->
+    <GlobalQuickAdd
+      :visible="Boolean(householdId) && !(isLoading && entries.length === 0) && !(loadError && entries.length === 0)"
+      :blocked="isDatePickerOpen || filterSheetOpen"
+      with-tab-bar
     />
 
     <!-- ⑤ 筛选弹层（设计稿 C）：从底部弹起，含 谁付的 / 什么类型 两组 chip。
@@ -320,6 +312,7 @@ import CategoryFilterChips from '../../components/ledger/CategoryFilterChips.vue
 import LedgerEntryItem from '../../components/ledger/LedgerEntryItem.vue'
 import RestorableEntryItem from './RestorableEntryItem.vue'
 import AppTabBar from '../../components/AppTabBar.vue'
+import GlobalQuickAdd from '../../components/GlobalQuickAdd.vue'
 import { useHouseholdStore } from '../../store/modules/household'
 import { useLedgerStore } from '../../store/modules/ledger'
 import { formatYuan, formatLedgerMonth } from '../../utils/format'
@@ -349,7 +342,6 @@ const { household, profile } = storeToRefs(householdStore)
 const { entries, deletedEntries, categories, stats, currentMonth, payerMode, typeFilter, selectedDate, selectedCategoryIds, phase, errorMessage, entriesHasMore, isLoadingMore } = storeToRefs(ledgerStore)
 
 const showDeleted = ref(false)
-const isAdding = ref(false)
 // 类目筛选默认折叠——避免 8+ 个 chip 一直占两行视觉空间；点"按类目筛选"展开。
 // selectedCategoryIds 非空时按钮文字变成"类目（已选 N）"，让用户知道当前已激活。
 const categoryOpen = ref(false)
@@ -466,13 +458,6 @@ function onPressEntry(entryId: string): void {
 function onRestoreEntry(entryId: string): void {
   const operationToken = `restore_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
   void ledgerStore.restoreEntry({ entryId, operationToken })
-}
-
-function goAdd(): void {
-  if (isAdding.value) return
-  isAdding.value = true
-  uni.navigateTo({ url: '/subpackages/ledger/ledger-add/index' })
-  setTimeout(() => { isAdding.value = false }, 500)
 }
 
 /** 跳到账本统计页（PRD 008 / brainstorm 2026-08-30）。

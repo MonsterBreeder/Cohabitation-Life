@@ -158,6 +158,7 @@ import { computed, ref, shallowRef, watch } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useTaskStore } from '../../../store/modules/task'
 import { readPendingTask } from '../../../utils/pending-task'
+import { returnAfterQuickCreate } from '../../../utils/quick-add'
 import type { TaskType } from '../../../types/task'
 import {
   describeDueDate,
@@ -246,7 +247,8 @@ async function submit(): Promise<void> {
     note: draft.value.note || undefined,
   })
   if (ok) {
-    uni.reLaunch({ url: '/pages/index/index' })
+    // 新建只返回一级，保留发起页的筛选、滚动和浏览位置。
+    await returnAfterQuickCreate('事项已添加')
   } else {
     errorMessage.value = taskStore.errorMessage || '暂时无法创建，请稍后重试'
   }

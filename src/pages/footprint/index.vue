@@ -138,6 +138,12 @@
       </view>
     </wd-popup>
 
+    <!-- 地图页保留原有顶部新增按钮，同时提供跨业务公共入口。 -->
+    <GlobalQuickAdd
+      :visible="Boolean(household) && !checkingHome && !pageError"
+      :blocked="historyNoticeOpen"
+      with-tab-bar
+    />
     <AppTabBar active="footprint" />
   </view>
 </template>
@@ -148,6 +154,7 @@ import { storeToRefs } from 'pinia'
 import { onLoad, onReady, onShow } from '@dcloudio/uni-app'
 import AppTabBar from '../../components/AppTabBar.vue'
 import FootprintNavigationButton from '../../components/FootprintNavigationButton.vue'
+import GlobalQuickAdd from '../../components/GlobalQuickAdd.vue'
 import FootprintTimeline from './components/FootprintTimeline.vue'
 import { useAuthStore } from '../../store/modules/auth'
 import { useHouseholdStore } from '../../store/modules/household'
