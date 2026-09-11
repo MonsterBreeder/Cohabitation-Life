@@ -18,7 +18,7 @@
 | 状态 | Pinia 2.1 | 每个业务域一个 store，对象式 + 单飞保护 + 超时恢复 |
 | 样式 | SCSS + 品牌变量 | `src/uni.scss` 集中维护 `$brand-color-*`、`$brand-radius-*` |
 | 后端 | 微信云开发（云函数 + 云数据库） | 11 个云函数目录，见下表 |
-| 工具链 | Vite 5 + vue-tsc + Jest 29 | TS 严格模式、单元测试 58 套件 / 728 用例 |
+| 工具链 | Vite 5 + vue-tsc + Jest 29 | TS 严格模式、单元测试 64 套件 / 792 用例 |
 
 ## 本地运行
 
@@ -75,8 +75,19 @@
 
 ```
 src/
-├── pages/                          # 主包（5 个主要入口页面）
-│   ├── login/                      # 登录入口
+├── pages/                          # 主包（7 个页面：5 主入口 + legal + experience）
+│   ├── login/                      # 启动入口：欢迎页 / 恢复 / 邀请摘要 / 邀请终态
+│   │   ├── index.vue               # 入口页 + 协议勾选 + 5 种视图
+│   │   ├── welcome-view.ts         # 视图描述器（纯函数）
+│   │   └── components/             # 私有组件
+│   │       ├── LoginBrandHero.vue
+│   │       ├── InvitationSummary.vue
+│   │       ├── AgreementCheckbox.vue  # 协议勾选 + 协议正文链接
+│   │       └── WelcomeActions.vue
+│   ├── legal/                      # 用户协议 / 隐私政策正文
+│   │   ├── index.vue
+│   │   └── legal-content.ts        # 静态文档（运营者信息待补）
+│   ├── experience/                 # 首次体验页：事项 / 账本 / 足迹（纯内存）
 │   ├── index/                      # 首页（家庭 + 事项 + 月度账目入口）
 │   ├── profile/                    # 我的
 │   ├── ledger/                     # 家庭账本首页（月度概览 + 筛选 + 列表 + FAB）
@@ -154,7 +165,7 @@ docs/
 ├── brainstorms/                    # 头脑风暴输出（ce:brainstorm 落盘）
 └── brand/visual-standard.md        # 视觉规范
 tests/
-├── unit/                           # 58 套件 / 728 用例
+├── unit/                           # 64 套件 / 792 用例
 └── e2e/                            # 真机自动化（依赖微信开发者工具会话）
 ```
 
@@ -166,6 +177,7 @@ tests/
 - 首次登录云端建 user，已登录返回 profile
 - 登录后根据"是否已有家庭"分流到首页 / 创建家庭 / 加入家庭
 - 邀请链接携带 token，登录后直达加入页
+- **2026-09-11 首次体验重构**（详见 §11）：欢迎页协议确认从独立页面内联，文案改"开始使用"，老用户清缓存后 2 步进家
 
 ### 2. 品牌视觉（PRD 002 / `docs/brand/visual-standard.md`）
 - 主色：暖米白底 `#FFF9F2` + 薄荷绿 `#43C89A`（主）/ `#267A5A`（动作）
@@ -271,10 +283,70 @@ tests/
 - 首页新增“我们的足迹”卡片，底部新增“足迹”入口；首页、账本、足迹、我的组成四个主要入口。
 - 足迹首页支持地图和时间列表两种查看方式；没有记录时仍保留完整地图，引导信息位于地图下方。
 - 同一地点可以多次记录，地图合并展示游玩次数，时间列表保留每一次独立回忆。
-- 每条足迹包含地点、游玩日期、最多 3 张照片和 300 字回忆；当前家庭成员可以共同新增、修改和删除。
+- 每条足迹包含地点、游玩日期、最少 1 张照片和 300 字回忆；当前家庭成员可以共同新增、修改和删除。
 - 支持从空足迹、地图选中地点和足迹详情发起微信地图导航；导航与足迹记录相互独立，不会自动标记为“去过”。
 - 位置只在用户主动选择地点或导航时使用，不在页面打开时定位，不持续记录移动路线。
 - 照片经过重绘和安全检查后保存；未关联照片和软删除满 30 天的记录由清理任务处理。
+
+### 11. 首次体验重构（PRD 001 / Plan 2026-09-11-001 / Audit 2026-09-11-001）
+
+2026-09-11 微信审核反馈要求"首次进入不直接展示登录或授权"，老用户清缓存后回到欢迎页原 plan 走"欢迎 → 独立开始页 → 勾协议 → 确认"4 步太繁冗。两轮 ce-code-review 后落地"方案 C"：协议确认内联到欢迎页，删除独立 start 页。
+
+**前后对比**：
+
+| 维度 | 原 plan | 方案 C（当前） |
+| --- | --- | --- |
+| 页面数 | 欢迎 + 独立 start + 业务页 | 欢迎 + 业务页 |
+| 老用户清缓存后步骤 | 4 步（点欢迎 → 进 start → 勾 → 确认） | 2 步（勾 + 点） |
+| 主按钮文案 | "创建我的家"（暗示新建）| "开始使用"（中性）|
+| 协议位置 | 独立页面内 | 欢迎页内联 |
+| 协议未勾选时 | 不可进入独立页 | 主按钮 disabled + 点击后受控提示 |
+| 主包体积 | ~864 KB | **856 KB**（-8KB） |
+
+**实现要点**：
+
+- **协议内联到欢迎页**（`pages/login/index.vue`）：在品牌 + 邀请摘要下方加 `<AgreementCheckbox>` + 提示文案；勾选后主按钮变可用
+- **删除独立 `pages/start/`**：整目录、view 描述器、组件、单测全删
+- **welcome-view 描述器**扩展支持协议状态（`agreementChecked` 入参 + `primaryTestId` 输出带 mode 后缀）
+- **主按钮统一 action = `'start-use'`**：由云端 `resolveLogin` 按 `pendingInviteToken` 是否存在决定 `HOME` / `CREATE_HOME` / `JOIN_CONFIRM`
+- **首测页 `pages/experience/`**：纯内存的事例 / 记账 / 足迹示例，金额规则复用 `validateAmountCents`，离开即重置
+- **静态协议页 `pages/legal/`**：用户协议 + 隐私政策的本地正文，可从协议区链接打开
+
+**新视图结构（欢迎页）**：
+
+```text
+[品牌区]
+[邀请摘要 - 仅有邀请时]
+[协议勾选 * + 提示]  ← 仅 welcome / invite-summary 模式显示
+[主按钮]            ← 未勾选时 disabled
+[次按钮]            ← 体验入口
+```
+
+**新邀请预览契约（`cloudfunctions/household/invitation-domain.js`）**：
+
+- `safePreviewInviter` 把 custom 头像经 `cloud.getTempFileURL` 换短时 https URL；失败退化为默认头像
+- URL 校验拒绝 `cloud://` 和 `tcb-qcloud.com`
+- `safeProfile` 仍把 custom 退化为默认（pre-existing；U2 仅收紧 preview，home 路径未改）
+- `InvitationResult` 类型新增 `PreviewAvatar = Builtin | Temp`，排除 `Custom`
+
+**新邀请预览防竞态（`src/store/modules/invitation.ts`）**：
+
+- `previewToken` + `previewVersion` 双字段：每次新预览 bump version + 写入 token
+- 响应回来时若 `previewVersion !== version || previewToken !== inviteToken` 静默丢弃
+- 解决旧请求迟到覆盖新邀请 / 用户快速切换邀请的 race
+
+**ce-code-review 两轮**（详见 `docs/solutions/developer-experience/ce-code-review-windows-fallback-2026-09-12.md`）：
+
+- 第一轮：16 个 actionable finding（3 P1 + 6 P2 + 7 P3）
+- 第二轮：10 个 finding（2 P1 + 4 P2 + 4 P3）
+- 全部修复后 792/792 单测通过，64 套件
+
+**待实际环境确认**（自动检查不能代替）：
+
+- 用户协议 / 隐私政策正文（运营者名称、联系渠道、保存期限）：`legal-content.ts` 用 `[待运营者填写]` 占位，**未替换前不要把页面标为"可提审完成"**
+- 体验页示例图：当前为 ffmpeg 生成的 600×600 / 3KB 极简占位（公园日落），待品牌终图替换
+- 微信公众平台类目：至少补充"工具－记账"
+- 真机双账号 + 微信开发者工具 6 类场景逐条验证（普通新用户 / 邀请新用户 / 已有用户 / 清缓存 + 已有家庭 / 无效邀请 / 网络失败）
 
 ## 全站交互规范
 
@@ -326,10 +398,12 @@ tests/
 
 ```powershell
 npm run type-check      # vue-tsc --noEmit，0 错
-npm run test:unit       # 58 套件 / 728 用例
+npm run test:unit       # 64 套件 / 792 用例
 npm run build:mp-weixin # 微信小程序构建
 npm run build:h5        # H5 构建
 npm run test:e2e        # 依赖微信开发者工具的 automator，会话不通则跳过
+npm run check:styles    # BEM + SCSS 嵌套规范
+npm run check:package-size   # 主包 < 1.5 MB 警告线
 ```
 
 每次改完代码至少跑前三个。`build:mp-weixin` 是**发布构建**，dev 时不要手动重导 `dist/dev/mp-weixin`，要重导根目录。
@@ -339,6 +413,17 @@ npm run test:e2e        # 依赖微信开发者工具的 automator，会话不�
 ## 协作规范
 
 项目协作规则（分支策略、commit 规范、Vue 文件顺序、注释、UI 组件选型、分包体积、隐私安全）都在 `AGENTS.md`，**改任何东西之前先读这一份**。本文档不重复列。
+
+## 经验沉淀
+
+`docs/solutions/` 是项目知识库，按 `category` / `module` / `tags` / `problem_type` 分类，存已验证的解决方案与最佳实践。**开发或排错时先搜一下**——很可能前人已经踩过同样的坑。`AGENTS.md` 第 8 行也有同一条提示。
+
+当前已沉淀：
+
+- `best-practices/welcome-page-inline-agreement-2026-09-12.md` — 欢迎页内联协议 + 删独立 start 页
+- `security-issues/invite-preview-isolation-2026-09-12.md` — 邀请预览公开契约收紧（custom avatar 短时 URL + token 版本防竞态）
+- `developer-experience/ce-code-review-windows-fallback-2026-09-12.md` — Windows PowerShell 下 ce-code-review 实战
+- `workflow-issues/prd-brainstorm-plan-delivery-loop-2026-09-09.md` — PRD/brainstorm/plan 文档闭环
 
 ## 路线图
 
@@ -357,4 +442,5 @@ npm run test:e2e        # 依赖微信开发者工具的 automator，会话不�
 - [x] 自定义个人头像：5 格 Picker 接入 + 裁剪链路接通 + 删 `profilePreset` 全栈字段（Plan 2026-08-27-001，详见 §8）
 - [x] 问账本：受控查找、汇总、比较与来源回看（PRD 010）
 - [x] 我们的足迹：地图、时间列表、共同回忆、照片与地点导航（PRD 011 / 012 / 013）
+- [x] **首次体验重构**：欢迎页内联协议 + 删独立 start 页 + 邀请预览公开契约收紧 + token 版本防竞态（Plan 2026-09-11-001，详见 §11）
 - [ ] 下一个模块：见 `docs/prd/` 最新编号

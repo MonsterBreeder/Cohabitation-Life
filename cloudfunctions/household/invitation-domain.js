@@ -33,6 +33,43 @@ function safeProfile(user) {
   }
 }
 
+/**
+ * 邀请预览阶段专用的邀请人资料：
+ * - 内置头像直接返回受控编号
+ * - 自定义头像由云端在有效邀请凭证授权后换取短时展示 URL
+ * - 短时 URL 生成失败时退化为默认头像，但邀请仍可继续
+ * 整个流程不返回资源编号、存储路径或可长期复用的地址，避免扩大未登录访问范围。
+ */
+async function safePreviewInviter(user, dependencies) {
+  const nickname = typeof user?.nickname === 'string' && user.nickname.trim() ? user.nickname.trim() : '小伙伴'
+  if (user?.avatar?.kind === 'builtin') {
+    return { nickname, avatar: user.avatar }
+  }
+  if (
+    user?.avatar?.kind === 'custom'
+    && typeof user.avatar.resourceId === 'string'
+    && user.avatar.resourceId.length > 0
+    && dependencies
+    && typeof dependencies.tempUrl === 'function'
+  ) {
+    try {
+      const result = await dependencies.tempUrl([user.avatar.resourceId])
+      const fileList = Array.isArray(result && result.fileList) ? result.fileList : []
+      const entry = fileList[0]
+      const url = entry && entry.tempFileURL
+      if (entry && entry.status === 0 && typeof url === 'string' && url.startsWith('https://') && !url.includes('cloud://') && !url.includes('tcb-qcloud.com')) {
+        return { nickname, avatar: { kind: 'temp', url } }
+      }
+    } catch (error) {
+      // 临时 URL 失败时按默认头像处理；邀请本身仍可继续，不应把整份邀请标记成无效。
+      if (dependencies && typeof dependencies.logTempUrlFailure === 'function') {
+        dependencies.logTempUrlFailure(user.avatar.resourceId, error)
+      }
+    }
+  }
+  return { nickname, avatar: DEFAULT_PROFILE_AVATAR }
+}
+
 async function homeResult(home, identityKey, getUser) {
   const members = await Promise.all((home.memberKeys || []).slice(0, 2).map(async (memberKey) => ({
     ...safeProfile(await getUser(memberKey)),
@@ -102,12 +139,12 @@ async function previewInvitation(input, dependencies) {
   const home = await dependencies.repository.getHousehold(loaded.invitation.householdId)
   if (!home || !Array.isArray(home.memberKeys)) return inviteFailure('INVITE_INVALID')
   if (home.memberKeys.length >= 2) return inviteFailure('HOME_FULL')
-  // 受邀者只需要知道“谁邀请我”，不应得到邀请人的身份编号或任何可用于越权的信息。
+  // 受邀者只需要知道"谁邀请我"，且头像只能是受控编号或短时 URL；自定义头像不暴露资源编号。
   return {
     status: 'INVITE_PREVIEW',
     retryable: false,
     household: safeHousehold(home),
-    inviter: safeProfile(await dependencies.repository.getUser(home.ownerKey)),
+    inviter: await safePreviewInviter(await dependencies.repository.getUser(home.ownerKey), dependencies),
   }
 }
 

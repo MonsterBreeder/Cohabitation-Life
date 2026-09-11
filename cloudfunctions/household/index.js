@@ -163,6 +163,13 @@ exports.main = async (event) => {
       now: () => new Date(),
       createHouseholdId: () => `home_${crypto.randomBytes(16).toString('hex')}`,
       checkText: (content) => checkText(content, context.OPENID, 1, cloud.openapi),
+      // 邀请预览阶段把邀请人自定义头像换取短时展示 URL；调用失败时只退化头像，邀请仍继续。
+      tempUrl: (fileList) => cloud.getTempFileURL({ fileList }),
+      logTempUrlFailure: (resourceId, error) => {
+        // 仅记录资源编号与错误类别，不记录邀请人昵称或家庭业务字段。
+        const message = error instanceof Error ? error.message : String(error)
+        console.warn('invite preview temp url failed', { resourceId, message })
+      },
     }
     const media = avatarDependencies(identityKey, context.OPENID, repository)
     if (event && event.action === 'prepareAvatar') return await prepareAvatar(event, media)

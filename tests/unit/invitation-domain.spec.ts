@@ -151,6 +151,73 @@ describe('邀请与成员关系', () => {
     })
     expect(JSON.stringify(await previewInvitation({ inviteToken: token }, dependencies(repository, 'guest')))).not.toContain('owner')
   })
+
+  // 阶段二：邀请人使用自定义头像时，云端必须在有效邀请凭证授权下换取短时 URL，
+  // 不向客户端返回独立的资源编号或 digest 字段（短时 URL 本身是签名后的可短期展示地址）。
+  it('邀请人使用自定义头像时，预览只返回短时 URL', async () => {
+    const repository = createRepository({
+      households: [{ _id: 'home-1', name: '我们的小家', ownerKey: 'owner', memberKeys: ['owner'] }],
+      invitations: [{ _id: 'invite_home-1', householdId: 'home-1', tokenHash: require('crypto').createHash('sha256').update(token).digest('hex'), expiresAt: '2026-08-15T12:00:00.000Z' }],
+      users: [{ _id: 'owner', nickname: '小帅', avatar: { kind: 'custom', resourceId: 'avatar_resource_1', digest: 'abc' } }],
+    })
+    const tempUrl = jest.fn().mockResolvedValue({
+      fileList: [{ fileID: 'avatar_resource_1', status: 0, tempFileURL: 'https://example.com/temp/avatar_resource_1?sign=xyz' }],
+    })
+    const deps = { ...dependencies(repository, 'guest'), tempUrl }
+
+    const result = await previewInvitation({ inviteToken: token }, deps)
+
+    expect(tempUrl).toHaveBeenCalledWith(['avatar_resource_1'])
+    expect(result).toMatchObject({
+      status: 'INVITE_PREVIEW',
+      inviter: { nickname: '小帅', avatar: { kind: 'temp', url: 'https://example.com/temp/avatar_resource_1?sign=xyz' } },
+    })
+    // 响应里不能保留独立的资源编号或 digest 字段，避免客户端把它们当成可长期复用的引用。
+    const inviter = (result as { inviter: { avatar: Record<string, unknown> } }).inviter.avatar
+    expect(inviter).not.toHaveProperty('resourceId')
+    expect(inviter).not.toHaveProperty('digest')
+    expect(inviter).not.toHaveProperty('kind', 'custom')
+  })
+
+  // 阶段二：自定义头像短时 URL 换取失败时，邀请本身仍可继续，只把头像退化为默认。
+  it('自定义头像换取短时 URL 失败时，邀请摘要仍可继续并使用默认头像', async () => {
+    const repository = createRepository({
+      households: [{ _id: 'home-1', name: '我们的小家', ownerKey: 'owner', memberKeys: ['owner'] }],
+      invitations: [{ _id: 'invite_home-1', householdId: 'home-1', tokenHash: require('crypto').createHash('sha256').update(token).digest('hex'), expiresAt: '2026-08-15T12:00:00.000Z' }],
+      users: [{ _id: 'owner', nickname: '小帅', avatar: { kind: 'custom', resourceId: 'avatar_resource_1', digest: 'abc' } }],
+    })
+    const tempUrl = jest.fn().mockRejectedValue(new Error('cloud temp url failed'))
+    const logTempUrlFailure = jest.fn()
+    const deps = { ...dependencies(repository, 'guest'), tempUrl, logTempUrlFailure }
+
+    const result = await previewInvitation({ inviteToken: token }, deps)
+
+    expect(result).toMatchObject({
+      status: 'INVITE_PREVIEW',
+      inviter: { nickname: '小帅', avatar: { kind: 'builtin', id: 'person-neutral' } },
+    })
+    expect(logTempUrlFailure).toHaveBeenCalledWith('avatar_resource_1', expect.any(Error))
+  })
+
+  // 阶段二：返回的短时 URL 必须以 https 开头且不能是 cloud:// 形式，避免泄露可长期复用的地址。
+  it('短时 URL 不以 https 开头或使用 cloud:// 时，邀请摘要退化为默认头像', async () => {
+    const repository = createRepository({
+      households: [{ _id: 'home-1', name: '我们的小家', ownerKey: 'owner', memberKeys: ['owner'] }],
+      invitations: [{ _id: 'invite_home-1', householdId: 'home-1', tokenHash: require('crypto').createHash('sha256').update(token).digest('hex'), expiresAt: '2026-08-15T12:00:00.000Z' }],
+      users: [{ _id: 'owner', nickname: '小帅', avatar: { kind: 'custom', resourceId: 'avatar_resource_1', digest: 'abc' } }],
+    })
+    const tempUrl = jest.fn().mockResolvedValue({
+      fileList: [{ fileID: 'avatar_resource_1', status: 0, tempFileURL: 'cloud://tcb-qcloud.com/foo' }],
+    })
+    const deps = { ...dependencies(repository, 'guest'), tempUrl }
+
+    const result = await previewInvitation({ inviteToken: token }, deps)
+
+    expect(result).toMatchObject({
+      status: 'INVITE_PREVIEW',
+      inviter: { nickname: '小帅', avatar: { kind: 'builtin', id: 'person-neutral' } },
+    })
+  })
 })
 
 export {}

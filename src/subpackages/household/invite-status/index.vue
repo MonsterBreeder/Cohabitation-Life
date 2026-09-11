@@ -1,65 +1,67 @@
 <template>
-  <!-- 只展示有限邀请原因，不泄露邀请原文或家庭资料。 -->
+  <!-- 邀请终态页：未开始用户只给"结束邀请"；已开始且无家庭给"创建家庭"；已有家庭给"回到自己的家"。 -->
   <view class="invite-status">
     <view class="invite-status__dot" />
     <view class="invite-status__content">
       <image class="invite-status__logo" src="/static/brand/logo.png" mode="aspectFit" aria-label="睦录 Logo" />
       <view class="invite-status__card" data-testid="invite-status-card">
-        <text class="invite-status__eyebrow">睦录</text>
-        <text class="invite-status__title" data-testid="invite-status-title">{{ title }}</text>
-        <text class="invite-status__description" data-testid="invite-status-description">{{ message }}</text>
+        <text class="invite-status__title" data-testid="invite-status-title">{{ view.title }}</text>
+        <text class="invite-status__description" data-testid="invite-status-description">{{ view.description }}</text>
         <view class="invite-status__tip">
           <view class="invite-status__tip-mark">i</view>
           <text class="invite-status__tip-text">请联系对方重新发一份邀请。</text>
         </view>
       </view>
     </view>
-    <!-- 邀请无效页只在登录且仍有已确认家庭时提供快速新增。 -->
-    <GlobalQuickAdd :visible="auth.hasCompletedLogin && Boolean(household) && !checkingHousehold" />
+    <view class="invite-status__action">
+      <wd-button
+        block
+        round
+        size="large"
+        :loading="view.primaryLoading"
+        :disabled="view.primaryDisabled"
+        :data-testid="view.primaryAction ? `invite-status-${view.primaryAction}` : 'invite-status-busy'"
+        custom-class="invite-status__primary"
+        @click="handleAction"
+      >{{ view.primaryLabel }}</wd-button>
+    </view>
+    <GlobalQuickAdd v-if="canShowQuickAdd" :visible="true" />
   </view>
 </template>
 
 <script setup lang="ts">
 import { computed, shallowRef } from 'vue'
-import { storeToRefs } from 'pinia'
 import { onShow } from '@dcloudio/uni-app'
+import { storeToRefs } from 'pinia'
 import GlobalQuickAdd from '../../../components/GlobalQuickAdd.vue'
 import { useAuthStore } from '../../../store/modules/auth'
 import { useHouseholdStore } from '../../../store/modules/household'
+import { useInvitationStore } from '../../../store/modules/invitation'
+import { describeInviteStatusView, type InviteStatusAction } from './invite-status-view'
 
 const auth = useAuthStore()
 const householdStore = useHouseholdStore()
-const { household } = storeToRefs(householdStore)
+const invitationStore = useInvitationStore()
+const { hasCompletedLogin, errorMessage, notice, isResolving } = storeToRefs(auth)
+const { household, checking } = storeToRefs(householdStore)
 const checkingHousehold = shallowRef(true)
 
-// 页面文案完全由本地有限提示编号生成。
-const content = computed(() => {
-  const messages = {
-    invite_invalid: { title: '这份邀请无效', message: '请确认你打开的是对方刚刚发来的邀请。' },
-    invite_expired: { title: '这份邀请已失效', message: '它可能已经超过了有效时间。' },
-    invite_used: { title: '这份邀请已被使用', message: '每份邀请只能用于一次加入确认。' },
-    home_full: { title: '这个家已经满员', message: '一个家目前只能由两位成员共同使用。' },
-  }
+const view = computed(() => describeInviteStatusView({
+  notice: notice.value,
+  hasStartedUse: hasCompletedLogin.value,
+  hasHousehold: Boolean(household.value),
+  isResolving: isResolving.value,
+  errorMessage: errorMessage.value,
+}))
 
-  switch (auth.notice) {
-    case 'invite_invalid':
-    case 'invite_expired':
-    case 'invite_used':
-    case 'home_full':
-      return messages[auth.notice]
-    default:
-      return { title: '邀请暂时无法使用', message: '请让对方重新发一份邀请。' }
-  }
-})
-
-const title = computed(() => content.value.title)
-const message = computed(() => content.value.message)
+/** 已有家庭用户才显示快速新增；按"避免误操作"原则不再展示在邀请异常页。 */
+const canShowQuickAdd = computed(() => hasCompletedLogin.value && Boolean(household.value) && !checkingHousehold.value)
 
 /** 未登录用户不额外请求；已登录时只确认是否仍有家庭，不改变邀请错误内容。 */
 async function loadHousehold(): Promise<void> {
   checkingHousehold.value = true
   try {
-    if (!auth.hasCompletedLogin) return
+    if (!hasCompletedLogin.value) return
     await householdStore.loadCurrent({ preserveExisting: true })
   } finally {
     checkingHousehold.value = false
@@ -67,20 +69,42 @@ async function loadHousehold(): Promise<void> {
 }
 
 onShow(() => { void loadHousehold() })
+
+/** 终态页主按钮：按 action 决定路由或本地清理。 */
+function handleAction(): void {
+  const action = view.value.primaryAction
+  if (action === 'back-home') {
+    uni.reLaunch({ url: '/pages/index/index' })
+    return
+  }
+  if (action === 'create-home') {
+    uni.reLaunch({ url: '/subpackages/household/create-home/index' })
+    return
+  }
+  if (action === 'end-invite-and-welcome') {
+    auth.clearInviteToken()
+    invitationStore.clearPreview()
+    uni.reLaunch({ url: '/pages/login/index' })
+    return
+  }
+  // null action：按钮处于禁用状态，这里不会触发
+}
 </script>
 
 <style lang="scss" scoped>
 .invite-status {
-  /* 邀请异常页使用单卡片布局，下一步始终是联系对方重新邀请。 */
+  /* 邀请异常页：单卡片 + 主按钮；保留品牌装饰和提示信息。 */
   position: relative;
   min-height: 100vh;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  padding: 64rpx 48rpx;
+  padding: 64rpx 48rpx 96rpx;
   box-sizing: border-box;
   background: $brand-color-background;
+
   &__content {
     position: relative;
     z-index: 1;
@@ -99,20 +123,12 @@ onShow(() => { void loadHousehold() })
     border-radius: $brand-radius-card;
     background: $brand-color-surface;
   }
-  &__eyebrow {
-    display: block;
-    color: $brand-color-primary;
-    font-size: 24rpx;
-    font-weight: 700;
-    letter-spacing: 5rpx;
-  }
   &__title {
     display: block;
-    margin-top: 22rpx;
     color: $brand-color-text;
-    font-size: 42rpx;
+    font-size: 36rpx;
     font-weight: 700;
-    line-height: 1.35;
+    line-height: 1.4;
   }
   &__description {
     display: block;
@@ -124,7 +140,7 @@ onShow(() => { void loadHousehold() })
   &__tip {
     display: flex;
     align-items: flex-start;
-    margin-top: 38rpx;
+    margin-top: 32rpx;
     padding-top: 28rpx;
     border-top: 2rpx solid $brand-color-border;
   }
@@ -138,7 +154,7 @@ onShow(() => { void loadHousehold() })
     margin: 4rpx 14rpx 0 0;
     border-radius: 50%;
     background: $brand-color-accent;
-    color: #fff;
+    color: #ffffff;
     font-size: 21rpx;
     font-weight: 700;
     line-height: 1;
@@ -156,6 +172,24 @@ onShow(() => { void loadHousehold() })
     height: 172rpx;
     border-radius: 50%;
     background: rgba($brand-color-primary, .13);
+  }
+  &__action {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 620rpx;
+    margin-top: 32rpx;
+  }
+  :deep(.invite-status__primary) {
+    height: 96rpx;
+    background: $brand-color-action;
+    color: #ffffff;
+    font-size: 30rpx;
+    font-weight: 700;
+  }
+  :deep(.invite-status__primary.is-disabled) {
+    background: rgba($brand-color-action, .48);
+    color: rgba(255, 255, 255, .9);
   }
 }
 </style>

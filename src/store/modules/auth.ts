@@ -6,6 +6,8 @@ import { getStringStorage, setStringStorage } from '../../utils/storage'
 import store from '..'
 import { getHouseholdSuccessRevision } from './household'
 
+// 本地标记既表示“已登录”，也表示“已开始使用”——用户首次点击开始使用后
+// 这两个语义才会同时成立。保留原 key 是为了兼容已上线用户，避免被当成新人。
 const loginMarkerKey = 'auth.login.completed'
 const inviteTokenKey = 'auth.invite.pending'
 
@@ -15,12 +17,19 @@ interface AuthCloudClient {
 }
 
 interface AuthState {
+  /** 内部沿用历史命名；对外语义是“用户是否已经主动开始使用过本产品”。 */
   hasCompletedLogin: boolean
+  /** 启动或回前台时暂存的邀请凭证；只有完成非邀请分流、受控邀请终态或用户主动结束邀请时才清理。 */
   pendingInviteToken: string | undefined
+  /** 正在执行主动开始使用或恢复会话的云端调用。 */
   isResolving: boolean
+  /** 当前可展示的受控错误，不暴露云端任意文本。 */
   errorMessage: string | undefined
+  /** 当前有限提示编号，由本地映射生成。 */
   notice: EntryNotice | undefined
+  /** 等待页面消费的一次性页面去向。 */
   navigationIntent: EntryRoute | undefined
+  /** 上一次调用意图，用于失败重试和补齐防回退。 */
   lastIntent: AuthIntent | undefined
 }
 
@@ -30,23 +39,25 @@ let inFlight: Promise<void> | undefined
 /** 登录与启动分流状态，采用参考项目一致的对象式 Pinia 写法。 */
 export const useAuthStore = defineStore('auth', {
   state: (): AuthState => ({
-    /** 是否曾经主动完成登录 */
+    /** 是否曾经主动开始使用过；UI 可视为“已登录”。 */
     hasCompletedLogin: getStringStorage(loginMarkerKey) === '1',
-    /** 登录期间临时保存的邀请 */
+    /** 启动或回前台时暂存的邀请凭证；只有完成非邀请分流、受控邀请终态或用户主动结束邀请时才清理。 */
     pendingInviteToken: getStringStorage(inviteTokenKey),
-    /** 是否正在请求云端 */
+    /** 是否正在请求云端（开始使用、恢复或重试）。 */
     isResolving: false,
-    /** 当前可展示的错误 */
+    /** 当前可展示的受控错误，不暴露云端任意文本。 */
     errorMessage: undefined,
-    /** 当前有限提示编号 */
+    /** 当前有限提示编号，由本地映射生成。 */
     notice: undefined,
-    /** 等待页面消费的一次性跳转 */
+    /** 等待页面消费的一次性页面去向。 */
     navigationIntent: undefined,
-    /** 上一次调用意图，用于失败重试 */
+    /** 上一次调用意图，用于失败重试和补齐防回退。 */
     lastIntent: undefined,
   }),
   getters: {
-    /** 当前是否允许重新执行上一次动作 */
+    /** 语义别名：UI 与单元测试可用它表达“用户是否已经主动开始使用过”。 */
+    hasStartedUse: (state) => state.hasCompletedLogin,
+    /** 当前是否允许重新执行上一次动作。 */
     canRetry: (state) => !state.isResolving && state.lastIntent !== undefined,
   },
   actions: {
@@ -126,16 +137,28 @@ export const useAuthStore = defineStore('auth', {
 
       return inFlight
     },
-    /** 已有登录标记时查询最新身份和家庭状态。 */
+    /** 已有开始使用标记时查询最新身份和家庭状态（只读，不创建用户）。 */
     async restore() {
       if (!this.hasCompletedLogin) return
       await this.resolve('resume')
     },
-    /** 用户主动点击后执行首次登录。 */
+    /** 用户主动点击后执行首次登录（可幂等创建最小用户）。 */
     async login() {
       await this.resolve('login')
     },
-    /** 重试上一次失败的登录或恢复动作。 */
+    /**
+     * 页面统一入口：用户主动点击“开始使用”按钮。
+     * 已有标记时退化为只读恢复；首次开始时才允许调用云端创建身份，
+     * 避免已上线用户在升级后被当成新人，也不会重复创建身份。
+     */
+    async startUse() {
+      if (this.hasCompletedLogin) {
+        await this.restore()
+        return
+      }
+      await this.login()
+    },
+    /** 重试上一次失败的开始使用或恢复动作。 */
     async retry() {
       if (!this.lastIntent) return
       await this.resolve(this.lastIntent)

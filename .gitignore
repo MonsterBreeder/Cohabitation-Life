@@ -18,6 +18,7 @@ dist
 references
 tmp
 .cloud-deploy-tmp
+.ce-tmp
 
 # Editor directories and files
 .idea

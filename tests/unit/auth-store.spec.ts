@@ -143,4 +143,77 @@ describe('auth store', () => {
     expect(auth.notice).toBe('invite_expired')
     expect(auth.consumeNavigationIntent()).toMatchObject({ page: 'invite-status' })
   })
+
+  // 阶段一：本地标记丢失但云端已有家庭时，主动开始必须复用既有家庭，而不是创建第二个。
+  it('restores an existing family when the local marker is cleared but the cloud has one', async () => {
+    setAuthCloudClientForTesting({
+      resolve: jest.fn().mockResolvedValue({ status: 'HOME', retryable: false }),
+    })
+    const auth = useAuthStore()
+    // 模拟用户清缓存 / 重新安装小程序：本地没有开始使用标记。
+    auth.hasCompletedLogin = false
+
+    await auth.startUse()
+
+    expect(auth.hasCompletedLogin).toBe(true)
+    expect(auth.hasStartedUse).toBe(true)
+    expect(auth.consumeNavigationIntent()).toMatchObject({ page: 'home' })
+  })
+
+  // 阶段一：已上线用户点击"开始使用"时只走只读恢复，不重复创建用户。
+  it('startUse falls back to a read-only resume when the marker already exists', async () => {
+    const resolve = jest.fn().mockResolvedValue({ status: 'HOME', retryable: false })
+    setAuthCloudClientForTesting({ resolve })
+    const auth = useAuthStore()
+    auth.hasCompletedLogin = true
+
+    await auth.startUse()
+
+    expect(resolve).toHaveBeenCalledTimes(1)
+    expect(resolve).toHaveBeenCalledWith({ intent: 'resume', inviteToken: undefined })
+    expect(auth.consumeNavigationIntent()).toMatchObject({ page: 'home' })
+  })
+
+  // 阶段一：未开始用户在主动开始前不应触发任何云端请求或创建身份。
+  it('does not call the cloud or set a marker on the very first open', async () => {
+    const resolve = jest.fn()
+    setAuthCloudClientForTesting({ resolve })
+    const auth = useAuthStore()
+
+    await auth.restore()
+
+    expect(resolve).not.toHaveBeenCalled()
+    expect(auth.hasCompletedLogin).toBe(false)
+    expect(auth.navigationIntent).toBeUndefined()
+  })
+
+  // 阶段一补强：方案 C 调整后，welcome 页不再主动清邀请；startUse 直接把 pendingInviteToken 透传给云端。
+  // 这里覆盖两种典型用法：清邀请后不带（create 路径） / 不清邀请则带上（join 路径）。
+  it('startUse sends no invite when pendingInviteToken is undefined', async () => {
+    const resolve = jest.fn().mockResolvedValue({ status: 'CREATE_HOME', retryable: false })
+    setAuthCloudClientForTesting({ resolve })
+    const auth = useAuthStore()
+
+    await auth.startUse()
+
+    expect(resolve).toHaveBeenCalledTimes(1)
+    expect(resolve).toHaveBeenCalledWith({ intent: 'login', inviteToken: undefined })
+    expect(auth.consumeNavigationIntent()).toMatchObject({ page: 'create-home' })
+  })
+
+  it('startUse forwards the pending invite to the cloud when one exists', async () => {
+    const resolve = jest.fn().mockResolvedValue({ status: 'JOIN_CONFIRM', retryable: false })
+    setAuthCloudClientForTesting({ resolve })
+    const auth = useAuthStore()
+    auth.captureInviteToken('valid-invite')
+    expect(auth.pendingInviteToken).toBe('valid-invite')
+
+    await auth.startUse()
+
+    expect(resolve).toHaveBeenCalledTimes(1)
+    expect(resolve).toHaveBeenCalledWith({ intent: 'login', inviteToken: 'valid-invite' })
+    // 仍在 join 流程中：邀请不应被消费
+    expect(auth.pendingInviteToken).toBe('valid-invite')
+    expect(auth.consumeNavigationIntent()).toMatchObject({ page: 'join-home' })
+  })
 })

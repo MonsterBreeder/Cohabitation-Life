@@ -15,6 +15,22 @@
 			}
 		},
 		{
+			"path": "pages/legal/index",
+			"style": {
+				"navigationBarTitleText": "协议与隐私",
+				"navigationBarBackgroundColor": "#FFF9F2",
+				"navigationBarTextStyle": "black"
+			}
+		},
+		{
+			"path": "pages/experience/index",
+			"style": {
+				"navigationBarTitleText": "功能体验",
+				"navigationBarBackgroundColor": "#FFF9F2",
+				"navigationBarTextStyle": "black"
+			}
+		},
+		{
 			"path": "pages/index/index",
 			"style": {
 				"navigationBarTitleText": "睦录"

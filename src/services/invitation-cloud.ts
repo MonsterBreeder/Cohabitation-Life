@@ -26,11 +26,36 @@ function initialize(): void {
   initialized = true
 }
 
+// 内置头像编号与 src/types/household.ts 保持一致；只接受白名单，避免把云端任意字符串当作可展示编号。
+const BUILTIN_PROFILE_AVATAR_IDS = new Set([
+  'person-neutral',
+  'person-01',
+  'person-02',
+  'person-03',
+  'person-04',
+])
+
+/** 校验预览头像只能是受控编号或短时 URL；其他形态（包括 custom 资源编号）一律拒绝。 */
+function isPreviewAvatar(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false
+  const avatar = value as { kind?: unknown; id?: unknown; url?: unknown }
+  if (avatar.kind === 'builtin') {
+    return typeof avatar.id === 'string' && BUILTIN_PROFILE_AVATAR_IDS.has(avatar.id)
+  }
+  if (avatar.kind === 'temp') {
+    return typeof avatar.url === 'string'
+      && avatar.url.startsWith('https://')
+      && !avatar.url.includes('cloud://')
+      && !avatar.url.includes('tcb-qcloud.com')
+  }
+  return false
+}
+
 function isResult(value: unknown): value is InvitationResult {
   if (!value || typeof value !== 'object' || typeof (value as { status?: unknown }).status !== 'string' || typeof (value as { retryable?: unknown }).retryable !== 'boolean') return false
-  const result = value as { status: string; inviteToken?: unknown; expiresAt?: unknown; inviteeName?: unknown; household?: { name?: unknown; memberCount?: unknown; members?: unknown }; inviter?: { nickname?: unknown; avatar?: unknown } }
+  const result = value as { status: string; inviteToken?: unknown; expiresAt?: unknown; inviteeName?: unknown; household?: { name?: unknown; avatar?: unknown; memberCount?: unknown; members?: unknown }; inviter?: { nickname?: unknown; avatar?: unknown } }
   if (result.status === 'INVITE_READY') return typeof result.inviteToken === 'string' && typeof result.expiresAt === 'string' && typeof result.inviteeName === 'string'
-  if (result.status === 'INVITE_PREVIEW') return typeof result.household?.name === 'string' && typeof result.household?.memberCount === 'number' && typeof result.inviter?.nickname === 'string' && Boolean(result.inviter.avatar)
+  if (result.status === 'INVITE_PREVIEW') return typeof result.household?.name === 'string' && typeof result.household?.memberCount === 'number' && typeof result.inviter?.nickname === 'string' && isPreviewAvatar(result.inviter?.avatar)
   if (result.status === 'TRANSFER_CONFIRM') return true
   if (result.status === 'HOME') return typeof result.household?.name === 'string' && Array.isArray(result.household?.members)
   return ['INVITE_INVALID', 'INVITE_EXPIRED', 'INVITE_USED', 'HOME_FULL', 'ALREADY_IN_HOME', 'FORBIDDEN', 'NO_OTHER_MEMBER', 'NO_HOME', 'MULTIPLE_HOUSEHOLDS', 'INVALID_REQUEST', 'CONTENT_REJECTED', 'TEMPORARY_FAILURE'].includes(result.status)
