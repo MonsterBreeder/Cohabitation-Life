@@ -8,6 +8,43 @@
 - `docs/solutions/` 保存已验证的历史解决方案与实践，按类别及 `module`、`tags`、`problem_type` 等信息整理，适合在相关功能开发、排错或决策时检索参考。
 - 文件夹和代码文件使用英文名称，产品文档使用中文。
 
+## 分支策略（2026-09-12 起执行）
+
+仓库采用三段式分支模型，所有人必须遵守：
+
+- **`master`**：发布分支，只接受从 `dev` 合并的 PR；**禁止直接 push**
+- **`dev`**：集成分支，所有 feature 分支合并到这里；**禁止直接 push**
+- **`feature/xxx`** 或 `fix/xxx`：工作分支，**必须从 `dev` 开**，完成后通过 PR 合并回 `dev`
+
+### 分支命名
+
+- `feature/<name>`：新功能（如 `feature/first-use-experience`、`feature/global-quick-add`）
+- `fix/<name>`：bug 修复（如 `fix/ledger-stats-display`）
+- `chore/<name>`：杂项（依赖升级、配置调整等）
+- `docs/<name>`：纯文档改动
+
+### 流程
+
+1. **新工作**：从最新的 `dev` 拉新分支
+   ```bash
+   git fetch origin
+   git checkout dev
+   git pull origin dev
+   git checkout -b feature/<name>
+   ```
+2. **提交**：分支内自由 commit；commit message 沿用 conventional commits（`feat` / `fix` / `chore` / `docs` / `refactor` / `test` + scope + 中文描述）
+3. **完成**：push 到 origin，开 PR `feature/<name> → dev`
+4. **集成**：dev 分支累积多个 feature 后，开 PR `dev → master` 发布
+5. **回退**：紧急修复可以 `hotfix/<name>` 从 master 切出，合并回 master + dev
+
+### 强制约束
+
+- **不得直接 push 到 `master` 或 `dev`**（GitHub 仓库设置 branch protection 强制执行；本地也没有任何理由 push 这两个分支）
+- feature 分支必须从 `dev` 开；不接受从 `master` 或其他 feature 分支开
+- 合并前必须保证 `npm run test:unit` + `npm run build:mp-weixin` + `npm run check:styles` + `npm run check:package-size` 全部通过
+- 删除本地已合并的 feature 分支（`git branch -d feature/<name>`）保持仓库干净
+- `master` 和 `dev` 必须在 GitHub 仓库设置里勾选 "Require pull request reviews before merging" 和 "Include administrators"，让规则对自己也生效
+
 ## Vue 文件顺序
 
 所有 `.vue` 文件必须严格使用以下顺序：
