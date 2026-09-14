@@ -1,5 +1,7 @@
 import type { BuiltinHouseholdAvatarId, BuiltinProfileAvatarId } from '../../types/household'
 
+const HOME_SHARE_TITLE = '睦录｜把共同生活认真记下来'
+
 const householdAvatarSources: Record<BuiltinHouseholdAvatarId, string> = {
   'household-01': '/static/avatars/households/household-01.png',
   'household-02': '/static/avatars/households/household-02.png',
@@ -33,4 +35,20 @@ export function resolveHomeLoadDestination(hasLogin: boolean, status?: string): 
   if (status === 'NO_HOME') return 'create-home'
   if (status === 'HOME') return 'home'
   return 'stay'
+}
+
+/** 好友转发只使用公开品牌文案和固定首页路径，避免把当前家庭资料带入分享卡片。 */
+export function createHomeShareMessage(): { title: string; path: string } {
+  return {
+    title: HOME_SHARE_TITLE,
+    path: '/pages/index/index',
+  }
+}
+
+/** 朋友圈分享不附带查询参数，接收者进入后仍由首页执行正常的登录与家庭分流。 */
+export function createHomeTimelineShare(): { title: string; query: string } {
+  return {
+    title: HOME_SHARE_TITLE,
+    query: '',
+  }
 }

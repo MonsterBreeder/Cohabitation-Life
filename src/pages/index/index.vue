@@ -96,7 +96,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
-import { onShow } from '@dcloudio/uni-app'
+import { onShareAppMessage, onShareTimeline, onShow } from '@dcloudio/uni-app'
 import HomeSummaryCard from '../../components/home/HomeSummaryCard.vue'
 import MonthlyExpenseCard from '../../components/home/MonthlyExpenseCard.vue'
 import HomeFootprintCard from './components/HomeFootprintCard.vue'
@@ -109,7 +109,7 @@ import { useTaskStore } from '../../store/modules/task'
 import { useLedgerStore } from '../../store/modules/ledger'
 import { useFootprintStore } from '../../store/modules/footprint'
 import { formatLedgerMonth } from '../../utils/format'
-import { householdAvatarSource, resolveHomeLoadDestination } from './home-view'
+import { createHomeShareMessage, createHomeTimelineShare, householdAvatarSource, resolveHomeLoadDestination } from './home-view'
 import { getAvatarTemporaryUrl } from '../../services/avatar-media'
 import type { CurrentTasks } from '../../types/task'
 
@@ -287,6 +287,10 @@ async function loadHome(): Promise<void> {
 onShow(() => {
   void loadHome()
 })
+
+// 注册两个微信页面级分享入口；缺少对应生命周期时，右上角菜单会显示为不可用。
+onShareAppMessage(() => createHomeShareMessage())
+onShareTimeline(() => createHomeTimelineShare())
 </script>
 
 <style lang="scss" scoped>
