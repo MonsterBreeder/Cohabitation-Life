@@ -1,8 +1,9 @@
 declare function require(path: string): any
-const { prepareAvatar, checkAvatar, validateAvatarReference, getAvatarUrl, MAX_BYTES } = require('../../cloudfunctions/household/avatar-media')
+const { prepareAvatar, checkAvatar, validateAvatarReference, getAvatarUrl, releaseSlots, MAX_BYTES } = require('../../cloudfunctions/household/avatar-media')
 
 function fixtures() {
   const records = new Map<string, any>()
+  const slots = new Map<string, any>()
   const stagingFileID = 'cloud://test.bucket/avatar-staging/ownerhash/secret/avatar_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png'
   const repository = {
     countRecent: jest.fn(async () => 0), countPending: jest.fn(async () => 0),
@@ -10,8 +11,11 @@ function fixtures() {
     create: jest.fn(async (r) => records.set(r._id, r)), get: jest.fn(async (id) => records.get(id)),
     update: jest.fn(async (id, data) => records.set(id, { ...records.get(id), ...data })),
     reserveSlot: jest.fn(async (ownerKey, purpose, createdAt, expiresAt) => {
-      const resourceId = 'avatar_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; records.set(resourceId, { _id: resourceId, ownerKey, purpose, state: 'prepared', createdAt, expiresAt, secret: 'secret' }); return { resourceId, secret: 'secret' }
+      const resourceId = 'avatar_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; records.set(resourceId, { _id: resourceId, ownerKey, purpose, state: 'prepared', createdAt, expiresAt, slotId: 'slot_test_0', secret: 'secret' }); slots.set('slot_test_0', { ownerKey, resourceId, expiresAt }); return { resourceId, secret: 'secret' }
     }),
+    cleanupSlot: jest.fn(async (slotId) => { slots.delete(slotId) }),
+    releaseAllSlots: jest.fn(async (ownerKey) => { for (const key of Array.from(slots.keys())) if (key.startsWith(`slot_${ownerKey}`)) slots.delete(key) }),
+    findPendingForRelease: jest.fn(async (ownerKey) => Array.from(records.values()).filter((r) => r.ownerKey === ownerKey && r.state === 'prepared')),
     findHouseholdsByMemberKey: jest.fn(async () => [{ avatar: null, memberKeys: ['trusted'] }]), getUser: jest.fn(async () => null), isMemberProfileAvatar: jest.fn(async () => false),
   }
   const png = Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), Buffer.from('safe')])
@@ -91,6 +95,28 @@ describe('secure avatar media', () => {
       purpose: 'profile',
       stagingPath: 'avatar-staging/owner/secret/avatar_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png',
     })
+  })
+  it('releases the upload slot as soon as the image check approves', async () => {
+    const f = fixtures()
+    const ready = await prepareAvatar({ purpose: 'profile' }, f.deps)
+    await checkAvatar({ resourceId: ready.resourceId, fileID: f.stagingFileID }, f.deps)
+    expect(f.repository.cleanupSlot).toHaveBeenCalledWith('slot_test_0')
+  })
+  it('releases the upload slot even when the image check rejects', async () => {
+    const f = fixtures()
+    const ready = await prepareAvatar({ purpose: 'profile' }, f.deps)
+    f.deps.checkImage.mockResolvedValueOnce('rejected')
+    await checkAvatar({ resourceId: ready.resourceId, fileID: f.stagingFileID }, f.deps)
+    expect(f.repository.cleanupSlot).toHaveBeenCalledWith('slot_test_0')
+  })
+  it('releaseAvatarSlots clears every slot for the current identity and finalises leftover prepared records', async () => {
+    const f = fixtures()
+    const ready = await prepareAvatar({ purpose: 'profile' }, f.deps)
+    expect(f.records.get(ready.resourceId)).toMatchObject({ state: 'prepared' })
+    const result = await releaseSlots({}, f.deps)
+    expect(result).toEqual({ status: 'RELEASED', retryable: false, releasedSlots: 3, releasedPending: 1 })
+    expect(f.repository.releaseAllSlots).toHaveBeenCalledWith('trusted')
+    expect(f.records.get(ready.resourceId)).toMatchObject({ state: 'replaced', stagingPath: null })
   })
 })
 export {}

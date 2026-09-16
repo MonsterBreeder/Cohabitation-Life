@@ -4,7 +4,7 @@ const cloudbaseStorage = require('@cloudbase/node-sdk/lib/storage')
 const crypto = require('crypto')
 const { createHousehold, confirmHousehold, getCurrentHousehold, updateHousehold, updateProfile, HouseholdDomainError } = require('./household-domain')
 const { withoutDocumentId } = require('./repository-data')
-const { prepareAvatar, checkAvatar, getAvatarUrl, AvatarMediaError } = require('./avatar-media')
+const { prepareAvatar, checkAvatar, getAvatarUrl, releaseSlots, AvatarMediaError } = require('./avatar-media')
 const { checkImage, checkText } = require('./content-safety')
 const { swapHouseholdAvatar, swapProfileAvatar } = require('./avatar-swap')
 const { createInvitation, previewInvitation, joinInvitation, removeOtherMember } = require('./invitation-domain')
@@ -66,6 +66,27 @@ function createRepository() {
       }
       return null
     }),
+    // avatarUploadSlots 集合在 approved / rejected / replaced 时不会自动释放，
+    // 这里提供主动清理入口（详见 cloudfunctions/household/avatar-media.js 中 checkAvatar / releaseSlots）。
+    cleanupSlot: async (slotId) => {
+      if (!slotId) return
+      try { await db.collection('avatarUploadSlots').doc(slotId).remove() } catch (error) { /* 已被清理或不存在，忽略 */ }
+    },
+    // releaseAvatarSlots action 配套：一次性删除当前身份下所有 3 个 slot 记录。
+    // ownerKey 就是 reserveSlot 时写入的 identityKey（avatar-media.js 显式传 identityKey），
+    // 所以这里直接基于 ownerKey 计算 slotId，与 reserveSlot 保持一致。
+    releaseAllSlots: async (ownerKey) => {
+      const removals = []
+      for (let slot = 0; slot < 3; slot += 1) {
+        const slotId = `slot_${crypto.createHash('sha256').update(`${ownerKey}:${slot}`).digest('hex')}`
+        removals.push(db.collection('avatarUploadSlots').doc(slotId).remove().catch(() => undefined))
+      }
+      await Promise.all(removals)
+    },
+    findPendingForRelease: async (ownerKey) => {
+      const result = await avatarCollection.where({ ownerKey, state: 'prepared' }).limit(50).get()
+      return result.data
+    },
   }
   const repository = {
     avatarMedia,
@@ -114,9 +135,18 @@ function createRepository() {
     updateHousehold: (id, data) => transaction.collection('households').doc(id).update({ data }),
     updateUser: (id, data) => transaction.collection('users').doc(id).update({ data }),
     markReplacedIfUnreferenced: async (resourceId, replacedAt, householdId, identityKey) => {
-      const [home, user] = await Promise.all([getDocument(transaction.collection('households'), householdId), getDocument(transaction.collection('users'), identityKey)])
+      const [home, user, avatar] = await Promise.all([
+        getDocument(transaction.collection('households'), householdId),
+        getDocument(transaction.collection('users'), identityKey),
+        getDocument(transaction.collection('avatarMedia'), resourceId),
+      ])
       if (home?.avatar?.resourceId === resourceId || user?.avatar?.resourceId === resourceId) return
       await transaction.collection('avatarMedia').doc(resourceId).update({ data: { state: 'replaced', replacedAt, expiresAt: replacedAt } })
+      // avatarMedia 记录里有 slotId 字段（reserveSlot 时写入），被替换时同步释放 slot，
+      // 否则下一次 prepareAvatar 会撞到 RESOURCE_LIMIT。
+      if (avatar && avatar.slotId) {
+        try { await transaction.collection('avatarUploadSlots').doc(avatar.slotId).remove() } catch { /* 已被清理，忽略 */ }
+      }
     },
   })
   repository.swapHouseholdAvatar = (input) => db.runTransaction((transaction) => swapHouseholdAvatar(input, transactionAdapter(transaction), input.now))
@@ -175,6 +205,7 @@ exports.main = async (event) => {
     if (event && event.action === 'prepareAvatar') return await prepareAvatar(event, media)
     if (event && event.action === 'checkAvatar') return await checkAvatar(event, media)
     if (event && event.action === 'getAvatarUrl') return await getAvatarUrl(event, media)
+    if (event && event.action === 'releaseAvatarSlots') return await releaseSlots(event, media)
     // 首页查询不接收家庭编号，只按微信云端确认的当前身份查找归属。
     if (event && event.action === 'get') return await getCurrentHousehold(dependencies)
     if (event && event.action === 'updateHousehold') return await updateHousehold(event, dependencies)
