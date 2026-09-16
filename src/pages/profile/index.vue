@@ -13,7 +13,14 @@
       </view>
 
       <button class="profile-summary" @click="openProfileEditor">
-        <wd-avatar :src="profile.avatar.kind === 'builtin' ? profileAvatarSource(profile.avatar.id) : profileAvatarUrl" size="116rpx" />
+        <view class="profile-summary__avatar">
+          <view v-if="profileAvatarLoading" class="profile-summary__avatar-placeholder" aria-label="个人头像加载中">
+            <wd-loading color="#43C89A" size="32rpx" />
+          </view>
+          <wd-avatar v-else-if="profile.avatar.kind === 'builtin'" :src="profileAvatarSource(profile.avatar.id)" size="116rpx" />
+          <wd-avatar v-else-if="profileAvatarUrl" :src="profileAvatarUrl" :alt="`${profile.nickname}的头像`" size="116rpx" />
+          <wd-avatar v-else icon="user" bg-color="#effbf5" color="#267A5A" size="116rpx" />
+        </view>
         <view class="profile-summary__content">
           <text class="profile-summary__label">我的资料</text>
           <text class="profile-summary__name">{{ profile.nickname }}</text>
@@ -26,6 +33,7 @@
         <HomeSummaryCard
           :name="household.name"
           :avatar-src="household.avatar.kind === 'builtin' ? householdAvatarSource(household.avatar.id) : householdAvatarUrl"
+          :avatar-loading="householdAvatarLoading"
           :member-count="household.memberCount"
           @press="openHouseholdEditor"
         />
@@ -37,7 +45,8 @@
           v-for="member in household.members"
           :key="`${member.nickname}-${member.isSelf}`"
           :nickname="member.nickname"
-          :avatar-src="member.avatar.kind === 'builtin' ? profileAvatarSource(member.avatar.id) : memberAvatarUrls[member.avatar.resourceId] || profileAvatarSource('person-neutral')"
+          :avatar-src="member.avatar.kind === 'builtin' ? profileAvatarSource(member.avatar.id) : memberAvatarUrls[member.avatar.resourceId] || ''"
+          :avatar-loading="isMemberAvatarLoading(member)"
           :is-self="member.isSelf"
           :editable="member.isSelf"
           @press="openProfileEditor"
@@ -63,7 +72,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, shallowRef } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { storeToRefs } from 'pinia'
 import AppTabBar from '../../components/AppTabBar.vue'
@@ -71,26 +80,61 @@ import GlobalQuickAdd from '../../components/GlobalQuickAdd.vue'
 import HomeSummaryCard from '../../components/home/HomeSummaryCard.vue'
 import { getAvatarTemporaryUrl } from '../../services/avatar-media'
 import { useHouseholdStore } from '../../store/modules/household'
-import type { CustomAvatar } from '../../types/household'
+import type { CustomAvatar, HouseholdMemberDisplay } from '../../types/household'
 import { householdAvatarSource, profileAvatarSource } from '../index/home-view'
 import MemberProfileCard from '../index/components/MemberProfileCard.vue'
 
 const householdStore = useHouseholdStore()
 const { household, profile, phase } = storeToRefs(householdStore)
 const isLoading = computed(() => phase.value === 'checking')
-const householdAvatarUrl = ref('/static/avatars/households/household-01.png')
-const profileAvatarUrl = ref('/static/avatars/people/person-01.png')
-const memberAvatarUrls = ref<Record<string, string>>({})
+// 自定义头像地址异步返回：初始保持空值，不用内置头像冒充占位。
+const householdAvatarUrl = shallowRef('')
+const profileAvatarUrl = shallowRef('')
+const memberAvatarUrls = shallowRef<Record<string, string>>({})
+const householdAvatarLoading = shallowRef(false)
+const profileAvatarLoading = shallowRef(false)
+const memberAvatarLoading = shallowRef<Record<string, boolean>>({})
+
+/** 成员自定义头像按资源编号独立记录加载状态，内置头像不进入加载态。 */
+function isMemberAvatarLoading(member: HouseholdMemberDisplay): boolean {
+  return member.avatar.kind === 'custom' && Boolean(memberAvatarLoading.value[member.avatar.resourceId])
+}
 
 /** 我的页只读取已确认资料，头像地址在读取成功后按成员范围短暂获取。 */
 async function loadProfile(): Promise<void> {
   const result = await householdStore.loadCurrent()
   if (result?.status !== 'HOME') return
-  if (result.household.avatar.kind === 'custom') householdAvatarUrl.value = await getAvatarTemporaryUrl(result.household.avatar.resourceId).catch(() => householdAvatarUrl.value)
-  if (result.profile.avatar.kind === 'custom') profileAvatarUrl.value = await getAvatarTemporaryUrl(result.profile.avatar.resourceId).catch(() => profileAvatarUrl.value)
+
+  // 家庭资料先到、头像地址后到；同步建立占位状态，避免渲染出一帧默认头像。
+  householdAvatarUrl.value = ''
+  profileAvatarUrl.value = ''
+  memberAvatarUrls.value = {}
+  householdAvatarLoading.value = result.household.avatar.kind === 'custom'
+  profileAvatarLoading.value = result.profile.avatar.kind === 'custom'
   const customMembers = result.household.members.filter((member): member is typeof member & { avatar: CustomAvatar } => member.avatar.kind === 'custom')
-  const urls = await Promise.all(customMembers.map(async (member) => [member.avatar.resourceId, await getAvatarTemporaryUrl(member.avatar.resourceId).catch(() => '')] as const))
-  memberAvatarUrls.value = Object.fromEntries(urls.filter(([, url]) => Boolean(url)))
+  memberAvatarLoading.value = Object.fromEntries(customMembers.map((member) => [member.avatar.resourceId, true]))
+
+  const requests: Array<Promise<void>> = []
+  if (result.household.avatar.kind === 'custom') {
+    requests.push(getAvatarTemporaryUrl(result.household.avatar.resourceId)
+      .then((url) => { householdAvatarUrl.value = url })
+      .catch(() => { householdAvatarUrl.value = '' })
+      .finally(() => { householdAvatarLoading.value = false }))
+  }
+  if (result.profile.avatar.kind === 'custom') {
+    requests.push(getAvatarTemporaryUrl(result.profile.avatar.resourceId)
+      .then((url) => { profileAvatarUrl.value = url })
+      .catch(() => { profileAvatarUrl.value = '' })
+      .finally(() => { profileAvatarLoading.value = false }))
+  }
+  for (const member of customMembers) {
+    const resourceId = member.avatar.resourceId
+    requests.push(getAvatarTemporaryUrl(resourceId)
+      .then((url) => { memberAvatarUrls.value = { ...memberAvatarUrls.value, [resourceId]: url } })
+      .catch(() => { memberAvatarUrls.value = { ...memberAvatarUrls.value, [resourceId]: '' } })
+      .finally(() => { memberAvatarLoading.value = { ...memberAvatarLoading.value, [resourceId]: false } }))
+  }
+  await Promise.all(requests)
 }
 
 function openProfileEditor(): void { uni.navigateTo({ url: '/subpackages/household/edit-profile/index' }) }
@@ -159,6 +203,20 @@ onShow(() => { void loadProfile() })
   text-align: left;
   &::after {
     border: 0;
+  }
+  &__avatar {
+    width: 116rpx;
+    height: 116rpx;
+    flex-shrink: 0;
+  }
+  &__avatar-placeholder {
+    display: flex;
+    width: 116rpx;
+    height: 116rpx;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: #effbf5;
   }
   &__content {
     display: flex;

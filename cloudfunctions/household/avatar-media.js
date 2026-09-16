@@ -44,15 +44,37 @@ async function checkAvatar(input, deps) {
   const imageType = detectImageType(buffer)
   if (!imageType) throw new AvatarMediaError('INVALID_MEDIA')
   const verdict = await deps.checkImage(buffer, deps.openId, imageType.mime)
-  if (verdict !== 'approved') { await deps.repository.update(record._id, { state: 'rejected', reviewedAt: deps.now() }); return { status: 'REJECTED', retryable: false } }
+  if (verdict !== 'approved') {
+    await deps.repository.update(record._id, { state: 'rejected', reviewedAt: deps.now() })
+    // 不论通过还是拒绝，检查结束都要释放 slot，否则调试场景会占满 3 个 slot
+    // 直至 expiresAt 过期（24h）。avatarMedia 记录里的 slotId 是 reserveSlot 时写入的。
+    await deps.repository.cleanupSlot(record.slotId)
+    return { status: 'REJECTED', retryable: false }
+  }
   const contentDigest = digest(buffer)
   const formalPath = `avatar-private/${deps.ownerHash}/${crypto.randomBytes(24).toString('hex')}/${record._id}-${contentDigest}.${imageType.extension}`
   const uploaded = await deps.storage.upload(formalPath, buffer)
   const formalFileID = uploaded && uploaded.fileID
   if (typeof formalFileID !== 'string' || !formalFileID.startsWith('cloud://') || !formalFileID.endsWith(`/${formalPath}`)) throw new AvatarMediaError('TEMPORARY_FAILURE', true)
   await deps.repository.update(record._id, { state: 'approved', formalPath, formalFileID, digest: contentDigest, reviewedAt: deps.now(), stagingPath: null })
+  await deps.repository.cleanupSlot(record.slotId)
   await deps.storage.remove([record.stagingPath])
   return { status: 'APPROVED', retryable: false, resourceId: record._id, digest: contentDigest }
+}
+
+/**
+ * 释放当前身份下所有未过期的 avatar upload slot，并把残留 prepared 状态的
+ * avatarMedia 标记为 replaced（避免下次 prepareAvatar 复用过期引用）。
+ * 用途：调试过程中多次 prepareAvatar 把 3 个 slot 都占满且用户没走到 saveProfile，
+ * 导致 RESOURCE_LIMIT 持续 24h；用户主动调用本函数可立即恢复。
+ */
+async function releaseSlots(input, deps) {
+  // 删除当前身份的所有 avatarUploadSlots 记录；不区分过期与否，一次清干净。
+  await deps.repository.releaseAllSlots(deps.identityKey)
+  const pending = await deps.repository.findPendingForRelease(deps.identityKey)
+  const now = deps.now()
+  await Promise.all(pending.map((record) => deps.repository.update(record._id, { state: 'replaced', replacedAt: now, expiresAt: now, stagingPath: null })))
+  return { status: 'RELEASED', retryable: false, releasedSlots: 3, releasedPending: pending.length }
 }
 
 async function validateAvatarReference(avatar, purpose, identityKey, repository) {
@@ -84,4 +106,4 @@ async function getAvatarUrl(input, deps) {
   return { status: 'URL_READY', retryable: false, url: item.tempFileURL }
 }
 
-module.exports = { prepareAvatar, checkAvatar, validateAvatarReference, getAvatarUrl, AvatarMediaError, MAX_BYTES, detectImageType }
+module.exports = { prepareAvatar, checkAvatar, validateAvatarReference, getAvatarUrl, releaseSlots, AvatarMediaError, MAX_BYTES, detectImageType }

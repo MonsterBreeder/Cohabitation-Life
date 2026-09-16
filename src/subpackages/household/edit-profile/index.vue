@@ -99,12 +99,13 @@ function goToCropAvatar(): void {
   // 解除上一次可能残留的监听，避免用户在 Picker 上多次点击上传时叠加回调。
   channelOff?.()
   channelOff = undefined
+  // 必须传 events 才能让 success.result.eventChannel 是一个有效的 EventChannel 实例。
+  // 不传 events 时 result.eventChannel 在不同平台可能为 undefined，handler 永远注册不到；
+  // crop-avatar 端 getOpenerEventChannel() 同样拿不到有效 channel，emit 触发不到，最终头像修改失败。
   uni.navigateTo({
     url: '/subpackages/household/crop-avatar/index?purpose=profile',
+    events: { avatarApproved: () => undefined },
     success: (result) => {
-      // 必须通过 navigateTo 的 success 回调拿 result.eventChannel；
-      // 在当前页调用 getOpenerEventChannel() 拿到的是"打开本页面"的父页 channel（profile），
-      // 那个 channel 跟 crop-avatar 端的 emit 不互通，这是之前头像不显示的根本原因。
       const handler = handleAvatarApproved
       result.eventChannel.on('avatarApproved', handler)
       channelOff = () => { try { result.eventChannel.off?.('avatarApproved', handler) } catch { /* 旧版 eventChannel 可能没有 off，忽略 */ } }
