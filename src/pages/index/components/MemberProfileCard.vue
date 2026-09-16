@@ -1,7 +1,13 @@
 <template>
   <!-- 当前阶段只展示本人，不提前暴露邀请或其他成员操作。 -->
   <button class="member-card" data-testid="member-profile" :disabled="!editable" @click="editable && emit('press')">
-    <wd-avatar :src="avatarSrc" :alt="`${nickname}的头像`" size="104rpx" />
+    <view class="member-card__avatar">
+      <view v-if="avatarLoading" class="member-card__avatar-placeholder" aria-label="成员头像加载中">
+        <wd-loading color="#43C89A" size="30rpx" />
+      </view>
+      <wd-avatar v-else-if="avatarSrc" :src="avatarSrc" :alt="`${nickname}的头像`" size="104rpx" />
+      <wd-avatar v-else icon="user" bg-color="#effbf5" color="#267A5A" size="104rpx" />
+    </view>
     <view class="member-card__content">
       <text class="member-card__label">{{ isSelf ? '我' : '成员' }}</text>
       <text class="member-card__name">{{ nickname }}</text>
@@ -14,11 +20,13 @@
 interface Props {
   nickname: string
   avatarSrc: string
+  /** 自定义头像的短期地址尚未返回时显示固定尺寸占位，避免默认头像闪烁。 */
+  avatarLoading?: boolean
   isSelf: boolean
   editable?: boolean
 }
 
-withDefaults(defineProps<Props>(), { editable: false })
+withDefaults(defineProps<Props>(), { avatarLoading: false, editable: false })
 const emit = defineEmits<{ press: [] }>()
 </script>
 
@@ -35,6 +43,20 @@ const emit = defineEmits<{ press: [] }>()
   line-height: 1;
   &::after {
     border: 0;
+  }
+  &__avatar {
+    width: 104rpx;
+    height: 104rpx;
+    flex-shrink: 0;
+  }
+  &__avatar-placeholder {
+    display: flex;
+    width: 104rpx;
+    height: 104rpx;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: #effbf5;
   }
   &__content {
     display: flex;

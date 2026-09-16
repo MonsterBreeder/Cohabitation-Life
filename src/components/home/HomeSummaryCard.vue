@@ -8,15 +8,16 @@
 <template>
   <button class="household-card" data-testid="household-profile" @click="emit('press')">
     <view class="household-card__avatar">
+      <view v-if="avatarLoading" class="household-card__avatar-placeholder" aria-label="家庭头像加载中">
+        <wd-loading color="#43C89A" size="36rpx" />
+      </view>
       <wd-avatar
-        v-if="!avatarLoading"
+        v-else-if="avatarSrc"
         :src="avatarSrc"
         :alt="`${name}的家庭头像`"
         size="144rpx"
       />
-      <view v-else class="household-card__avatar-placeholder" aria-label="家庭头像加载中">
-        <wd-loading color="#43C89A" size="36rpx" />
-      </view>
+      <wd-avatar v-else icon="home" bg-color="#effbf5" color="#267A5A" size="144rpx" />
     </view>
     <view class="household-card__content">
       <text class="household-card__eyebrow">我的家庭</text>

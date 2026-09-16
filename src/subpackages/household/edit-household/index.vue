@@ -68,8 +68,12 @@ async function save(): Promise<void> {
 }
 function selectBuiltinAvatar(value: BuiltinHouseholdAvatarId): void { avatarId.value = value; customAvatar.value = undefined; customPreview.value = '' }
 function selectCustomAvatar(): void {
+  // 必须传 events 才能让 success.result.eventChannel 是一个有效的 EventChannel 实例；
+  // 不传 events 时 result.eventChannel 在不同平台可能为 undefined，handler 永远注册不到，
+  // crop-avatar 端 getOpenerEventChannel() 也拿不到有效 channel，emit 触发不到。
   uni.navigateTo({
     url: '/subpackages/household/crop-avatar/index?purpose=household',
+    events: { avatarApproved: () => undefined },
     success: (result) => {
       result.eventChannel.on('avatarApproved', ({ avatar, previewPath }: { avatar: HouseholdAvatar; previewPath: string }) => {
         if (avatar.kind !== 'custom') return

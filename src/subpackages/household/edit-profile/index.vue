@@ -25,7 +25,9 @@
 // 编辑个人资料页。
 // 设计要点：
 // 1) 头像用单一 draftAvatar 表达（覆盖 builtin / custom 两态），Picker 通过 v-model 与之绑定；
-// 2) 点击 Picker 第 5 格 → 跳 crop-avatar 子分包，通过 eventChannel 监听 avatarApproved 事件；
+// 2) 点击 Picker 第 5 格 → 跳 crop-avatar 子分包，通过 navigateTo.success 回调拿到当前次跳转的
+//    eventChannel，并在其上监听 avatarApproved 事件；注意：当前页调用 getOpenerEventChannel()
+//    会返回"打开本页面"的父页 channel，跟 crop-avatar 端的 emit 不互通；
 // 3) 进入页面时若 profile 已是 custom，主动拉一次临时 URL 让 Picker 缩略图显示；拉取失败时回退到 "+" 占位但不重置草稿；
 // 4) 草稿不入 store，未保存就退出页面等价于放弃；onUnload 解绑 eventChannel 防止 stale 回调。
 import { computed, ref } from 'vue'
@@ -84,27 +86,32 @@ async function load(): Promise<void> {
 
 function markCustomNickname(): void { nicknameValidation.value = '' }
 
-function registerEventChannel(): void {
-  // 仅注册一次；onShow 多次触发时不能重复挂监听，否则会有多个 stale 回调。
-  if (channelOff) return
-  const pages = getCurrentPages()
-  const page = pages.at(-1) as (Record<string, unknown> & { getOpenerEventChannel?: () => { on: (event: string, fn: (data: { avatar: { resourceId: string; digest: string }; previewPath: string }) => void) => void; off?: (event: string) => void } | undefined }) | undefined
-  const channel = page?.getOpenerEventChannel?.()
-  if (!channel) return
-  const handler = (data: { avatar: { resourceId: string; digest: string }; previewPath: string }) => {
-    if (!data || !data.avatar || !data.avatar.resourceId || !data.avatar.digest) return
-    draftAvatar.value = { kind: 'custom', resourceId: data.avatar.resourceId, digest: data.avatar.digest }
-    customPreview.value = data.previewPath || ''
-    nicknameValidation.value = ''
-    uni.showToast({ title: '已选择新头像', icon: 'success' })
-  }
-  channel.on('avatarApproved', handler)
-  channelOff = () => { try { channel.off?.('avatarApproved') } catch { /* 旧版 eventChannel 可能没有 off，忽略 */ } }
+function handleAvatarApproved(data: { avatar: { resourceId: string; digest: string }; previewPath: string }): void {
+  // 校验 payload 完整性：resourceId / digest 缺失时忽略，避免草稿被错误清空。
+  if (!data || !data.avatar || !data.avatar.resourceId || !data.avatar.digest) return
+  draftAvatar.value = { kind: 'custom', resourceId: data.avatar.resourceId, digest: data.avatar.digest }
+  customPreview.value = data.previewPath || ''
+  nicknameValidation.value = ''
+  uni.showToast({ title: '已选择新头像', icon: 'success' })
 }
 
 function goToCropAvatar(): void {
-  registerEventChannel()
-  uni.navigateTo({ url: '/subpackages/household/crop-avatar/index?purpose=profile' })
+  // 解除上一次可能残留的监听，避免用户在 Picker 上多次点击上传时叠加回调。
+  channelOff?.()
+  channelOff = undefined
+  // 必须传 events 才能让 success.result.eventChannel 是一个有效的 EventChannel 实例。
+  // 不传 events 时 result.eventChannel 在不同平台可能为 undefined，handler 永远注册不到；
+  // crop-avatar 端 getOpenerEventChannel() 同样拿不到有效 channel，emit 触发不到，最终头像修改失败。
+  uni.navigateTo({
+    url: '/subpackages/household/crop-avatar/index?purpose=profile',
+    events: { avatarApproved: () => undefined },
+    success: (result) => {
+      const handler = handleAvatarApproved
+      result.eventChannel.on('avatarApproved', handler)
+      channelOff = () => { try { result.eventChannel.off?.('avatarApproved', handler) } catch { /* 旧版 eventChannel 可能没有 off，忽略 */ } }
+    },
+    fail: () => { uni.showToast({ title: '暂时无法打开图片选择，请稍后再试', icon: 'none' }) },
+  })
 }
 
 async function save(): Promise<void> {
