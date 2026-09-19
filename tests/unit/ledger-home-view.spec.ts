@@ -4,6 +4,8 @@ import {
   describeDeletedEntryHint,
   describeEntryAmount,
   describeEntryMonth,
+  describeEntryCategoryName,
+  describeMealPeriodLabel,
   describeHomeActions,
   describeMonthLabel,
   describePayerFilterOptions,
@@ -41,6 +43,7 @@ function makeEntry(overrides: any = {}): LedgerEntrySummary {
     type: 'expense',
     amountCents: 5000,
     categoryId: 'cat_xxxxxxxxxxxxx_1',
+    mealPeriod: null,
     note: '买菜',
     occurredAt: '2026-08-17T10:00:00.000Z',
     receiptMediaId: null,
@@ -56,11 +59,34 @@ describe('describeCategory', () => {
     const view = describeCategory(cat)
     expect(view.colorHex).toBe(LEDGER_CATEGORY_COLOR_MAP.amber)
     expect(view.iconName).toBe(LEDGER_CATEGORY_ICON_MAP['fork-spoon'])
+    expect(view.key).toBe('dining')
   })
 
   it('falls back to gray / tag for unknown keys', () => {
     const view = describeCategory(makeCategory({ colorKey: 'amber', iconKey: 'tag' }))
     expect(view.colorHex).toBe(LEDGER_CATEGORY_COLOR_MAP.amber)
+  })
+})
+
+describe('餐次展示', () => {
+  it('餐饮账目在列表中追加餐次，历史空值保持原类目名', () => {
+    const category = describeCategory(makeCategory())
+    expect(describeEntryCategoryName(makeEntry({ mealPeriod: 'breakfast' }), category)).toBe('餐饮 · 早餐')
+    expect(describeEntryCategoryName(makeEntry({ mealPeriod: null }), category)).toBe('餐饮')
+  })
+
+  it('非餐饮与同名自定义类目不追加餐次', () => {
+    const transport = describeCategory(makeCategory({ key: 'transport', name: '交通' }))
+    const customDining = describeCategory(
+      makeCategory({ key: 'custom-dining', name: '餐饮', isCustom: true }),
+    )
+    expect(describeEntryCategoryName(makeEntry({ mealPeriod: 'dinner' }), transport)).toBe('交通')
+    expect(describeEntryCategoryName(makeEntry({ mealPeriod: 'dinner' }), customDining)).toBe('餐饮')
+  })
+
+  it('未知或空餐次不展示', () => {
+    expect(describeMealPeriodLabel(null)).toBe('')
+    expect(describeMealPeriodLabel('unknown' as any)).toBe('')
   })
 })
 

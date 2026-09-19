@@ -3,6 +3,8 @@
 // 这里不实现真正的 db 读写（云端运行时由 ledger/index.js 注入），
 // 只做：(1) 字段过滤（deletedAt IS NULL 软删过滤）；(2) 字段白名单收敛。
 
+const ALLOWED_MEAL_PERIODS = new Set(['breakfast', 'lunch', 'dinner'])
+
 function withoutDocumentId(record) {
   const { _id, ...rest } = record
   return rest
@@ -22,6 +24,8 @@ function normaliseEntry(record) {
     type: record.type,
     amountCents: typeof record.amountCents === 'number' ? record.amountCents : 0,
     categoryId: record.categoryId,
+    // 历史记录没有餐次字段；响应层统一补 null，避免前端出现 undefined 分支。
+    mealPeriod: ALLOWED_MEAL_PERIODS.has(record.mealPeriod) ? record.mealPeriod : null,
     note: typeof record.note === 'string' ? record.note : '',
     occurredAt: record.occurredAt,
     receiptMediaId: record.receiptMediaId || null,

@@ -9,6 +9,8 @@ import {
   describeSaveButton,
   describeTypeTabs,
   draftFromEntry,
+  inferMealPeriod,
+  resolveMealPeriodAfterCategoryChange,
   hasErrors,
   validateCategoryDraft,
   validateDraft,
@@ -20,6 +22,7 @@ describe('defaultAddDraft', () => {
     expect(draft.type).toBe('expense')
     expect(draft.amountCents).toBe(0)
     expect(draft.categoryId).toBeNull()
+    expect(draft.mealPeriod).toBeNull()
     expect(draft.note).toBe('')
     expect(draft.occurredAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
   })
@@ -37,6 +40,7 @@ describe('draftFromEntry', () => {
       type: 'expense',
       amountCents: 12345,
       categoryId: 'cat_xxxxxxxxxxxxx_1',
+      mealPeriod: 'dinner',
       payer: { memberKey: 'user_self' },
       note: '买菜',
       occurredAt: '2026-08-17T10:00:00.000Z',
@@ -45,6 +49,34 @@ describe('draftFromEntry', () => {
     expect(draft.amountCents).toBe(12345)
     expect(draft.payerMemberKey).toBe('user_self')
     expect(draft.note).toBe('买菜')
+    expect(draft.mealPeriod).toBe('dinner')
+  })
+})
+
+describe('餐次默认与类目切换', () => {
+  // 边界必须按本机小时稳定切分，避免 10:59/11:00 这类时刻落错餐次。
+  it.each([
+    [10, 59, 'breakfast'],
+    [11, 0, 'lunch'],
+    [15, 59, 'lunch'],
+    [16, 0, 'dinner'],
+    [23, 59, 'dinner'],
+    [0, 0, 'breakfast'],
+  ])('%i:%i 推断为 %s', (hour, minute, expected) => {
+    expect(inferMealPeriod(new Date(2026, 8, 19, hour, minute))).toBe(expected)
+  })
+
+  it('进入系统餐饮时自动选择，保留用户已手动选择的值', () => {
+    const dining = { key: 'dining', isCustom: false }
+    expect(resolveMealPeriodAfterCategoryChange(dining, null, new Date(2026, 8, 19, 12))).toBe('lunch')
+    expect(resolveMealPeriodAfterCategoryChange(dining, 'breakfast', new Date(2026, 8, 19, 12))).toBe(
+      'breakfast',
+    )
+  })
+
+  it('切到非餐饮或同名自定义类目时清空', () => {
+    expect(resolveMealPeriodAfterCategoryChange({ key: 'transport', isCustom: false }, 'dinner')).toBeNull()
+    expect(resolveMealPeriodAfterCategoryChange({ key: 'dining', isCustom: true }, 'dinner')).toBeNull()
   })
 })
 
@@ -56,10 +88,12 @@ describe('validateDraft', () => {
   })
 
   it('passes for valid draft', () => {
-    const errors = validateDraft(defaultAddDraft({
-      amountCents: 5000,
-      categoryId: 'cat_xxxxxxxxxxxxx_1',
-    }))
+    const errors = validateDraft(
+      defaultAddDraft({
+        amountCents: 5000,
+        categoryId: 'cat_xxxxxxxxxxxxx_1',
+      }),
+    )
     expect(errors.amount).toBeUndefined()
     expect(errors.category).toBeUndefined()
   })
@@ -77,12 +111,20 @@ describe('validateDraft', () => {
 
   it('rejects future time', () => {
     const future = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString()
-    const errors = validateDraft(defaultAddDraft({ amountCents: 100, categoryId: 'cat_xxxxxxxxxxxxx_1', occurredAt: future }))
+    const errors = validateDraft(
+      defaultAddDraft({ amountCents: 100, categoryId: 'cat_xxxxxxxxxxxxx_1', occurredAt: future }),
+    )
     expect(errors.time).toBeDefined()
   })
 
   it('rejects too-old time', () => {
-    const errors = validateDraft(defaultAddDraft({ amountCents: 100, categoryId: 'cat_xxxxxxxxxxxxx_1', occurredAt: '2010-01-01T00:00:00.000Z' }))
+    const errors = validateDraft(
+      defaultAddDraft({
+        amountCents: 100,
+        categoryId: 'cat_xxxxxxxxxxxxx_1',
+        occurredAt: '2010-01-01T00:00:00.000Z',
+      }),
+    )
     expect(errors.time).toBeDefined()
   })
 })

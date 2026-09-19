@@ -30,7 +30,10 @@
           v-for="tab in typeTabs"
           :key="tab.value"
           class="ledger-add-page__tab"
-          :class="{ 'ledger-add-page__tab--active': draft.type === tab.value, [`ledger-add-page__tab--${tab.value}`]: true }"
+          :class="{
+            'ledger-add-page__tab--active': draft.type === tab.value,
+            [`ledger-add-page__tab--${tab.value}`]: true,
+          }"
           :data-testid="`ledger-add-tab-${tab.value}`"
           @click="onTypeChange(tab.value)"
         >
@@ -49,7 +52,11 @@
         />
         <!-- 空表单错误延后到首次保存时显示，避免页面刚打开就出现红字；
              用户已经输入但格式不合法时立即说明原因，不能只让保存按钮变灰。 -->
-        <text v-if="(submitAttempted || amountInputError) && errors.amount" class="ledger-add-page__validation" data-testid="ledger-add-amount-error">
+        <text
+          v-if="(submitAttempted || amountInputError) && errors.amount"
+          class="ledger-add-page__validation"
+          data-testid="ledger-add-amount-error"
+        >
           {{ errors.amount }}
         </text>
       </view>
@@ -60,13 +67,24 @@
         <CategoryPicker
           v-if="visibleCategories.length > 0"
           :categories="visibleCategories"
-          v-model="draft.categoryId"
+          :model-value="draft.categoryId"
+          @update:model-value="onCategoryChange"
           @add="onShowAddCategory"
         />
         <text v-else class="ledger-add-page__empty-tip">还没有类目，请到「类目管理」添加</text>
-        <text v-if="errors.category" class="ledger-add-page__validation" data-testid="ledger-add-category-error">
+        <text
+          v-if="errors.category"
+          class="ledger-add-page__validation"
+          data-testid="ledger-add-category-error"
+        >
           {{ errors.category }}
         </text>
+      </view>
+
+      <!-- 餐次只在系统预设餐饮类目出现；历史空值编辑时保持未选，不擅自补写。 -->
+      <view v-if="isDiningCategory" class="ledger-add-page__field">
+        <text class="ledger-add-page__label">餐次</text>
+        <MealPeriodPicker v-model="draft.mealPeriod" :disabled="isBusy" />
       </view>
 
       <!-- 付款人（双成员家庭才显示） -->
@@ -143,7 +161,9 @@
           :disabled="!saveState.enabled"
           data-testid="ledger-add-save"
           @click="onSave"
-        >{{ saveState.label }}</wd-button>
+        >
+          {{ saveState.label }}
+        </wd-button>
       </view>
     </view>
 
@@ -154,7 +174,11 @@
          - 遮罩：去掉 @click.self 关闭（uni-app 在 .view 上不可靠，用户的反馈"随意一点就关"），
                  改用弹窗右上角显式 X 按钮 + "取消" 按钮两种关闭方式
     -->
-    <view v-if="showCategoryDialog" class="ledger-add-page__dialog-mask" data-testid="ledger-add-category-dialog">
+    <view
+      v-if="showCategoryDialog"
+      class="ledger-add-page__dialog-mask"
+      data-testid="ledger-add-category-dialog"
+    >
       <view class="ledger-add-page__dialog">
         <view class="ledger-add-page__dialog-header">
           <text class="ledger-add-page__dialog-title">添加类目</text>
@@ -168,7 +192,12 @@
         </view>
         <view class="ledger-add-page__dialog-field">
           <text class="ledger-add-page__label">类目名（2-8 字）</text>
-          <wd-input v-model="categoryDraft.name" placeholder="比如：宠物" data-testid="ledger-add-category-name" :maxlength="8" />
+          <wd-input
+            v-model="categoryDraft.name"
+            placeholder="比如：宠物"
+            data-testid="ledger-add-category-name"
+            :maxlength="8"
+          />
         </view>
         <view class="ledger-add-page__dialog-field">
           <text class="ledger-add-page__label">选择图标和颜色</text>
@@ -189,12 +218,25 @@
             </view>
           </view>
         </view>
-        <text v-if="categoryDialogError" class="ledger-add-page__validation" data-testid="ledger-add-cat-error">
+        <text
+          v-if="categoryDialogError"
+          class="ledger-add-page__validation"
+          data-testid="ledger-add-cat-error"
+        >
           {{ categoryDialogError }}
         </text>
         <view class="ledger-add-page__dialog-actions">
           <wd-button size="small" plain @click="showCategoryDialog = false">取消</wd-button>
-          <wd-button size="small" type="primary" :loading="isAddingCategory" :disabled="isAddingCategory" data-testid="ledger-add-cat-confirm" @click="onConfirmAddCategory">添加</wd-button>
+          <wd-button
+            size="small"
+            type="primary"
+            :loading="isAddingCategory"
+            :disabled="isAddingCategory"
+            data-testid="ledger-add-cat-confirm"
+            @click="onConfirmAddCategory"
+          >
+            添加
+          </wd-button>
         </view>
       </view>
     </view>
@@ -207,6 +249,7 @@ import { storeToRefs } from 'pinia'
 import { onLoad } from '@dcloudio/uni-app'
 import AmountInput from './components/AmountInput.vue'
 import CategoryPicker from './components/CategoryPicker.vue'
+import MealPeriodPicker from './components/MealPeriodPicker.vue'
 import ReceiptUploader from './components/ReceiptUploader.vue'
 import { useHouseholdStore } from '../../../store/modules/household'
 import { useLedgerStore } from '../../../store/modules/ledger'
@@ -225,6 +268,7 @@ import {
   describeTypeTabs,
   draftFromEntry,
   hasErrors,
+  resolveMealPeriodAfterCategoryChange,
   validateCategoryDraft,
   validateDraft,
   type AddEntryDraft,
@@ -242,7 +286,6 @@ const { categories } = storeToRefs(ledgerStore)
 const householdId = computed(() => household.value?.id || '')
 
 const isReady = ref(false)
-const isBusy = ref(false)
 const isSaving = ref(false)
 // 错误信息延后显示：用户首次尝试保存时才浮现"金额/类目"等验证文案，
 // 避免页面一打开就一片红字，干扰录入节奏。
@@ -250,6 +293,8 @@ const submitAttempted = ref(false)
 // 输入组件会保留用户正在输入的原文；若原文不合法，单独记录原因，避免误保存上一次合法金额。
 const amountInputError = ref('')
 const isAddingCategory = ref(false)
+// 保存流程包含凭证上传和云端写入；期间统一禁用表单，避免界面值与已提交值不同。
+const isBusy = computed(() => isSaving.value || isAddingCategory.value)
 
 const draft = reactive<AddEntryDraft>(defaultAddDraft())
 const showCategoryDialog = ref(false)
@@ -264,13 +309,19 @@ const colorOptions = CATEGORY_COLOR_OPTIONS
 const categoryPresets = CATEGORY_PRESETS
 
 const visibleCategories = computed(() => ledgerStore.visibleCategories.map((c) => describeCategory(c)))
+const selectedCategory = computed(() => categories.value.find((category) => category.id === draft.categoryId))
+const isDiningCategory = computed(
+  () => selectedCategory.value?.key === 'dining' && !selectedCategory.value.isCustom,
+)
 
 // 'self' / 'other' 是字面量占位符（与 defaultAddDraft 的 payerMemberKey 默认值一致）。
 // addEntry 调云端时云端会映射到真实 memberKey（self → 当前 identityKey；other → 另一位）。
 const selfMemberKey = computed(() => 'self')
 const otherMemberKey = computed(() => 'other')
 const memberCount = computed(() => household.value?.memberCount || 1)
-const payerOptions = computed(() => describePayerOptions(selfMemberKey.value, otherMemberKey.value, memberCount.value))
+const payerOptions = computed(() =>
+  describePayerOptions(selfMemberKey.value, otherMemberKey.value, memberCount.value),
+)
 
 const dateValue = computed(() => formatDateYMD(draft.occurredAt || new Date().toISOString()))
 const maxDate = computed(() => {
@@ -319,13 +370,16 @@ async function loadForEdit(entryId: string): Promise<void> {
       // 单成员家庭只有 'self' 选项（payerOptions 不会渲染 '对方' chip），落到 'other' 会无效。
       const loadedPayerKey: 'self' | 'other' = loaded.isCurrentUserPayer
         ? 'self'
-        : (memberCount.value >= 2 ? 'other' : 'self')
+        : memberCount.value >= 2
+          ? 'other'
+          : 'self'
       // 注意：直接覆盖 draft.payerMemberKey，而不是用 draftFromEntry 的 memberKey 默认逻辑，
       // 那样会写入真实 memberKey（user_xxx），导致 chip 永远不亮。
       const fallbackDraft = draftFromEntry({
         type: loaded.type,
         amountCents: loaded.amountCents,
         categoryId: loaded.categoryId,
+        mealPeriod: loaded.mealPeriod,
         payer: loaded.payer,
         note: loaded.note,
         occurredAt: loaded.occurredAt,
@@ -344,6 +398,15 @@ async function loadForEdit(entryId: string): Promise<void> {
 
 function onTypeChange(type: LedgerEntryType): void {
   draft.type = type
+}
+
+/** 只响应用户主动切换类目；加载编辑数据不会触发，避免给历史账目自动补餐次。 */
+function onCategoryChange(categoryId: string | null): void {
+  // 保存/上传期间忽略类目点击，避免间接清空或重新推断正在提交的餐次。
+  if (isBusy.value) return
+  draft.categoryId = categoryId
+  const category = categories.value.find((item) => item.id === categoryId)
+  draft.mealPeriod = resolveMealPeriodAfterCategoryChange(category, draft.mealPeriod)
 }
 
 function onAmountError(message: string): void {
@@ -397,7 +460,7 @@ async function onConfirmAddCategory(): Promise<void> {
   })
   isAddingCategory.value = false
   if (result) {
-    draft.categoryId = result.id
+    onCategoryChange(result.id)
     showCategoryDialog.value = false
   } else {
     categoryDialogError.value = ledgerStore.errorMessage || '添加类目失败'
@@ -424,9 +487,11 @@ async function onSave(): Promise<void> {
     if (isEditMode.value && editingEntryId.value) {
       const result = await ledgerStore.updateEntry({
         entryId: editingEntryId.value,
-        operationToken: editingOperationToken.value || `op_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        operationToken:
+          editingOperationToken.value || `op_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         amountCents: draft.amountCents,
         categoryId: draft.categoryId as string,
+        mealPeriod: draft.mealPeriod,
         // 把 'self' / 'other' 字面量透传给云端做映射；如果用户没动过付款人 chip，
         // loadForEntry 写入的就是 'self' / 'other'，与 addEntry 走同一条映射逻辑，
         // 不会再出现"编辑时 payer 不生效"的问题。
@@ -447,6 +512,7 @@ async function onSave(): Promise<void> {
         type: draft.type,
         amountCents: draft.amountCents,
         categoryId: draft.categoryId as string,
+        mealPeriod: draft.mealPeriod,
         payerMemberKey: draft.payerMemberKey,
         note: draft.note,
         occurredAt: draft.occurredAt,
@@ -514,17 +580,17 @@ watch(
     color: $brand-color-text-secondary;
     font-size: 28rpx;
     font-weight: 600;
-    transition: all .15s ease;
+    transition: all 0.15s ease;
   }
   &__tab--active {
     &.ledger-add-page__tab--expense {
       background: $brand-color-accent;
-      color: #FFFFFF;
+      color: #ffffff;
     }
 
     &.ledger-add-page__tab--income {
       background: $brand-color-primary;
-      color: #FFFFFF;
+      color: #ffffff;
     }
   }
   &__amount-block {
@@ -608,7 +674,7 @@ watch(
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, .45);
+    background: rgba(0, 0, 0, 0.45);
   }
   &__dialog {
     width: 86vw;
@@ -637,9 +703,9 @@ watch(
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    transition: background .15s ease;
+    transition: background 0.15s ease;
     &:active {
-      background: rgba($brand-color-border, .4);
+      background: rgba($brand-color-border, 0.4);
     }
   }
   &__dialog-close-icon {
@@ -668,16 +734,19 @@ watch(
     justify-content: center;
     border-radius: 20rpx;
     border: 4rpx solid transparent;
-    box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, .06);
-    transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+    box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.06);
+    transition:
+      transform 0.15s ease,
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
   }
   &__preset--active {
     border-color: $brand-color-text;
-    box-shadow: 0 2rpx 12rpx rgba(41, 68, 58, .2);
+    box-shadow: 0 2rpx 12rpx rgba(41, 68, 58, 0.2);
     transform: scale(1.04);
   }
   &__preset-char {
-    color: #FFFFFF;
+    color: #ffffff;
     font-size: 32rpx;
     font-weight: 700;
     line-height: 1;

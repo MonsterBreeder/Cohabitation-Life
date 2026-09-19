@@ -50,7 +50,9 @@ function makeCategory(overrides: any = {}): any {
 
 function makeRuntime(result: unknown, delay = 0): any {
   let resolveCall: ((v: unknown) => void) | undefined
-  const callPromise = new Promise<unknown>((resolve) => { resolveCall = resolve })
+  const callPromise = new Promise<unknown>((resolve) => {
+    resolveCall = resolve
+  })
   return {
     call: callPromise,
     runtime: {
@@ -82,6 +84,12 @@ describe('ledger-cloud validators', () => {
 
   it('isLedgerEntry rejects missing payer', () => {
     expect(isLedgerEntry(makeEntry({ payer: undefined }))).toBe(false)
+  })
+
+  // 兼容分阶段发布：旧云端缺字段可接收，未知餐次仍必须拒绝。
+  it('accepts a missing meal period but rejects an unknown value', () => {
+    expect(isLedgerEntry(makeEntry())).toBe(true)
+    expect(isLedgerEntry(makeEntry({ mealPeriod: 'midnight-snack' }))).toBe(false)
   })
 
   it('isLedgerCategory accepts well-formed category', () => {
@@ -126,7 +134,11 @@ describe('addLedgerEntryInCloud', () => {
   })
 
   it('passes through failure result', async () => {
-    const { runtime } = makeRuntime({ status: 'LEDGER_AMOUNT_INVALID', retryable: false, errorMessage: '金额格式不正确' })
+    const { runtime } = makeRuntime({
+      status: 'LEDGER_AMOUNT_INVALID',
+      retryable: false,
+      errorMessage: '金额格式不正确',
+    })
     setLedgerCloudRuntimeForTesting(runtime)
     const result = await addLedgerEntryInCloud({
       requestId: 'req_xxxxxxxxxxxxx_1',
@@ -145,23 +157,28 @@ describe('addLedgerEntryInCloud', () => {
   it('throws LedgerCloudError on invalid response', async () => {
     const { runtime } = makeRuntime({ status: 'ADDED', entry: { invalid: 'entry' } })
     setLedgerCloudRuntimeForTesting(runtime)
-    await expect(addLedgerEntryInCloud({
-      requestId: 'req_xxxxxxxxxxxxx_1',
-      operationToken: 'op_xxxxxxxxxxxxx_1',
-      type: 'expense',
-      amountCents: 5000,
-      categoryId: 'cat_xxxxxxxxxxxxx_1',
-      payerMemberKey: 'user_self',
-      note: '',
-      occurredAt: '2026-08-17T10:00:00.000Z',
-      receiptMediaId: null,
-    })).rejects.toThrow(LedgerCloudError)
+    await expect(
+      addLedgerEntryInCloud({
+        requestId: 'req_xxxxxxxxxxxxx_1',
+        operationToken: 'op_xxxxxxxxxxxxx_1',
+        type: 'expense',
+        amountCents: 5000,
+        categoryId: 'cat_xxxxxxxxxxxxx_1',
+        payerMemberKey: 'user_self',
+        note: '',
+        occurredAt: '2026-08-17T10:00:00.000Z',
+        receiptMediaId: null,
+      }),
+    ).rejects.toThrow(LedgerCloudError)
   })
 })
 
 describe('listLedgerEntriesInCloud', () => {
   it('returns LISTED with filtered entries', async () => {
-    const entry = makeEntry({ receiptMediaId: 'cloud://receipt', receiptUrl: 'https://temp.example/receipt.jpg' })
+    const entry = makeEntry({
+      receiptMediaId: 'cloud://receipt',
+      receiptUrl: 'https://temp.example/receipt.jpg',
+    })
     const { runtime } = makeRuntime({ status: 'LISTED', entries: [entry], deletedEntries: [], hasMore: true })
     setLedgerCloudRuntimeForTesting(runtime)
     const result = await listLedgerEntriesInCloud({ month: 'all', payerMode: 'all', categoryIds: [] })
@@ -170,22 +187,60 @@ describe('listLedgerEntriesInCloud', () => {
     expect(result.deletedEntries).toHaveLength(0)
     expect(result.entries[0].receiptUrl).toBe('https://temp.example/receipt.jpg')
     expect(result.hasMore).toBe(true)
+    expect(result.entries[0].mealPeriod).toBeNull()
   })
 })
 
 describe('deleteLedgerEntryInCloud', () => {
   it('returns DELETED on success', async () => {
-    const { runtime } = makeRuntime({ status: 'DELETED', entryId: 'ledger_xxxxxxxxxxxxx_1', deletedAt: '2026-08-17T10:00:00.000Z' })
+    const { runtime } = makeRuntime({
+      status: 'DELETED',
+      entryId: 'ledger_xxxxxxxxxxxxx_1',
+      deletedAt: '2026-08-17T10:00:00.000Z',
+    })
     setLedgerCloudRuntimeForTesting(runtime)
-    const result = await deleteLedgerEntryInCloud({ entryId: 'ledger_xxxxxxxxxxxxx_1', operationToken: 'op_xxxxxxxxxxxxx_1' })
+    const result = await deleteLedgerEntryInCloud({
+      entryId: 'ledger_xxxxxxxxxxxxx_1',
+      operationToken: 'op_xxxxxxxxxxxxx_1',
+    })
     expect(result.status).toBe('DELETED')
   })
 })
 
 describe('initLedgerCategoriesInCloud', () => {
   it('returns INITED with 8 categories', async () => {
-    const cats = ['dining', 'transport', 'home', 'entertain', 'medical', 'clothing', 'education', 'other'].map((key) =>
-      makeCategory({ id: `cat_xxxxxxxx_${key}`, key, name: key, iconKey: key === 'dining' ? 'fork-spoon' : (key === 'transport' ? 'car' : (key === 'home' ? 'house' : (key === 'entertain' ? 'gamepad' : (key === 'medical' ? 'first-aid' : (key === 'clothing' ? 'shopping-bag' : (key === 'education' ? 'book' : 'tag')))))), colorKey: 'amber' }),
+    const cats = [
+      'dining',
+      'transport',
+      'home',
+      'entertain',
+      'medical',
+      'clothing',
+      'education',
+      'other',
+    ].map((key) =>
+      makeCategory({
+        id: `cat_xxxxxxxx_${key}`,
+        key,
+        name: key,
+        iconKey:
+          key === 'dining'
+            ? 'fork-spoon'
+            : key === 'transport'
+              ? 'car'
+              : key === 'home'
+                ? 'house'
+                : key === 'entertain'
+                  ? 'gamepad'
+                  : key === 'medical'
+                    ? 'first-aid'
+                    : key === 'clothing'
+                      ? 'shopping-bag'
+                      : key === 'education'
+                        ? 'book'
+                        : 'tag',
+        colorKey: 'amber',
+      }),
     )
     const { runtime } = makeRuntime({ status: 'INITED', categories: cats })
     setLedgerCloudRuntimeForTesting(runtime)
@@ -200,7 +255,12 @@ describe('addLedgerCategoryInCloud', () => {
     const cat = makeCategory({ name: '宠物', iconKey: 'tag', colorKey: 'gray', isCustom: true })
     const { runtime } = makeRuntime({ status: 'ADDED', category: cat })
     setLedgerCloudRuntimeForTesting(runtime)
-    const result = await addLedgerCategoryInCloud({ requestId: 'req_xxxxxxxxxxxxx_1', name: '宠物', iconKey: 'tag', colorKey: 'gray' })
+    const result = await addLedgerCategoryInCloud({
+      requestId: 'req_xxxxxxxxxxxxx_1',
+      name: '宠物',
+      iconKey: 'tag',
+      colorKey: 'gray',
+    })
     expect(result.status).toBe('ADDED')
     expect(result.category.name).toBe('宠物')
   })
@@ -237,10 +297,18 @@ describe('getLedgerEntryInCloud', () => {
   // 回归测试：云端必须在 getEntry 响应里带 canEdit / canDelete（boolean）；
   // 字段类型错误时 service 层要拒绝（INVALID_RESPONSE），防止前端拿到脏数据。
   it('rejects when canEdit / canDelete are wrong type', async () => {
-    const detail = { ...makeEntry(), updatedAt: '2026-08-17T10:00:00.000Z', deletedAt: null, canEdit: 'yes', canDelete: 'yes' }
+    const detail = {
+      ...makeEntry(),
+      updatedAt: '2026-08-17T10:00:00.000Z',
+      deletedAt: null,
+      canEdit: 'yes',
+      canDelete: 'yes',
+    }
     const { runtime } = makeRuntime({ status: 'LOADED', detail })
     setLedgerCloudRuntimeForTesting(runtime)
-    await expect(getLedgerEntryInCloud({ entryId: 'ledger_xxxxxxxxxxxxx_1' })).rejects.toThrow(/getEntry 响应格式错误/)
+    await expect(getLedgerEntryInCloud({ entryId: 'ledger_xxxxxxxxxxxxx_1' })).rejects.toThrow(
+      /getEntry 响应格式错误/,
+    )
   })
 })
 
@@ -249,7 +317,10 @@ describe('restoreLedgerEntryInCloud / updateLedgerEntryInCloud / updateLedgerCat
     const entry = makeEntry()
     const { runtime } = makeRuntime({ status: 'RESTORED', entry })
     setLedgerCloudRuntimeForTesting(runtime)
-    const result = await restoreLedgerEntryInCloud({ entryId: 'ledger_xxxxxxxxxxxxx_1', operationToken: 'op_xxxxxxxxxxxxx_1' })
+    const result = await restoreLedgerEntryInCloud({
+      entryId: 'ledger_xxxxxxxxxxxxx_1',
+      operationToken: 'op_xxxxxxxxxxxxx_1',
+    })
     expect(result.status).toBe('RESTORED')
   })
 
@@ -273,7 +344,11 @@ describe('restoreLedgerEntryInCloud / updateLedgerEntryInCloud / updateLedgerCat
     const cat = makeCategory()
     const { runtime } = makeRuntime({ status: 'UPDATED', category: cat, hiddenByMe: true })
     setLedgerCloudRuntimeForTesting(runtime)
-    const result = await updateLedgerCategoryInCloud({ categoryId: 'cat_xxxxxxxxxxxxx_1', operationToken: 'op_xxxxxxxxxxxxx_1', setHiddenByMe: true })
+    const result = await updateLedgerCategoryInCloud({
+      categoryId: 'cat_xxxxxxxxxxxxx_1',
+      operationToken: 'op_xxxxxxxxxxxxx_1',
+      setHiddenByMe: true,
+    })
     expect(result.status).toBe('UPDATED')
     expect(result.hiddenByMe).toBe(true)
   })
@@ -281,7 +356,10 @@ describe('restoreLedgerEntryInCloud / updateLedgerEntryInCloud / updateLedgerCat
   it('removeLedgerCategoryInCloud returns REMOVED', async () => {
     const { runtime } = makeRuntime({ status: 'REMOVED', categoryId: 'cat_xxxxxxxxxxxxx_1' })
     setLedgerCloudRuntimeForTesting(runtime)
-    const result = await removeLedgerCategoryInCloud({ categoryId: 'cat_xxxxxxxxxxxxx_1', operationToken: 'op_xxxxxxxxxxxxx_1' })
+    const result = await removeLedgerCategoryInCloud({
+      categoryId: 'cat_xxxxxxxxxxxxx_1',
+      operationToken: 'op_xxxxxxxxxxxxx_1',
+    })
     expect(result.status).toBe('REMOVED')
   })
 })
@@ -291,16 +369,18 @@ describe('timeout and platform errors', () => {
     const { runtime } = makeRuntime({ status: 'ADDED', entry: makeEntry() }, 100)
     setLedgerCloudRuntimeForTesting(runtime)
     setLedgerCloudTimeoutForTesting(10)
-    await expect(addLedgerEntryInCloud({
-      requestId: 'req_xxxxxxxxxxxxx_1',
-      operationToken: 'op_xxxxxxxxxxxxx_1',
-      type: 'expense',
-      amountCents: 5000,
-      categoryId: 'cat_xxxxxxxxxxxxx_1',
-      payerMemberKey: 'user_self',
-      note: '',
-      occurredAt: '2026-08-17T10:00:00.000Z',
-      receiptMediaId: null,
-    })).rejects.toThrow(LedgerCloudError)
+    await expect(
+      addLedgerEntryInCloud({
+        requestId: 'req_xxxxxxxxxxxxx_1',
+        operationToken: 'op_xxxxxxxxxxxxx_1',
+        type: 'expense',
+        amountCents: 5000,
+        categoryId: 'cat_xxxxxxxxxxxxx_1',
+        payerMemberKey: 'user_self',
+        note: '',
+        occurredAt: '2026-08-17T10:00:00.000Z',
+        receiptMediaId: null,
+      }),
+    ).rejects.toThrow(LedgerCloudError)
   })
 })

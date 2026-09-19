@@ -12,7 +12,11 @@
       <text class="ledger-detail-page__state-title">无法读取账目</text>
     </view>
 
-    <view v-else-if="!detail && !loadError" class="ledger-detail-page__state" data-testid="ledger-detail-loading">
+    <view
+      v-else-if="!detail && !loadError"
+      class="ledger-detail-page__state"
+      data-testid="ledger-detail-loading"
+    >
       <wd-loading color="#267A5A" size="40rpx" />
       <text class="ledger-detail-page__state-title">正在加载账目详情</text>
     </view>
@@ -41,6 +45,10 @@
           <text class="ledger-detail-page__row-label">付款人</text>
           <text class="ledger-detail-page__row-value">{{ payerLine }}</text>
         </view>
+        <view v-if="mealPeriodLabel" class="ledger-detail-page__row">
+          <text class="ledger-detail-page__row-label">餐次</text>
+          <text class="ledger-detail-page__row-value">{{ mealPeriodLabel }}</text>
+        </view>
         <view v-if="detail.note" class="ledger-detail-page__row">
           <text class="ledger-detail-page__row-label">备注</text>
           <text class="ledger-detail-page__row-value">{{ detail.note }}</text>
@@ -53,13 +61,20 @@
           <text class="ledger-detail-page__row-label">创建时间</text>
           <text class="ledger-detail-page__row-value">{{ formatRelativeTime(detail.createdAt) }}</text>
         </view>
-        <view v-if="detail.updatedAt && detail.updatedAt !== detail.createdAt" class="ledger-detail-page__row">
+        <view
+          v-if="detail.updatedAt && detail.updatedAt !== detail.createdAt"
+          class="ledger-detail-page__row"
+        >
           <text class="ledger-detail-page__row-label">最后修改</text>
           <text class="ledger-detail-page__row-value">{{ formatRelativeTime(detail.updatedAt) }}</text>
         </view>
         <view v-if="detail.receiptMediaId" class="ledger-detail-page__receipt">
           <text class="ledger-detail-page__row-label">凭证</text>
-          <view class="ledger-detail-page__receipt-wrap" data-testid="ledger-detail-receipt" @click="onPreviewReceipt">
+          <view
+            class="ledger-detail-page__receipt-wrap"
+            data-testid="ledger-detail-receipt"
+            @click="onPreviewReceipt"
+          >
             <image class="ledger-detail-page__receipt-image" :src="receiptUrl" mode="aspectFill" />
             <text class="ledger-detail-page__receipt-hint">点击查看原图</text>
           </view>
@@ -79,7 +94,9 @@
           :disabled="isBusy"
           data-testid="ledger-detail-edit"
           @click="onEdit"
-        >编辑</wd-button>
+        >
+          编辑
+        </wd-button>
         <wd-button
           v-if="availability.delete"
           block
@@ -90,7 +107,9 @@
           :disabled="isBusy"
           data-testid="ledger-detail-delete"
           @click="onDelete"
-        >删除</wd-button>
+        >
+          删除
+        </wd-button>
       </view>
       <view v-else class="ledger-detail-page__readonly" data-testid="ledger-detail-readonly">
         <text class="ledger-detail-page__readonly-text">只有记账人可以编辑或删除</text>
@@ -117,6 +136,7 @@ import {
   describeAmountColor,
   describeAmountLine,
   describeDeleteConfirmMessage,
+  describeMealPeriod,
   describePayerLine,
   describeTypeLabel,
   describeWhenLine,
@@ -147,13 +167,17 @@ const amountText = computed(() => describeAmountLine(detail.value || undefined))
 const amountColor = computed(() => describeAmountColor(detail.value?.type))
 const typeLabel = computed(() => describeTypeLabel(detail.value?.type))
 const payerLine = computed(() => describePayerLine(detail.value || undefined))
+const mealPeriodLabel = computed(() => describeMealPeriod(detail.value || undefined))
 const whenLine = computed(() => describeWhenLine(detail.value || undefined))
-const category = computed<{ id: string; name: string; colorHex: string; iconName: string }>(() => {
-  if (!detail.value) return { id: '__none__', name: '', colorHex: '#74847D', iconName: 'tag' }
-  const c = categories.value.find((x) => x.id === detail.value!.categoryId)
-  if (!c) return { id: detail.value.categoryId, name: '其他', colorHex: '#74847D', iconName: 'tag' }
-  return describeCategory(c) as any
-})
+const category = computed<{ id: string; key: string; name: string; colorHex: string; iconName: string }>(
+  () => {
+    if (!detail.value) return { id: '__none__', key: '', name: '', colorHex: '#74847D', iconName: 'tag' }
+    const c = categories.value.find((x) => x.id === detail.value!.categoryId)
+    if (!c)
+      return { id: detail.value.categoryId, key: '', name: '其他', colorHex: '#74847D', iconName: 'tag' }
+    return describeCategory(c) as any
+  },
+)
 
 const isBusy = computed(() => isDeleting.value || isEditing.value || phase.value === 'deleting')
 const loadError = computed(() => storeError.value)
@@ -190,11 +214,11 @@ async function reload(): Promise<void> {
     // mp-weixin 构建会把 `await import('...')` 错误地编成 `await <string>`，
     // 然后解构出 undefined，调用时抛 "_e is not a function"。
     // store 顶层 import 已经 work，detail / edit 页都通过 store 调云函数。
-      const loaded = await ledgerStore.loadEntry(entryId.value)
+    const loaded = await ledgerStore.loadEntry(entryId.value)
     if (loaded) {
       detail.value = loaded
       if (loaded.receiptMediaId) {
-        receiptUrl.value = loaded.receiptUrl || await resolveReceiptUrl(loaded.receiptMediaId)
+        receiptUrl.value = loaded.receiptUrl || (await resolveReceiptUrl(loaded.receiptMediaId))
       }
     } else {
       // loadEntry 已把 errorMessage 写到 store；UI 通过 storeError 读
@@ -232,7 +256,9 @@ function onEdit(): void {
   uni.navigateTo({
     url: `/subpackages/ledger/ledger-add/index?mode=edit&entryId=${detail.value.id}&operationToken=${operationToken}`,
   })
-  setTimeout(() => { isEditing.value = false }, 500)
+  setTimeout(() => {
+    isEditing.value = false
+  }, 500)
 }
 
 function onDelete(): void {
@@ -256,7 +282,9 @@ function onDelete(): void {
         uni.showToast({ title: ledgerStore.errorMessage || '删除失败', icon: 'none' })
       }
     },
-    complete: () => { confirmingDelete.value = false },
+    complete: () => {
+      confirmingDelete.value = false
+    },
   })
 }
 </script>

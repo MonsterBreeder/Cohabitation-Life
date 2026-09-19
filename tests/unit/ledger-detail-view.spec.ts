@@ -4,6 +4,7 @@ import {
   describeAmountLine,
   describeDeleteConfirmMessage,
   describePayerLine,
+  describeMealPeriod,
   describeTypeLabel,
   describeWhenLine,
   formatRelativeTime,
@@ -16,6 +17,7 @@ function makeDetail(overrides: Partial<LedgerEntryDetail> = {}): LedgerEntryDeta
     type: 'expense',
     amountCents: 1234,
     categoryId: 'cat_xxxxxxxxxxxxx_1',
+    mealPeriod: null,
     note: '买菜',
     occurredAt: '2026-08-17T10:00:00.000Z',
     receiptMediaId: null,
@@ -82,22 +84,52 @@ describe('describeAmountLine / describeAmountColor', () => {
 
 describe('describePayerLine (PRD 008 优化 R17)', () => {
   it('formats normal expense payer', () => {
-    const detail = makeDetail({ type: 'expense', payer: { memberKey: 'user_self', nickname: '我', avatar: { kind: 'builtin', id: 'person-neutral' } } as any })
+    const detail = makeDetail({
+      type: 'expense',
+      payer: {
+        memberKey: 'user_self',
+        nickname: '我',
+        avatar: { kind: 'builtin', id: 'person-neutral' },
+      } as any,
+    })
     expect(describePayerLine(detail)).toBe('由 我 付款')
   })
 
   it('formats income payer with "入账" (R17)', () => {
-    const detail = makeDetail({ type: 'income', payer: { memberKey: 'user_self', nickname: '我', avatar: { kind: 'builtin', id: 'person-neutral' } } as any })
+    const detail = makeDetail({
+      type: 'income',
+      payer: {
+        memberKey: 'user_self',
+        nickname: '我',
+        avatar: { kind: 'builtin', id: 'person-neutral' },
+      } as any,
+    })
     expect(describePayerLine(detail)).toBe('由 我 入账')
   })
 
   it('appends "（已离开）" when payer has left (R18)', () => {
-    const detail = makeDetail({ type: 'expense', payer: { memberKey: 'user_old', nickname: '前任', avatar: { kind: 'builtin', id: 'person-neutral' }, hasLeft: true } as any })
+    const detail = makeDetail({
+      type: 'expense',
+      payer: {
+        memberKey: 'user_old',
+        nickname: '前任',
+        avatar: { kind: 'builtin', id: 'person-neutral' },
+        hasLeft: true,
+      } as any,
+    })
     expect(describePayerLine(detail)).toBe('由 前任 付款（已离开）')
   })
 
   it('returns empty for undefined', () => {
     expect(describePayerLine(undefined)).toBe('')
+  })
+})
+
+describe('describeMealPeriod', () => {
+  it('返回已记录的餐次，历史空值不显示', () => {
+    expect(describeMealPeriod(makeDetail({ mealPeriod: 'dinner' }))).toBe('晚餐')
+    expect(describeMealPeriod(makeDetail({ mealPeriod: null }))).toBe('')
+    expect(describeMealPeriod(undefined)).toBe('')
   })
 })
 

@@ -28,24 +28,58 @@ import type {
   LedgerEntryDetail,
   LedgerEntrySummary,
   LedgerStats,
+  UpdateLedgerEntryRequest,
 } from '../../types/ledger'
 
 // === 类型 ===
 
-type LedgerPhase = 'idle' | 'loading' | 'adding' | 'updating' | 'deleting' | 'restoring' | 'categoryMutating' | 'failed'
+type LedgerPhase =
+  'idle' | 'loading' | 'adding' | 'updating' | 'deleting' | 'restoring' | 'categoryMutating' | 'failed'
 
 interface LedgerCloudClient {
   initCategories(input: { requestId: string }): Promise<{ status: 'INITED'; categories: LedgerCategory[] }>
   addEntry(input: AddLedgerEntryRequest): Promise<{ status: 'ADDED'; entry: LedgerEntrySummary }>
-  updateEntry(input: { entryId: string; operationToken: string; amountCents: number; categoryId: string; payerMemberKey?: string | null; note: string; occurredAt: string; receiptMediaId: string | null }): Promise<{ status: 'UPDATED'; entry: LedgerEntrySummary }>
-  deleteEntry(input: { entryId: string; operationToken: string }): Promise<{ status: 'DELETED'; entryId: string; deletedAt: string }>
-  restoreEntry(input: { entryId: string; operationToken: string }): Promise<{ status: 'RESTORED'; entry: LedgerEntrySummary }>
-  listEntries(input: { month: string; payerMode: string; typeFilter?: 'all' | 'expense' | 'income'; categoryIds: string[]; includeDeleted?: boolean; page?: number; pageSize?: number }): Promise<{ status: 'LISTED'; entries: LedgerEntrySummary[]; deletedEntries: LedgerEntrySummary[]; hasMore?: boolean }>
+  updateEntry(input: UpdateLedgerEntryRequest): Promise<{ status: 'UPDATED'; entry: LedgerEntrySummary }>
+  deleteEntry(input: {
+    entryId: string
+    operationToken: string
+  }): Promise<{ status: 'DELETED'; entryId: string; deletedAt: string }>
+  restoreEntry(input: {
+    entryId: string
+    operationToken: string
+  }): Promise<{ status: 'RESTORED'; entry: LedgerEntrySummary }>
+  listEntries(input: {
+    month: string
+    payerMode: string
+    typeFilter?: 'all' | 'expense' | 'income'
+    categoryIds: string[]
+    includeDeleted?: boolean
+    page?: number
+    pageSize?: number
+  }): Promise<{
+    status: 'LISTED'
+    entries: LedgerEntrySummary[]
+    deletedEntries: LedgerEntrySummary[]
+    hasMore?: boolean
+  }>
   getEntry(input: { entryId: string }): Promise<{ status: 'LOADED'; detail: LedgerEntryDetail }>
   addCategory(input: AddLedgerCategoryRequest): Promise<{ status: 'ADDED'; category: LedgerCategory }>
-  updateCategory(input: { categoryId: string; operationToken: string; name?: string; setHiddenByMe?: boolean }): Promise<{ status: 'UPDATED'; category: LedgerCategory; hiddenByMe: boolean }>
-  removeCategory(input: { categoryId: string; operationToken: string }): Promise<{ status: 'REMOVED'; categoryId: string }>
-  getStats(input: { month: string; payerMode?: string; typeFilter?: 'all' | 'expense' | 'income'; categoryIds?: string[] }): Promise<{ status: 'LOADED'; stats: LedgerStats }>
+  updateCategory(input: {
+    categoryId: string
+    operationToken: string
+    name?: string
+    setHiddenByMe?: boolean
+  }): Promise<{ status: 'UPDATED'; category: LedgerCategory; hiddenByMe: boolean }>
+  removeCategory(input: {
+    categoryId: string
+    operationToken: string
+  }): Promise<{ status: 'REMOVED'; categoryId: string }>
+  getStats(input: {
+    month: string
+    payerMode?: string
+    typeFilter?: 'all' | 'expense' | 'income'
+    categoryIds?: string[]
+  }): Promise<{ status: 'LOADED'; stats: LedgerStats }>
 }
 
 const defaultCloudClient: LedgerCloudClient = {
@@ -177,7 +211,7 @@ export const useLedgerStore = defineStore('ledger', {
     resetLedgerStoreForTesting(): void {
       if (this._debouncedLoadStats) {
         // lodash.debounce 返回的 DebouncedFn 有 cancel() 方法
-        (this._debouncedLoadStats as { cancel: () => void }).cancel?.()
+        ;(this._debouncedLoadStats as { cancel: () => void }).cancel?.()
       }
       Object.assign(this, initialState())
       inFlight.clear()
@@ -226,7 +260,9 @@ export const useLedgerStore = defineStore('ledger', {
     async loadCategories(): Promise<void> {
       if (!this.householdId) return
       try {
-        const result = await cloudClient.initCategories({ requestId: `loadcat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` })
+        const result = await cloudClient.initCategories({
+          requestId: `loadcat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        })
         this.categories = result.categories
         // 重新同步 hiddenByMe 状态（initCategories 不返回 hiddenByMe；由本地缓存推算）
         const hidden = new Set(this.hiddenByMeCategoryIds)
@@ -280,7 +316,8 @@ export const useLedgerStore = defineStore('ledger', {
         this.entriesHasMore = this.selectedDate ? false : Boolean(result.hasMore)
         this.phase = 'idle'
       } catch (error) {
-        if (this.activeEntryQueryKey === queryKey && this.entryLoadVersion === loadVersion) this.applyError(error)
+        if (this.activeEntryQueryKey === queryKey && this.entryLoadVersion === loadVersion)
+          this.applyError(error)
       } finally {
         if (this.entryLoadVersion === loadVersion) this.isLoadingMore = false
         inFlight.delete(key)
@@ -358,7 +395,7 @@ export const useLedgerStore = defineStore('ledger', {
       }
     },
 
-    async updateEntry(input: { entryId: string; operationToken: string; amountCents: number; categoryId: string; payerMemberKey?: string | null; note: string; occurredAt: string; receiptMediaId: string | null }): Promise<LedgerEntrySummary | null> {
+    async updateEntry(input: UpdateLedgerEntryRequest): Promise<LedgerEntrySummary | null> {
       const key = inFlightKey('update', input.entryId + input.operationToken)
       if (inFlight.has(key)) return null
       inFlight.add(key)
@@ -393,7 +430,11 @@ export const useLedgerStore = defineStore('ledger', {
         const result = await cloudClient.deleteEntry(input)
         if (result.status === 'DELETED') {
           this.entries = this.entries.filter((e) => e.id !== input.entryId)
-          this.deletedEntries = [this.entries.find((e) => e.id === input.entryId) || { ...(this.entries[0] || {}), id: input.entryId, deletedAt: result.deletedAt } as any, ...this.deletedEntries].filter(Boolean)
+          this.deletedEntries = [
+            this.entries.find((e) => e.id === input.entryId) ||
+              ({ ...(this.entries[0] || {}), id: input.entryId, deletedAt: result.deletedAt } as any),
+            ...this.deletedEntries,
+          ].filter(Boolean)
           // 重新算 stats
           if (this.stats) this.loadStats(this.stats.month).catch(() => undefined)
           this.phase = 'idle'
@@ -410,7 +451,10 @@ export const useLedgerStore = defineStore('ledger', {
       }
     },
 
-    async restoreEntry(input: { entryId: string; operationToken: string }): Promise<LedgerEntrySummary | null> {
+    async restoreEntry(input: {
+      entryId: string
+      operationToken: string
+    }): Promise<LedgerEntrySummary | null> {
       const key = inFlightKey('restore', input.entryId + input.operationToken)
       if (inFlight.has(key)) return null
       inFlight.add(key)
