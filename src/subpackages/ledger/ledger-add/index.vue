@@ -501,8 +501,8 @@ async function onSave(): Promise<void> {
         receiptMediaId: mediaId,
       })
       if (result) {
-        // 新建成功后返回真正的发起页面，并在返回完成后显示统一提示。
-        await returnAfterQuickCreate('已记账')
+        // 编辑成功后返回账目详情；直接调试此页时则进入账本首页。
+        await returnAfterQuickCreate('已记账', '/pages/ledger/index')
       } else if (ledgerStore.errorMessage) {
         uni.showToast({ title: ledgerStore.errorMessage, icon: 'none', duration: 2500 })
       }
@@ -519,7 +519,8 @@ async function onSave(): Promise<void> {
         receiptMediaId: mediaId,
       })
       if (result) {
-        uni.navigateBack({ delta: 1 })
+        // 新建成功后返回真正的发起页面；直接调试此页时避免返回空页面栈。
+        await returnAfterQuickCreate('已记账', '/pages/ledger/index')
       } else if (ledgerStore.errorMessage) {
         // addEntry 失败但 store 设了 errorMessage（云端返回的非 throw 错误）—— 给用户看
         uni.showToast({ title: ledgerStore.errorMessage, icon: 'none', duration: 2500 })
