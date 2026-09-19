@@ -11,6 +11,7 @@ import {
   draftFromEntry,
   inferMealPeriod,
   resolveMealPeriodAfterCategoryChange,
+  toggleMealPeriod,
   hasErrors,
   validateCategoryDraft,
   validateDraft,
@@ -77,6 +78,13 @@ describe('餐次默认与类目切换', () => {
   it('切到非餐饮或同名自定义类目时清空', () => {
     expect(resolveMealPeriodAfterCategoryChange({ key: 'transport', isCustom: false }, 'dinner')).toBeNull()
     expect(resolveMealPeriodAfterCategoryChange({ key: 'dining', isCustom: true }, 'dinner')).toBeNull()
+  })
+
+  // 餐次不是必填项：首次点击选中，重复点击同一项取消选中。
+  it('支持选择、切换和取消餐次', () => {
+    expect(toggleMealPeriod(null, 'breakfast')).toBe('breakfast')
+    expect(toggleMealPeriod('lunch', 'dinner')).toBe('dinner')
+    expect(toggleMealPeriod('dinner', 'dinner')).toBeNull()
   })
 })
 

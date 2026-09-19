@@ -77,6 +77,14 @@ export function inferMealPeriod(now: Date = new Date()): LedgerMealPeriod {
   return 'dinner'
 }
 
+/** 餐次是可选项：点击新选项时切换，重复点击已选项时清空。 */
+export function toggleMealPeriod(
+  current: LedgerMealPeriod | null,
+  next: LedgerMealPeriod,
+): LedgerMealPeriod | null {
+  return current === next ? null : next
+}
+
 /** 仅系统预设 dining 类目启用餐次；已有手动选择不得被重复推断覆盖。 */
 export function resolveMealPeriodAfterCategoryChange(
   category: Pick<LedgerCategory, 'key' | 'isCustom'> | undefined,

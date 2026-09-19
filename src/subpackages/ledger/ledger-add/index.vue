@@ -83,7 +83,7 @@
 
       <!-- 餐次只在系统预设餐饮类目出现；历史空值编辑时保持未选，不擅自补写。 -->
       <view v-if="isDiningCategory" class="ledger-add-page__field">
-        <text class="ledger-add-page__label">餐次</text>
+        <text class="ledger-add-page__label">餐次（可选）</text>
         <MealPeriodPicker v-model="draft.mealPeriod" :disabled="isBusy" />
       </view>
 
