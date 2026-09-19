@@ -6,6 +6,8 @@ const cloudbaseStorage = require('@cloudbase/node-sdk/lib/storage')
 const { createRepository } = require('./repository-data')
 const domain = require('./footprint-domain')
 const media = require('./footprint-media')
+const routeMedia = require('./footprint-route-media')
+const hiking = require('./hiking-domain')
 const { checkImage, checkText } = require('./content-safety')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
@@ -57,6 +59,14 @@ const actions = {
   reviewPhoto: media.reviewPhoto,
   getPhotoUrls: media.getPhotoUrls,
   abandonPhotos: media.abandonPhotos,
+  listHikes: hiking.listHikes,
+  getHike: hiking.getHike,
+  createHike: hiking.createHike,
+  updateHike: hiking.updateHike,
+  prepareRoute: routeMedia.prepareRoute,
+  reviewRoute: routeMedia.reviewRoute,
+  getRouteUrl: routeMedia.getRouteUrl,
+  abandonRoute: routeMedia.abandonRoute,
 }
 
 function humanise(code) {
@@ -65,6 +75,8 @@ function humanise(code) {
   if (code === 'FOOTPRINT_CONTENT_REJECTED') return '地点或回忆中包含暂时无法保存的内容'
   if (code === 'FOOTPRINT_MEDIA_REJECTED') return '照片未通过安全检查，请更换照片'
   if (code === 'FOOTPRINT_RATE_LIMITED') return '今天处理的照片较多，请稍后再试'
+  if (code === 'FOOTPRINT_ROUTE_RATE_LIMITED') return '今天导入的路线较多，请稍后再试'
+  if (code === 'FOOTPRINT_ROUTE_INVALID') return '路线已过期或无法使用，请重新导入'
   if (code === 'FOOTPRINT_INVALID') return '足迹内容不完整或格式不正确'
   if (code === 'TEMPORARY_FAILURE') return '暂时无法完成足迹操作，请稍后重试'
   if (code === 'FOOTPRINT_MEDIA_INVALID') return '照片已过期或无法使用，请重新选择'

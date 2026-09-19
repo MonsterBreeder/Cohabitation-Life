@@ -1,4 +1,5 @@
 /** 家庭足迹的共享类型。页面只接收展示所需字段，不接触云端内部成员编号。 */
+import type { HikingEntrySummary } from './hiking'
 export interface FootprintPlace {
   name: string
   address: string
@@ -20,6 +21,7 @@ export interface FootprintCreatorDisplay {
 }
 
 export interface FootprintEntrySummary {
+  entryKind?: 'place'
   id: string
   placeKey: string
   place: FootprintPlace
@@ -30,6 +32,9 @@ export interface FootprintEntrySummary {
   updatedAt: string
   editVersion: number
 }
+
+/** 新版足迹时间线同时承载地点与徒步，历史客户端仍只接收地点结构。 */
+export type FootprintTimelineEntry = FootprintEntrySummary | HikingEntrySummary
 
 export interface FootprintEntryDetail extends FootprintEntrySummary {
   photos: FootprintPhoto[]
@@ -77,6 +82,8 @@ export type FootprintFailureStatus =
   | 'FOOTPRINT_MEDIA_REJECTED'
   | 'FOOTPRINT_CONTENT_REJECTED'
   | 'FOOTPRINT_RATE_LIMITED'
+  | 'FOOTPRINT_ROUTE_INVALID'
+  | 'FOOTPRINT_ROUTE_RATE_LIMITED'
   | 'TEMPORARY_FAILURE'
 
 export interface FootprintFailure {

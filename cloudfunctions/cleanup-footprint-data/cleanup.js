@@ -2,8 +2,10 @@
 async function cleanupExpired(input, dependencies) {
   const expiredEntries = await dependencies.findExpiredEntries(input.entryCutoff, input.limit)
   const expiredMedia = await dependencies.findExpiredMedia(input.now, input.limit)
+  const expiredRoutes = dependencies.findExpiredRoutes ? await dependencies.findExpiredRoutes(input.now, input.limit) : []
   let entriesDeleted = 0
   let mediaDeleted = 0
+  let routesDeleted = 0
   const failures = []
   for (const entry of expiredEntries) {
     try { await dependencies.deleteEntry(entry); entriesDeleted += 1 } catch (error) { failures.push({ kind: 'entry', id: entry._id, message: error?.message }) }
@@ -11,6 +13,9 @@ async function cleanupExpired(input, dependencies) {
   for (const item of expiredMedia) {
     try { await dependencies.deleteMedia(item); mediaDeleted += 1 } catch (error) { failures.push({ kind: 'media', id: item._id, message: error?.message }) }
   }
-  return { ok: failures.length === 0, entriesDeleted, mediaDeleted, failures }
+  for (const item of expiredRoutes) {
+    try { await dependencies.deleteRoute(item); routesDeleted += 1 } catch (error) { failures.push({ kind: 'route', id: item._id, message: error?.message }) }
+  }
+  return { ok: failures.length === 0, entriesDeleted, mediaDeleted, routesDeleted, failures }
 }
 module.exports = { cleanupExpired }

@@ -1,107 +1,126 @@
 {
-	"easycom": {
-		"autoscan": true,
-		"custom": {
-			"^wd-(.*)": "@wot-ui/ui/components/wd-$1/wd-$1.vue"
-		}
-	},
-	"pages": [ //pages数组中第一项表示应用启动页，参考：https://uniapp.dcloud.io/collocation/pages
-		{
-			"path": "pages/login/index",
-			"style": {
-				"navigationBarTitleText": "睦录",
-				"navigationBarBackgroundColor": "#FFF9F2",
-				"navigationBarTextStyle": "black"
-			}
-		},
-		{
-			"path": "pages/legal/index",
-			"style": {
-				"navigationBarTitleText": "协议与隐私",
-				"navigationBarBackgroundColor": "#FFF9F2",
-				"navigationBarTextStyle": "black"
-			}
-		},
-		{
-			"path": "pages/experience/index",
-			"style": {
-				"navigationBarTitleText": "功能体验",
-				"navigationBarBackgroundColor": "#FFF9F2",
-				"navigationBarTextStyle": "black"
-			}
-		},
-		{
-			"path": "pages/index/index",
-			"style": {
-				"navigationBarTitleText": "睦录"
-			}
-		},
-		{
-			"path": "pages/profile/index",
-			"style": {
-				"navigationBarTitleText": "我的"
-			}
-		},
-		{
-			"path": "pages/ledger/index",
-			"style": {
-				"navigationBarTitleText": "家庭账本",
-				"navigationBarBackgroundColor": "#FFF9F2",
-				"navigationBarTextStyle": "black"
-			}
-		},
-		{
-			"path": "pages/footprint/index",
-			"style": {
-				"navigationBarTitleText": "我们的足迹",
-				"navigationBarBackgroundColor": "#FFF9F2",
-				"navigationBarTextStyle": "black"
-			}
-		}
-	],
-	"subPackages": [
-		{
-			"root": "subpackages/household",
-			"pages": [
-				{ "path": "create-home/index", "style": { "navigationBarTitleText": "创建我们的家" } },
-				{ "path": "join-home/index", "style": { "navigationBarTitleText": "加入我们的家" } },
-				{ "path": "member-management/index", "style": { "navigationBarTitleText": "家庭成员" } },
-				{ "path": "invite-status/index", "style": { "navigationBarTitleText": "邀请状态" } },
-				{ "path": "edit-household/index", "style": { "navigationBarTitleText": "编辑家庭资料" } },
-				{ "path": "edit-profile/index", "style": { "navigationBarTitleText": "编辑个人资料" } },
-				{ "path": "crop-avatar/index", "style": { "navigationBarTitleText": "裁剪头像" } }
-			]
-		},
-		{
-			"root": "subpackages/task",
-			"pages": [
-				{ "path": "add-task/index", "style": { "navigationBarTitleText": "记一件事" } },
-				{ "path": "task-detail/index", "style": { "navigationBarTitleText": "事项详情" } },
-				{ "path": "completed-tasks/index", "style": { "navigationBarTitleText": "已完成和已放弃" } }
-			]
-		},
-		{
-			"root": "subpackages/ledger",
-			"pages": [
-				{ "path": "ledger-add/index", "style": { "navigationBarTitleText": "记一笔" } },
-				{ "path": "ledger-detail/index", "style": { "navigationBarTitleText": "账目详情" } },
-				{ "path": "ledger-category-manager/index", "style": { "navigationBarTitleText": "类目管理" } },
-				{ "path": "ledger-stats/index", "style": { "navigationBarTitleText": "账本统计" } },
-				{ "path": "ledger-ai/index", "style": { "navigationBarTitleText": "问账本" } }
-			]
-		},
-		{
-			"root": "subpackages/footprint",
-			"pages": [
-				{ "path": "footprint-form/index", "style": { "navigationBarTitleText": "记录足迹" } },
-				{ "path": "footprint-detail/index", "style": { "navigationBarTitleText": "足迹详情" } }
-			]
-		}
-	],
-	"globalStyle": {
-		"navigationBarTextStyle": "black",
-		"navigationBarTitleText": "睦录",
-		"navigationBarBackgroundColor": "#FFF9F2",
-		"backgroundColor": "#FFF9F2"
-	}
+  "easycom": {
+    "autoscan": true,
+    "custom": {
+      "^wd-(.*)": "@wot-ui/ui/components/wd-$1/wd-$1.vue"
+    }
+  },
+  "pages": [
+    //pages数组中第一项表示应用启动页，参考：https://uniapp.dcloud.io/collocation/pages
+    {
+      "path": "pages/login/index",
+      "style": {
+        "navigationBarTitleText": "睦录",
+        "navigationBarBackgroundColor": "#FFF9F2",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/legal/index",
+      "style": {
+        "navigationBarTitleText": "协议与隐私",
+        "navigationBarBackgroundColor": "#FFF9F2",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/experience/index",
+      "style": {
+        "navigationBarTitleText": "功能体验",
+        "navigationBarBackgroundColor": "#FFF9F2",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/index/index",
+      "style": {
+        "navigationBarTitleText": "睦录"
+      }
+    },
+    {
+      "path": "pages/profile/index",
+      "style": {
+        "navigationBarTitleText": "我的"
+      }
+    },
+    {
+      "path": "pages/ledger/index",
+      "style": {
+        "navigationBarTitleText": "家庭账本",
+        "navigationBarBackgroundColor": "#FFF9F2",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/footprint/index",
+      "style": {
+        "navigationBarTitleText": "我们的足迹",
+        "navigationBarBackgroundColor": "#FFF9F2",
+        "navigationBarTextStyle": "black"
+      }
+    },
+    {
+      "path": "pages/life/index",
+      "style": {
+        "navigationBarTitleText": "生活",
+        "navigationBarBackgroundColor": "#FFF9F2",
+        "navigationBarTextStyle": "black"
+      }
+    }
+  ],
+  "subPackages": [
+    {
+      "root": "subpackages/household",
+      "pages": [
+        { "path": "create-home/index", "style": { "navigationBarTitleText": "创建我们的家" } },
+        { "path": "join-home/index", "style": { "navigationBarTitleText": "加入我们的家" } },
+        { "path": "member-management/index", "style": { "navigationBarTitleText": "家庭成员" } },
+        { "path": "invite-status/index", "style": { "navigationBarTitleText": "邀请状态" } },
+        { "path": "edit-household/index", "style": { "navigationBarTitleText": "编辑家庭资料" } },
+        { "path": "edit-profile/index", "style": { "navigationBarTitleText": "编辑个人资料" } },
+        { "path": "crop-avatar/index", "style": { "navigationBarTitleText": "裁剪头像" } }
+      ]
+    },
+    {
+      "root": "subpackages/task",
+      "pages": [
+        { "path": "add-task/index", "style": { "navigationBarTitleText": "记一件事" } },
+        { "path": "task-detail/index", "style": { "navigationBarTitleText": "事项详情" } },
+        { "path": "completed-tasks/index", "style": { "navigationBarTitleText": "已完成和已放弃" } }
+      ]
+    },
+    {
+      "root": "subpackages/ledger",
+      "pages": [
+        { "path": "ledger-add/index", "style": { "navigationBarTitleText": "记一笔" } },
+        { "path": "ledger-detail/index", "style": { "navigationBarTitleText": "账目详情" } },
+        { "path": "ledger-category-manager/index", "style": { "navigationBarTitleText": "类目管理" } },
+        { "path": "ledger-stats/index", "style": { "navigationBarTitleText": "账本统计" } },
+        { "path": "ledger-ai/index", "style": { "navigationBarTitleText": "问账本" } }
+      ]
+    },
+    {
+      "root": "subpackages/footprint",
+      "pages": [
+        { "path": "footprint-form/index", "style": { "navigationBarTitleText": "记录足迹" } },
+        { "path": "footprint-detail/index", "style": { "navigationBarTitleText": "足迹详情" } }
+      ]
+    },
+    {
+      "root": "subpackages/hiking",
+      "pages": [
+        { "path": "hiking-home/index", "style": { "navigationBarTitleText": "共同徒步" } },
+        { "path": "hiking-record/index", "style": { "navigationBarTitleText": "现场记录" } },
+        { "path": "hiking-form/index", "style": { "navigationBarTitleText": "补录徒步" } },
+        { "path": "hiking-import/index", "style": { "navigationBarTitleText": "导入 KML" } },
+        { "path": "hiking-detail/index", "style": { "navigationBarTitleText": "徒步详情" } }
+      ]
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "睦录",
+    "navigationBarBackgroundColor": "#FFF9F2",
+    "backgroundColor": "#FFF9F2"
+  }
 }
