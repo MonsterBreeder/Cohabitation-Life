@@ -149,6 +149,11 @@ async function listEntries(input, dependencies) {
   const home = await assertMember(dependencies)
   if (input?.placeKey && !/^[a-f0-9]{64}$/.test(input.placeKey)) throw new FootprintDomainError('FOOTPRINT_INVALID')
   const pageSize = Math.min(20, Math.max(1, Number(input?.pageSize) || 20))
+  if (input?.responseVersion === 'hiking-v1' && !input?.placeKey) {
+    // 新版时间线使用共同游标；旧请求仍走地点列表，确保云端先发布也不会改变线上旧客户端。
+    const result = await dependencies.repository.listTimelineEntries(home._id, input?.cursor || null, pageSize)
+    return { status: 'LISTED', retryable: false, entries: result.items, cursor: result.cursor }
+  }
   const result = await dependencies.repository.listEntries(home._id, input?.cursor || null, pageSize, input?.placeKey || null)
   return { status: 'LISTED', retryable: false, entries: result.items, cursor: result.cursor }
 }
@@ -264,6 +269,6 @@ async function acknowledgeHistoryNotice(_input, dependencies) {
 }
 
 module.exports = {
-  FootprintDomainError, normalisePlace, normaliseVisitedAt, placeKey, safeEntry,
+  FootprintDomainError, normalisePlace, normaliseVisitedAt, normalisePhotoIds, validatePhotos, placeKey, safeEntry,
   getSummary, getOverview, listEntries, listPlaces, getEntry, createEntry, updateEntry, deleteEntry, acknowledgeHistoryNotice,
 }

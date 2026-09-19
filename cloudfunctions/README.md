@@ -153,9 +153,27 @@
 
 2026-09-03 检查与修复：已下载备份并核对 `footprint`、`cleanup-footprint-data`、`household` 的业务源码，修复前与本地一致。随后修正微信 SDK 聚合返回值误读问题，成功增量上传 `footprint/repository-data.js`。足迹与清理函数均为 Active、Nodejs16.13、3 秒超时；本次未修改线上权限、超时或触发器，仍须完成上述配置核验及实际读取测试。
 
+## 016 共同徒步：新增云端配置
+
+共同徒步复用 `footprintEntries` 作为唯一记录来源，路线单独保存在私有云存储。云端先发布兼容动作，旧客户端仍只读取地点足迹；新入口只调用徒步动作。
+
+### 集合、索引和权限
+
+- 新建 `footprintRouteMedia`、`footprintRouteUploadLocks`，并与足迹现有集合一样设置为“小程序客户端不可读写”。
+- `footprintEntries` 增加复合索引：`householdId` 升序、`entryKind` 升序、`deletedAt` 升序、`sortDate` 降序、`createdAt` 降序、`_id` 降序，用于共同徒步列表。
+- `footprintRouteMedia` 增加 `expiresAt` 升序索引，供每日任务清理取消、保存失败和软删除满 30 天的路线。
+- `footprint-routes/` 仅允许预约上传者写入自己的随机路径，禁止客户端读取、列举和覆盖；路线查看必须由 `footprint` 重新确认家庭成员后签发临时地址。
+
+### 发布顺序
+
+1. 创建集合、索引和私有存储规则，先部署兼容版 `footprint` 与 `cleanup-footprint-data`。
+2. 用旧版小程序回归原有地点足迹，再发布含“生活—徒步”的新版本。
+3. 用家庭成员、非成员和已离开成员分别验证路线访问；非成员不得取得新的路线地址。
+4. 现场记录已经以“用户主动点击后仅在前台定位”的方式开放；发布前仍需确认连续定位接口资格、隐私用途说明和双端真机结果，不得添加后台定位声明。
+
 ### 验证与观察
 
-- 本地完整检查：`pnpm run verify:mp-weixin`。
+- 本地完整检查：`npm run verify:mp-weixin`。
 - 微信入口自动检查：先启用开发者工具自动化并由用户在测试小程序完成登录，再设置 `FOOTPRINT_E2E=1` 和本机 `MINIPROGRAM_AUTOMATOR_PATH`，运行 `pnpm run test:e2e -- --runInBand tests/e2e/footprint-flow.spec.js`。未启用时会跳过，跳过不能作为验收证据。
 - 上线后首个工作日观察足迹保存成功率、图片审核超时、未关联照片数量及 `footprint action failed`、`footprint staging cleanup failed` 日志。预期保存请求可重试且无重复记录，过期资源随每日任务下降。
 - 若出现越权访问、重复记录、照片意外删除或清理持续失败，停止足迹写入并隐藏入口，保留云端记录和照片排查；不得通过删库或删除家庭数据回滚。

