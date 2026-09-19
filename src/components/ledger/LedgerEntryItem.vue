@@ -6,7 +6,7 @@
     <view class="ledger-entry-item__main">
       <view class="ledger-entry-item__head">
         <view class="ledger-entry-item__dot" :style="{ background: category.colorHex }" />
-        <text class="ledger-entry-item__category">{{ category.name }}</text>
+        <text class="ledger-entry-item__category">{{ categoryName }}</text>
       </view>
       <text v-if="entry.note" class="ledger-entry-item__note">{{ entry.note }}</text>
       <text class="ledger-entry-item__payer">{{ payerName }}</text>
@@ -19,8 +19,15 @@
           'ledger-entry-item__amount--expense': entry.type === 'expense',
           'ledger-entry-item__amount--income': entry.type === 'income',
         }"
-      >{{ amountText }}</text>
-      <ReceiptThumb v-if="entry.receiptMediaId" :media-id="entry.receiptMediaId" :resolved-url="entry.receiptUrl" :test-id="`ledger-entry-thumb-${entry.id}`" />
+      >
+        {{ amountText }}
+      </text>
+      <ReceiptThumb
+        v-if="entry.receiptMediaId"
+        :media-id="entry.receiptMediaId"
+        :resolved-url="entry.receiptUrl"
+        :test-id="`ledger-entry-thumb-${entry.id}`"
+      />
     </view>
   </view>
 </template>
@@ -28,7 +35,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { LedgerEntrySummary } from '../../types/ledger'
-import { describeEntryAmount, describePayerLine, type CategoryView } from '../../pages/ledger/ledger-home-view'
+import {
+  describeEntryAmount,
+  describeEntryCategoryName,
+  describePayerLine,
+  type CategoryView,
+} from '../../pages/ledger/ledger-home-view'
 import ReceiptThumb from './ReceiptThumb.vue'
 
 interface Props {
@@ -39,6 +51,8 @@ const props = defineProps<Props>()
 const emit = defineEmits<{ (e: 'press', entryId: string): void }>()
 
 const amountText = computed(() => describeEntryAmount(props.entry.type, props.entry.amountCents))
+// 餐次只补充在类目名后，不改变原有备注与付款人层级。
+const categoryName = computed(() => describeEntryCategoryName(props.entry, props.category))
 // PRD 008 优化 R16：收入账目走 describePayerLine（"由 X 入账"），支出"由 X 付款"
 // 文案集中描述器 ledger-home-view.ts:describePayerLine，避免漂移
 const payerName = computed(() => describePayerLine(props.entry.type, props.entry.payer))
@@ -56,9 +70,11 @@ function onPress(): void {
   padding: 22rpx 24rpx;
   border-radius: 16rpx;
   background: $brand-color-surface;
-  transition: transform .12s ease, background .15s ease;
+  transition:
+    transform 0.12s ease,
+    background 0.15s ease;
   &:active {
-    transform: scale(.99);
+    transform: scale(0.99);
     background: #f8faf7;
   }
   &__main {

@@ -1,8 +1,5 @@
 import { createPinia, setActivePinia } from 'pinia'
-import {
-  setLedgerStoreCloudClientForTesting,
-  useLedgerStore,
-} from '../../src/store/modules/ledger'
+import { setLedgerStoreCloudClientForTesting, useLedgerStore } from '../../src/store/modules/ledger'
 import type { LedgerCategory, LedgerEntrySummary } from '../../src/types/ledger'
 
 function makeEntry(overrides: any = {}): LedgerEntrySummary {
@@ -115,12 +112,33 @@ describe('loadEntries', () => {
   })
 
   it('appends the next page without duplicating existing entries', async () => {
-    const listEntries = jest.fn(async (input: { page?: number }) => input.page === 1
-      ? { status: 'LISTED' as const, entries: [makeEntry({ id: 'page-1' })], deletedEntries: [], hasMore: true }
-      : { status: 'LISTED' as const, entries: [makeEntry({ id: 'page-2' })], deletedEntries: [], hasMore: false })
+    const listEntries = jest.fn(async (input: { page?: number }) =>
+      input.page === 1
+        ? {
+            status: 'LISTED' as const,
+            entries: [makeEntry({ id: 'page-1' })],
+            deletedEntries: [],
+            hasMore: true,
+          }
+        : {
+            status: 'LISTED' as const,
+            entries: [makeEntry({ id: 'page-2' })],
+            deletedEntries: [],
+            hasMore: false,
+          },
+    )
     setLedgerStoreCloudClientForTesting({
-      initCategories: jest.fn(), addEntry: jest.fn(), updateEntry: jest.fn(), deleteEntry: jest.fn(), restoreEntry: jest.fn(),
-      listEntries, getEntry: jest.fn(), addCategory: jest.fn(), updateCategory: jest.fn(), removeCategory: jest.fn(), getStats: jest.fn(),
+      initCategories: jest.fn(),
+      addEntry: jest.fn(),
+      updateEntry: jest.fn(),
+      deleteEntry: jest.fn(),
+      restoreEntry: jest.fn(),
+      listEntries,
+      getEntry: jest.fn(),
+      addCategory: jest.fn(),
+      updateCategory: jest.fn(),
+      removeCategory: jest.fn(),
+      getStats: jest.fn(),
     })
     const store = useLedgerStore()
     store.setHouseholdContext('home_xxxxxxxx', 'user_self')
@@ -136,15 +154,49 @@ describe('loadEntries', () => {
   })
 
   it('ignores an old next-page response after the list has refreshed', async () => {
-    let resolveOldPage: ((value: { status: 'LISTED'; entries: LedgerEntrySummary[]; deletedEntries: []; hasMore: boolean }) => void) | undefined
-    const oldPage = new Promise<{ status: 'LISTED'; entries: LedgerEntrySummary[]; deletedEntries: []; hasMore: boolean }>((resolve) => { resolveOldPage = resolve })
-    const listEntries = jest.fn()
-      .mockResolvedValueOnce({ status: 'LISTED', entries: [makeEntry({ id: 'initial' })], deletedEntries: [], hasMore: true })
+    let resolveOldPage:
+      | ((value: {
+          status: 'LISTED'
+          entries: LedgerEntrySummary[]
+          deletedEntries: []
+          hasMore: boolean
+        }) => void)
+      | undefined
+    const oldPage = new Promise<{
+      status: 'LISTED'
+      entries: LedgerEntrySummary[]
+      deletedEntries: []
+      hasMore: boolean
+    }>((resolve) => {
+      resolveOldPage = resolve
+    })
+    const listEntries = jest
+      .fn()
+      .mockResolvedValueOnce({
+        status: 'LISTED',
+        entries: [makeEntry({ id: 'initial' })],
+        deletedEntries: [],
+        hasMore: true,
+      })
       .mockReturnValueOnce(oldPage)
-      .mockResolvedValueOnce({ status: 'LISTED', entries: [makeEntry({ id: 'refreshed' })], deletedEntries: [], hasMore: false })
+      .mockResolvedValueOnce({
+        status: 'LISTED',
+        entries: [makeEntry({ id: 'refreshed' })],
+        deletedEntries: [],
+        hasMore: false,
+      })
     setLedgerStoreCloudClientForTesting({
-      initCategories: jest.fn(), addEntry: jest.fn(), updateEntry: jest.fn(), deleteEntry: jest.fn(), restoreEntry: jest.fn(),
-      listEntries, getEntry: jest.fn(), addCategory: jest.fn(), updateCategory: jest.fn(), removeCategory: jest.fn(), getStats: jest.fn(),
+      initCategories: jest.fn(),
+      addEntry: jest.fn(),
+      updateEntry: jest.fn(),
+      deleteEntry: jest.fn(),
+      restoreEntry: jest.fn(),
+      listEntries,
+      getEntry: jest.fn(),
+      addCategory: jest.fn(),
+      updateCategory: jest.fn(),
+      removeCategory: jest.fn(),
+      getStats: jest.fn(),
     })
     const store = useLedgerStore()
     store.setHouseholdContext('home_xxxxxxxx', 'user_self')
@@ -154,7 +206,12 @@ describe('loadEntries', () => {
     const loadingOldPage = store.loadMoreEntries()
     await Promise.resolve()
     await store.loadEntries(true)
-    resolveOldPage?.({ status: 'LISTED', entries: [makeEntry({ id: 'stale-page-2' })], deletedEntries: [], hasMore: false })
+    resolveOldPage?.({
+      status: 'LISTED',
+      entries: [makeEntry({ id: 'stale-page-2' })],
+      deletedEntries: [],
+      hasMore: false,
+    })
     await loadingOldPage
 
     expect(store.entries.map((entry) => entry.id)).toEqual(['refreshed'])
@@ -259,12 +316,48 @@ describe('addEntry / updateEntry / deleteEntry / restoreEntry', () => {
     expect(updateSpy.mock.calls[0][0].payerMemberKey).toBe('other')
   })
 
+  // 餐次由页面决定，store 只负责原样透传，不能在中间丢失。
+  it('updateEntry forwards mealPeriod to the cloud client', async () => {
+    const entry = makeEntry({ mealPeriod: 'dinner' })
+    const updateSpy = jest.fn(async () => ({ status: 'UPDATED' as const, entry }))
+    setLedgerStoreCloudClientForTesting({
+      initCategories: jest.fn(),
+      addEntry: jest.fn(),
+      updateEntry: updateSpy,
+      deleteEntry: jest.fn(),
+      restoreEntry: jest.fn(),
+      listEntries: jest.fn(),
+      getEntry: jest.fn(),
+      addCategory: jest.fn(),
+      updateCategory: jest.fn(),
+      removeCategory: jest.fn(),
+      getStats: jest.fn(),
+    })
+    const store = useLedgerStore()
+    store.setHouseholdContext('home_xxxxxxxx', 'user_self')
+    await store.updateEntry({
+      entryId: 'ledger_xxxxxxxxxxxxx_1',
+      operationToken: 'op_xxxxxxxxxxxxx_meal',
+      amountCents: 5000,
+      categoryId: 'cat_xxxxxxxxxxxxx_1',
+      mealPeriod: 'dinner',
+      note: '',
+      occurredAt: '2026-08-17T10:00:00.000Z',
+      receiptMediaId: null,
+    })
+    expect(updateSpy.mock.calls[0][0].mealPeriod).toBe('dinner')
+  })
+
   it('deleteEntry removes from entries on success', async () => {
     setLedgerStoreCloudClientForTesting({
       initCategories: jest.fn(),
       addEntry: jest.fn(),
       updateEntry: jest.fn(),
-      deleteEntry: jest.fn(async () => ({ status: 'DELETED' as const, entryId: 'ledger_xxxxxxxxxxxxx_1', deletedAt: '2026-08-17T10:00:00.000Z' })),
+      deleteEntry: jest.fn(async () => ({
+        status: 'DELETED' as const,
+        entryId: 'ledger_xxxxxxxxxxxxx_1',
+        deletedAt: '2026-08-17T10:00:00.000Z',
+      })),
       restoreEntry: jest.fn(),
       listEntries: jest.fn(),
       getEntry: jest.fn(),
@@ -276,7 +369,10 @@ describe('addEntry / updateEntry / deleteEntry / restoreEntry', () => {
     const store = useLedgerStore()
     store.setHouseholdContext('home_xxxxxxxx', 'user_self')
     store.entries = [makeEntry()]
-    const ok = await store.deleteEntry({ entryId: 'ledger_xxxxxxxxxxxxx_1', operationToken: 'op_xxxxxxxxxxxxx_1' })
+    const ok = await store.deleteEntry({
+      entryId: 'ledger_xxxxxxxxxxxxx_1',
+      operationToken: 'op_xxxxxxxxxxxxx_1',
+    })
     expect(ok).toBe(true)
     expect(store.entries).toHaveLength(0)
   })
@@ -299,7 +395,10 @@ describe('addEntry / updateEntry / deleteEntry / restoreEntry', () => {
     const store = useLedgerStore()
     store.setHouseholdContext('home_xxxxxxxx', 'user_self')
     store.deletedEntries = [entry]
-    const result = await store.restoreEntry({ entryId: 'ledger_xxxxxxxxxxxxx_1', operationToken: 'op_xxxxxxxxxxxxx_1' })
+    const result = await store.restoreEntry({
+      entryId: 'ledger_xxxxxxxxxxxxx_1',
+      operationToken: 'op_xxxxxxxxxxxxx_1',
+    })
     expect(result).not.toBeNull()
     expect(store.entries).toHaveLength(1)
     expect(store.deletedEntries).toHaveLength(0)
@@ -324,7 +423,12 @@ describe('addCategory / updateCategoryHidden / removeCategory', () => {
     })
     const store = useLedgerStore()
     store.setHouseholdContext('home_xxxxxxxx', 'user_self')
-    const result = await store.addCategory({ requestId: 'req_xxxxxxxxxxxxx_1', name: '宠物', iconKey: 'tag', colorKey: 'gray' })
+    const result = await store.addCategory({
+      requestId: 'req_xxxxxxxxxxxxx_1',
+      name: '宠物',
+      iconKey: 'tag',
+      colorKey: 'gray',
+    })
     expect(result).not.toBeNull()
     expect(store.categories).toHaveLength(1)
   })
@@ -339,7 +443,11 @@ describe('addCategory / updateCategoryHidden / removeCategory', () => {
       listEntries: jest.fn(),
       getEntry: jest.fn(),
       addCategory: jest.fn(),
-      updateCategory: jest.fn(async () => ({ status: 'UPDATED' as const, category: makeCategory(), hiddenByMe: true })),
+      updateCategory: jest.fn(async () => ({
+        status: 'UPDATED' as const,
+        category: makeCategory(),
+        hiddenByMe: true,
+      })),
       removeCategory: jest.fn(),
       getStats: jest.fn(),
     })
@@ -360,7 +468,10 @@ describe('addCategory / updateCategoryHidden / removeCategory', () => {
       getEntry: jest.fn(),
       addCategory: jest.fn(),
       updateCategory: jest.fn(),
-      removeCategory: jest.fn(async () => ({ status: 'REMOVED' as const, categoryId: 'cat_xxxxxxxxxxxxx_1' })),
+      removeCategory: jest.fn(async () => ({
+        status: 'REMOVED' as const,
+        categoryId: 'cat_xxxxxxxxxxxxx_1',
+      })),
       getStats: jest.fn(),
     })
     const store = useLedgerStore()
@@ -403,7 +514,11 @@ describe('addCategory / updateCategoryHidden / removeCategory', () => {
       deleteEntry: jest.fn(),
       restoreEntry: jest.fn(),
       listEntries: jest.fn(),
-      getEntry: jest.fn(async () => ({ status: 'LEDGER_NOT_FOUND' as const, retryable: false, errorMessage: '账目不存在' })),
+      getEntry: jest.fn(async () => ({
+        status: 'LEDGER_NOT_FOUND' as const,
+        retryable: false,
+        errorMessage: '账目不存在',
+      })),
       addCategory: jest.fn(),
       updateCategory: jest.fn(),
       removeCategory: jest.fn(),
@@ -428,7 +543,11 @@ describe('addCategory / updateCategoryHidden / removeCategory', () => {
       listEntries: jest.fn(),
       getEntry: jest.fn(),
       addCategory: jest.fn(),
-      updateCategory: jest.fn(async () => ({ status: 'UPDATED' as const, category: renamed, hiddenByMe: false })),
+      updateCategory: jest.fn(async () => ({
+        status: 'UPDATED' as const,
+        category: renamed,
+        hiddenByMe: false,
+      })),
       removeCategory: jest.fn(),
       getStats: jest.fn(),
     })
@@ -452,7 +571,11 @@ describe('addCategory / updateCategoryHidden / removeCategory', () => {
       listEntries: jest.fn(),
       getEntry: jest.fn(),
       addCategory: jest.fn(),
-      updateCategory: jest.fn(async () => ({ status: 'LEDGER_CATEGORY_NAME_TAKEN' as const, retryable: false, errorMessage: '类目名已被使用' })),
+      updateCategory: jest.fn(async () => ({
+        status: 'LEDGER_CATEGORY_NAME_TAKEN' as const,
+        retryable: false,
+        errorMessage: '类目名已被使用',
+      })),
       removeCategory: jest.fn(),
       getStats: jest.fn(),
     })
@@ -483,10 +606,25 @@ describe('getters', () => {
     const store = useLedgerStore()
     store.setHouseholdContext('home_xxxxxxxx', '')
     store.entries = [
-      makeEntry({ id: 'e1', payer: { memberKey: 'user_self', nickname: '我', avatar: { kind: 'builtin', id: 'person-neutral' } } as any }),
-      makeEntry({ id: 'e2', categoryId: 'cat_xxxxxxxxxxxxx_2', payer: { memberKey: 'user_other', nickname: 'TA', avatar: { kind: 'builtin', id: 'person-neutral' } } as any }),
+      makeEntry({
+        id: 'e1',
+        payer: {
+          memberKey: 'user_self',
+          nickname: '我',
+          avatar: { kind: 'builtin', id: 'person-neutral' },
+        } as any,
+      }),
+      makeEntry({
+        id: 'e2',
+        categoryId: 'cat_xxxxxxxxxxxxx_2',
+        payer: {
+          memberKey: 'user_other',
+          nickname: 'TA',
+          avatar: { kind: 'builtin', id: 'person-neutral' },
+        } as any,
+      }),
     ]
-    store.payerMode = 'me'  // 在前端不再过滤（云端处理）
+    store.payerMode = 'me' // 在前端不再过滤（云端处理）
     expect(store.monthEntries.map((e) => e.id).sort()).toEqual(['e1', 'e2'])
     store.payerMode = 'all'
     store.selectedCategoryIds = ['cat_xxxxxxxxxxxxx_2']

@@ -1,14 +1,20 @@
 // 记一笔页（PRD 008 / Plan U5）视图描述器。
 // 模式：纯函数 + 不持有状态。负责表单初始草稿、校验、tab 切换文案。
 
-import type { LedgerEntryType, LedgerCategory } from '../../../types/ledger'
-import { LEDGER_AMOUNT_MAX_CENTS, validateLedgerNote, validateLedgerCategoryName, toLedgerMonthString } from '../../../utils/ledger-validators'
+import type { LedgerEntryType, LedgerCategory, LedgerMealPeriod } from '../../../types/ledger'
+import {
+  LEDGER_AMOUNT_MAX_CENTS,
+  validateLedgerNote,
+  validateLedgerCategoryName,
+  toLedgerMonthString,
+} from '../../../utils/ledger-validators'
 
 /** 草稿：所有字段都是原始输入（金额是分、occurredAt 是 ISO 字符串）。 */
 export interface AddEntryDraft {
   type: LedgerEntryType
   amountCents: number
   categoryId: string | null
+  mealPeriod: LedgerMealPeriod | null
   payerMemberKey: string
   note: string
   occurredAt: string
@@ -21,6 +27,7 @@ export function defaultAddDraft(overrides: Partial<AddEntryDraft> = {}): AddEntr
     type: 'expense',
     amountCents: 0,
     categoryId: null,
+    mealPeriod: null,
     // 'self' 是字面量占位符；ledger 云端 addEntry 在收到时映射到 identityKey。
     // 前端不需要持有可能变化的家庭 memberKey 字符串。
     payerMemberKey: 'self',
@@ -36,6 +43,7 @@ export function draftFromEntry(input: {
   type: LedgerEntryType
   amountCents: number
   categoryId: string
+  mealPeriod: LedgerMealPeriod | null
   payer: { memberKey: string }
   note: string
   occurredAt: string
@@ -45,12 +53,46 @@ export function draftFromEntry(input: {
     type: input.type,
     amountCents: input.amountCents,
     categoryId: input.categoryId,
+    mealPeriod: input.mealPeriod,
     // 入参的 memberKey 是真实值（user_xxx）；fallback 才用 'self' 让云端映射。
     payerMemberKey: input.payer.memberKey || 'self',
     note: input.note,
     occurredAt: input.occurredAt,
     receiptMediaId: input.receiptMediaId,
   }
+}
+
+/** 餐次选项固定为早/午/晚三种，不扩展夜宵等额外分类。 */
+export const MEAL_PERIOD_OPTIONS: ReadonlyArray<{ value: LedgerMealPeriod; label: string }> = [
+  { value: 'breakfast', label: '早餐' },
+  { value: 'lunch', label: '午餐' },
+  { value: 'dinner', label: '晚餐' },
+]
+
+/** 按设备本地时间推断默认餐次：00-10 早餐、11-15 午餐、16-23 晚餐。 */
+export function inferMealPeriod(now: Date = new Date()): LedgerMealPeriod {
+  const hour = now.getHours()
+  if (hour < 11) return 'breakfast'
+  if (hour < 16) return 'lunch'
+  return 'dinner'
+}
+
+/** 餐次是可选项：点击新选项时切换，重复点击已选项时清空。 */
+export function toggleMealPeriod(
+  current: LedgerMealPeriod | null,
+  next: LedgerMealPeriod,
+): LedgerMealPeriod | null {
+  return current === next ? null : next
+}
+
+/** 仅系统预设 dining 类目启用餐次；已有手动选择不得被重复推断覆盖。 */
+export function resolveMealPeriodAfterCategoryChange(
+  category: Pick<LedgerCategory, 'key' | 'isCustom'> | undefined,
+  current: LedgerMealPeriod | null,
+  now: Date = new Date(),
+): LedgerMealPeriod | null {
+  if (!category || category.key !== 'dining' || category.isCustom) return null
+  return current ?? inferMealPeriod(now)
 }
 
 /** 表单校验。返回 errors 列表；空表示通过。 */
@@ -86,7 +128,8 @@ export function validateDraft(draft: AddEntryDraft): DraftErrors {
       const now = Date.now()
       const maxFuture = now + 24 * 60 * 60 * 1000
       if (d.getTime() > maxFuture) errors.time = '时间不能晚于明天'
-      if (d.getTime() < new Date('2020-01-01T00:00:00.000Z').getTime()) errors.time = '时间不能早于 2020-01-01'
+      if (d.getTime() < new Date('2020-01-01T00:00:00.000Z').getTime())
+        errors.time = '时间不能早于 2020-01-01'
     }
   }
   return errors
@@ -116,7 +159,11 @@ export interface PayerOption {
   label: string
 }
 
-export function describePayerOptions(selfMemberKey: string, otherMemberKey: string, memberCount: number): PayerOption[] {
+export function describePayerOptions(
+  selfMemberKey: string,
+  otherMemberKey: string,
+  memberCount: number,
+): PayerOption[] {
   if (memberCount < 2) return [{ value: selfMemberKey, label: '我' }]
   return [
     { value: selfMemberKey, label: '我' },
@@ -162,7 +209,12 @@ export function validateCategoryDraft(draft: CategoryDraft): string | null {
  *  `<wd-icon :name="x">` 会渲染成空白——用户反馈"只有教育和其它有图标"。
  *  改用 `firstChar` 字段显示类目首字（餐/交/居/娱/医/服/教/它），保证 8 个都能看见。
  *  `iconName` 字段保留作历史兼容（如果将来 Wot UI 补齐字符，模板可以优先用 iconName）。 */
-export const CATEGORY_ICON_OPTIONS: Array<{ value: string; label: string; iconName: string; firstChar: string }> = [
+export const CATEGORY_ICON_OPTIONS: Array<{
+  value: string
+  label: string
+  iconName: string
+  firstChar: string
+}> = [
   { value: 'fork-spoon', label: '餐饮', iconName: 'fork-spoon', firstChar: '餐' },
   { value: 'car', label: '交通', iconName: 'car', firstChar: '交' },
   { value: 'house', label: '居家', iconName: 'house', firstChar: '居' },

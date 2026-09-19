@@ -15,12 +15,20 @@
       <text class="ledger-home__state-copy">账本挂在家庭下，先去创建一个吧。</text>
     </view>
 
-    <view v-else-if="isLoading && entries.length === 0" class="ledger-home__state" data-testid="ledger-home-loading">
+    <view
+      v-else-if="isLoading && entries.length === 0"
+      class="ledger-home__state"
+      data-testid="ledger-home-loading"
+    >
       <wd-loading color="#267A5A" size="40rpx" />
       <text class="ledger-home__state-title">正在加载账本</text>
     </view>
 
-    <view v-else-if="loadError && entries.length === 0" class="ledger-home__state" data-testid="ledger-home-error">
+    <view
+      v-else-if="loadError && entries.length === 0"
+      class="ledger-home__state"
+      data-testid="ledger-home-error"
+    >
       <wd-icon name="warning" size="64rpx" color="#BA564B" />
       <text class="ledger-home__state-title">暂时无法读取</text>
       <text class="ledger-home__state-copy">{{ loadError }}</text>
@@ -60,7 +68,9 @@
         <view class="ledger-home__numbers">
           <view class="ledger-home__number-block">
             <text class="ledger-home__number-label">支出</text>
-            <text class="ledger-home__number-value ledger-home__number-value--expense">{{ expenseText }}</text>
+            <text class="ledger-home__number-value ledger-home__number-value--expense">
+              {{ expenseText }}
+            </text>
           </view>
           <view class="ledger-home__number-block">
             <text class="ledger-home__number-label">收入</text>
@@ -71,7 +81,11 @@
             <text class="ledger-home__number-value">{{ netText }}</text>
           </view>
         </view>
-        <view v-if="categorySlices.length > 0" class="ledger-home__bar" data-testid="ledger-home-category-bar">
+        <view
+          v-if="categorySlices.length > 0"
+          class="ledger-home__bar"
+          data-testid="ledger-home-category-bar"
+        >
           <view
             v-for="slice in categorySlices"
             :key="slice.categoryId"
@@ -90,14 +104,12 @@
         <!-- 2.1 日期筛选：单行 pill 形（[‹] 月份 [›] [📅]），整体走 mint 浅底圆角，
              比 wd-button 三个并排更紧凑。 -->
         <view class="ledger-home__date-bar">
-          <view
-            class="ledger-home__date-step"
-            data-testid="ledger-home-date-prev"
-            @click="onShiftMonth(-1)"
-          >
+          <view class="ledger-home__date-step" data-testid="ledger-home-date-prev" @click="onShiftMonth(-1)">
             <text class="ledger-home__date-step-icon">‹</text>
           </view>
-          <text class="ledger-home__date-current" data-testid="ledger-home-month-current">{{ monthLabel }}</text>
+          <text class="ledger-home__date-current" data-testid="ledger-home-month-current">
+            {{ monthLabel }}
+          </text>
           <view
             class="ledger-home__date-step"
             :class="{ 'ledger-home__date-step--disabled': !canGoNextMonth }"
@@ -130,7 +142,10 @@
           >
             <wd-icon name="filter" size="32rpx" :color="isFilterActive ? '#267A5A' : '#74847D'" />
             <text class="ledger-home__filter-btn-text">{{ filterLabel }}</text>
-            <view class="ledger-home__filter-btn-arrow" :class="{ 'ledger-home__filter-btn-arrow--open': filterSheetOpen }">
+            <view
+              class="ledger-home__filter-btn-arrow"
+              :class="{ 'ledger-home__filter-btn-arrow--open': filterSheetOpen }"
+            >
               <wd-icon name="caret-down" size="24rpx" :color="isFilterActive ? '#267A5A' : '#74847D'" />
             </view>
           </view>
@@ -142,21 +157,30 @@
           <view
             v-if="visibleCategories.length > 0"
             class="ledger-home__category-toggle"
-            :class="{ 'ledger-home__category-toggle--active': categoryOpen || selectedCategoryIds.length > 0 }"
+            :class="{
+              'ledger-home__category-toggle--active': categoryOpen || selectedCategoryIds.length > 0,
+            }"
             data-testid="ledger-home-category-toggle"
             @click="categoryOpen = !categoryOpen"
           >
             <text class="ledger-home__category-toggle-text">
-              {{ selectedCategoryIds.length > 0
-                ? `类目（已选 ${selectedCategoryIds.length}）`
-                : '按类目筛选' }}
+              {{
+                selectedCategoryIds.length > 0 ? `类目（已选 ${selectedCategoryIds.length}）` : '按类目筛选'
+              }}
             </text>
-            <view class="ledger-home__category-toggle-arrow" :class="{ 'ledger-home__category-toggle-arrow--open': categoryOpen }">
+            <view
+              class="ledger-home__category-toggle-arrow"
+              :class="{ 'ledger-home__category-toggle-arrow--open': categoryOpen }"
+            >
               <wd-icon name="caret-down" size="28rpx" color="#74847D" />
             </view>
           </view>
-          </view>
-        <view v-if="visibleCategories.length > 0 && categoryOpen" class="ledger-home__category-body" data-testid="ledger-home-category-body">
+        </view>
+        <view
+          v-if="visibleCategories.length > 0 && categoryOpen"
+          class="ledger-home__category-body"
+          data-testid="ledger-home-category-body"
+        >
           <CategoryFilterChips
             :categories="visibleCategories"
             :selected-ids="selectedCategoryIds"
@@ -181,7 +205,12 @@
       </view>
 
       <view v-else class="ledger-home__list" data-testid="ledger-home-list">
-        <view v-for="(group, groupIdx) in entryGroups" :key="group.label" class="ledger-home__group" :data-testid="`ledger-home-group-${groupIdx}`">
+        <view
+          v-for="(group, groupIdx) in entryGroups"
+          :key="group.label"
+          class="ledger-home__group"
+          :data-testid="`ledger-home-group-${groupIdx}`"
+        >
           <text class="ledger-home__group-label">{{ group.label }}</text>
           <view v-for="entry in group.entries" :key="entry.id" class="ledger-home__entry-wrap">
             <LedgerEntryItem
@@ -191,7 +220,12 @@
             />
           </view>
         </view>
-        <view v-if="loadMoreError" class="ledger-home__more-error" data-testid="ledger-home-more-error" @click="loadMore">
+        <view
+          v-if="loadMoreError"
+          class="ledger-home__more-error"
+          data-testid="ledger-home-more-error"
+          @click="loadMore"
+        >
           <text>加载更早账目失败，点这里重试</text>
         </view>
         <wd-loadmore
@@ -208,7 +242,11 @@
       </view>
 
       <!-- ⑤ 已删除区：date 模式（已选具体日期）时折叠（KTD6） -->
-      <view v-if="!selectedDate && deletedEntries.length > 0" class="ledger-home__deleted" data-testid="ledger-home-deleted">
+      <view
+        v-if="!selectedDate && deletedEntries.length > 0"
+        class="ledger-home__deleted"
+        data-testid="ledger-home-deleted"
+      >
         <view class="ledger-home__deleted-header" @click="showDeleted = !showDeleted">
           <text class="ledger-home__deleted-title">已删除（{{ deletedEntries.length }}）</text>
           <text class="ledger-home__deleted-toggle">{{ showDeleted ? '收起' : '展开' }}</text>
@@ -227,7 +265,9 @@
 
     <!-- 日期和筛选弹层出现时由页面阻塞公共入口，避免两个操作层同时可用。 -->
     <GlobalQuickAdd
-      :visible="Boolean(householdId) && !(isLoading && entries.length === 0) && !(loadError && entries.length === 0)"
+      :visible="
+        Boolean(householdId) && !(isLoading && entries.length === 0) && !(loadError && entries.length === 0)
+      "
       :blocked="isDatePickerOpen || filterSheetOpen"
       with-tab-bar
     />
@@ -294,7 +334,9 @@
             type="primary"
             data-testid="ledger-home-filter-confirm"
             @click="onConfirmFilter"
-          >确认</wd-button>
+          >
+            确认
+          </wd-button>
         </view>
       </view>
     </wd-popup>
@@ -339,7 +381,21 @@ const householdStore = useHouseholdStore()
 const ledgerStore = useLedgerStore()
 
 const { household, profile } = storeToRefs(householdStore)
-const { entries, deletedEntries, categories, stats, currentMonth, payerMode, typeFilter, selectedDate, selectedCategoryIds, phase, errorMessage, entriesHasMore, isLoadingMore } = storeToRefs(ledgerStore)
+const {
+  entries,
+  deletedEntries,
+  categories,
+  stats,
+  currentMonth,
+  payerMode,
+  typeFilter,
+  selectedDate,
+  selectedCategoryIds,
+  phase,
+  errorMessage,
+  entriesHasMore,
+  isLoadingMore,
+} = storeToRefs(ledgerStore)
 
 const showDeleted = ref(false)
 // 类目筛选默认折叠——避免 8+ 个 chip 一直占两行视觉空间；点"按类目筛选"展开。
@@ -356,6 +412,7 @@ const draftPayerMode = ref<'all' | 'me' | 'other'>('all')
 const draftTypeFilter = ref<'all' | 'expense' | 'income'>('all')
 const fallbackCategoryView: CategoryView = {
   id: '__fallback__',
+  key: '',
   name: '其他',
   iconKey: 'tag',
   colorKey: 'gray',
@@ -371,7 +428,9 @@ const householdId = computed(() => household.value?.id || '')
 // 但云端真的返回空账目（家庭刚建好没记过账）时 phase 也是 'idle'，会被误判成 loading 一直转圈。
 const isLoading = computed(() => phase.value === 'loading')
 const loadError = computed(() => errorMessage.value)
-const loadMoreError = computed(() => Boolean(errorMessage.value && entries.value.length > 0 && !isLoadingMore.value))
+const loadMoreError = computed(() =>
+  Boolean(errorMessage.value && entries.value.length > 0 && !isLoadingMore.value),
+)
 
 const monthLabel = computed(() => {
   // date 模式显示具体日期；月模式显示月份
@@ -381,13 +440,25 @@ const monthLabel = computed(() => {
 // 防御性 try-catch：store getter 在 reactive 链路初始化时偶尔会 throw，computed 缓存 undefined
 // 会让模板里的 .length / .map 直接报错。兜底成空数组/空对象，模板里其他 v-if 会处理空态。
 const monthEntries = computed<LedgerEntrySummary[]>(() => {
-  try { return ledgerStore.monthEntries } catch { return [] }
+  try {
+    return ledgerStore.monthEntries
+  } catch {
+    return []
+  }
 })
 const entryGroups = computed(() => {
-  try { return groupEntriesByDate(monthEntries.value) } catch { return [] }
+  try {
+    return groupEntriesByDate(monthEntries.value)
+  } catch {
+    return []
+  }
 })
 const categoryMap = computed<Record<string, LedgerCategory>>(() => {
-  try { return ledgerStore.categoriesMap } catch { return {} }
+  try {
+    return ledgerStore.categoriesMap
+  } catch {
+    return {}
+  }
 })
 const categoryViewMap = computed<Record<string, CategoryView>>(() => {
   const m: Record<string, CategoryView> = {}
@@ -398,21 +469,28 @@ const categoryViewMap = computed<Record<string, CategoryView>>(() => {
 const visibleCategories = computed<CategoryView[]>(() => {
   try {
     return (ledgerStore.visibleCategories || []).map((c) => describeCategory(c))
-  } catch { return [] }
+  } catch {
+    return []
+  }
 })
 const categorySlices = computed(() => {
   if (!stats.value) return []
   try {
-    return describeCategorySlices(stats.value.byCategory, stats.value.monthExpenseCents, Array.isArray(categories.value) ? categories.value : [])
-  } catch { return [] }
+    return describeCategorySlices(
+      stats.value.byCategory,
+      stats.value.monthExpenseCents,
+      Array.isArray(categories.value) ? categories.value : [],
+    )
+  } catch {
+    return []
+  }
 })
 
 const expenseText = computed(() => formatYuan(stats.value?.monthExpenseCents || 0, { sign: 'none' }))
 const incomeText = computed(() => formatYuan(stats.value?.monthIncomeCents || 0, { sign: 'none' }))
 const netText = computed(() => {
   const sign = (stats.value?.netCents || 0) >= 0 ? '+' : '-'
-  return formatYuan(Math.abs(stats.value?.netCents || 0), { sign: 'none' })
-    .replace('¥', `¥${sign}`)
+  return formatYuan(Math.abs(stats.value?.netCents || 0), { sign: 'none' }).replace('¥', `¥${sign}`)
 })
 
 const payerOptions = computed(() => {
@@ -436,7 +514,8 @@ const filterLabel = computed(() => {
   // payer 维度中文
   const payerLabel = payerMode.value === 'me' ? '我付的' : payerMode.value === 'other' ? '对方付的' : '全部人'
   // type 维度中文
-  const typeLabel = typeFilter.value === 'expense' ? '支出' : typeFilter.value === 'income' ? '收入' : '全部类型'
+  const typeLabel =
+    typeFilter.value === 'expense' ? '支出' : typeFilter.value === 'income' ? '收入' : '全部类型'
   return `${payerLabel} · ${typeLabel}`
 })
 
@@ -557,10 +636,7 @@ watch(
   () => currentMonth.value,
   async () => {
     if (!householdId.value) return
-    await Promise.all([
-      ledgerStore.loadEntries(),
-      ledgerStore.loadStats(currentMonth.value),
-    ])
+    await Promise.all([ledgerStore.loadEntries(), ledgerStore.loadStats(currentMonth.value)])
   },
 )
 
@@ -661,8 +737,13 @@ onReachBottom(() => {
     padding: 8rpx 16rpx;
     border-radius: 999rpx;
     background: $brand-color-action;
-    transition: transform .12s ease, opacity .15s ease;
-    &:active { transform: scale(.98); opacity: .78; }
+    transition:
+      transform 0.12s ease,
+      opacity 0.15s ease;
+    &:active {
+      transform: scale(0.98);
+      opacity: 0.78;
+    }
   }
   &__ai-entry-text {
     color: #fff;
@@ -680,9 +761,11 @@ onReachBottom(() => {
     min-height: 64rpx;
     padding: 8rpx 12rpx;
     border-radius: 16rpx;
-    transition: transform .12s ease, background .15s ease;
+    transition:
+      transform 0.12s ease,
+      background 0.15s ease;
     &:active {
-      transform: scale(.99);
+      transform: scale(0.99);
       background: #effbf5;
     }
   }
@@ -726,7 +809,7 @@ onReachBottom(() => {
     margin-top: 24rpx;
     overflow: hidden;
     border-radius: 999rpx;
-    background: rgba($brand-color-border, .5);
+    background: rgba($brand-color-border, 0.5);
   }
   &__bar-slice {
     height: 100%;
@@ -763,15 +846,17 @@ onReachBottom(() => {
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    transition: background .15s ease, opacity .15s ease;
+    transition:
+      background 0.15s ease,
+      opacity 0.15s ease;
   }
   // 用 class 后缀单独声明 .disabled —— BEM 守门脚本限制连续 &。
   &__date-step--disabled {
-    opacity: .35;
+    opacity: 0.35;
   }
   // active 但非 disabled：分开写两条选择器
   &__date-step:active {
-    background: rgba($brand-color-primary, .15);
+    background: rgba($brand-color-primary, 0.15);
   }
   &__date-step-icon {
     color: $brand-color-text;
@@ -791,7 +876,7 @@ onReachBottom(() => {
     width: 1rpx;
     height: 28rpx;
     margin: 0 4rpx;
-    background: rgba($brand-color-text, .12);
+    background: rgba($brand-color-text, 0.12);
   }
   // 2.2 主体筛选单按钮（设计稿 C）：合并旧版"人+类型"两行 chip 成一按钮，
   // 弹层里再展开选。active 态用主色浅底 + 深绿文字表明有筛选生效。
@@ -803,8 +888,8 @@ onReachBottom(() => {
     padding: 14rpx 22rpx;
     border: 2rpx solid transparent;
     border-radius: 999rpx;
-    background: rgba($brand-color-border, .35);
-    transition: all .18s ease;
+    background: rgba($brand-color-border, 0.35);
+    transition: all 0.18s ease;
     min-width: 0;
     &--active {
       border-color: $brand-color-primary;
@@ -817,7 +902,7 @@ onReachBottom(() => {
     font-size: 25rpx;
     font-weight: 500;
     line-height: 1.2;
-    transition: color .15s ease;
+    transition: color 0.15s ease;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -832,7 +917,7 @@ onReachBottom(() => {
     justify-content: center;
     width: 28rpx;
     height: 28rpx;
-    transition: transform .2s ease;
+    transition: transform 0.2s ease;
     flex-shrink: 0;
     &--open {
       transform: rotate(180deg);
@@ -856,8 +941,8 @@ onReachBottom(() => {
     padding: 14rpx 22rpx;
     border: 2rpx solid transparent;
     border-radius: 999rpx;
-    background: rgba($brand-color-border, .35);
-    transition: all .18s ease;
+    background: rgba($brand-color-border, 0.35);
+    transition: all 0.18s ease;
     min-width: 0;
     &--active {
       border-color: $brand-color-primary;
@@ -869,7 +954,7 @@ onReachBottom(() => {
     color: $brand-color-text-secondary;
     font-size: 25rpx;
     font-weight: 500;
-    transition: color .15s ease;
+    transition: color 0.15s ease;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -885,7 +970,7 @@ onReachBottom(() => {
     margin-left: 4rpx;
     width: 28rpx;
     height: 28rpx;
-    transition: transform .2s ease;
+    transition: transform 0.2s ease;
     flex-shrink: 0;
     &--open {
       transform: rotate(180deg);
@@ -899,7 +984,7 @@ onReachBottom(() => {
     gap: 12rpx;
     margin-top: 16rpx;
     padding-top: 16rpx;
-    border-top: 1rpx solid rgba($brand-color-text, .08);
+    border-top: 1rpx solid rgba($brand-color-text, 0.08);
     width: 100%;
   }
   &__category-clear {
@@ -909,9 +994,9 @@ onReachBottom(() => {
     margin-top: 4rpx;
     color: $brand-color-accent;
     font-size: 23rpx;
-    transition: opacity .15s ease;
+    transition: opacity 0.15s ease;
     &:active {
-      opacity: .6;
+      opacity: 0.6;
     }
   }
   /* 列表 */
@@ -922,7 +1007,7 @@ onReachBottom(() => {
     padding: 80rpx 32rpx;
     border: 2rpx dashed $brand-color-border;
     border-radius: $brand-radius-card;
-    background: rgba($brand-color-surface, .6);
+    background: rgba($brand-color-surface, 0.6);
     text-align: center;
   }
   &__empty-title {
@@ -953,7 +1038,8 @@ onReachBottom(() => {
     font-size: 24rpx;
     font-weight: 600;
   }
-  &__entry-wrap { }
+  &__entry-wrap {
+  }
   &__more-error {
     padding: 24rpx;
     color: $brand-color-action;
@@ -1019,9 +1105,9 @@ onReachBottom(() => {
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    transition: background .15s ease;
+    transition: background 0.15s ease;
     &:active {
-      background: rgba($brand-color-border, .4);
+      background: rgba($brand-color-border, 0.4);
     }
   }
   &__sheet-close-icon {
@@ -1053,8 +1139,8 @@ onReachBottom(() => {
     padding: 14rpx 26rpx;
     border: 2rpx solid transparent;
     border-radius: 999rpx;
-    background: rgba($brand-color-border, .35);
-    transition: all .15s ease;
+    background: rgba($brand-color-border, 0.35);
+    transition: all 0.15s ease;
     &--active {
       border-color: $brand-color-primary;
       background: #e8f8f1;
@@ -1065,7 +1151,7 @@ onReachBottom(() => {
     font-size: 26rpx;
     font-weight: 500;
     line-height: 1.2;
-    transition: color .15s ease;
+    transition: color 0.15s ease;
   }
   &__sheet-chip--active &__sheet-chip-text {
     color: $brand-color-action;

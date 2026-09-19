@@ -24,6 +24,7 @@ import type {
   LedgerEntryDetail,
   LedgerEntrySummary,
   LedgerEntryType,
+  LedgerMealPeriod,
   LedgerStats,
   ListLedgerEntriesRequest,
   ListLedgerEntriesResult,
@@ -55,7 +56,8 @@ let currentSelfMemberKey = ''
 
 export class LedgerCloudError extends Error {
   constructor(
-    public readonly code: 'CONFIGURATION' | 'PLATFORM_UNSUPPORTED' | 'TIMEOUT' | 'TEMPORARY_FAILURE' | 'INVALID_RESPONSE',
+    public readonly code:
+      'CONFIGURATION' | 'PLATFORM_UNSUPPORTED' | 'TIMEOUT' | 'TEMPORARY_FAILURE' | 'INVALID_RESPONSE',
     message: string,
   ) {
     super(message)
@@ -109,12 +111,35 @@ export function setLedgerCloudTimeoutForTesting(ms: number): void {
 }
 
 const ENTRY_TYPE_SET: ReadonlySet<string> = new Set(['expense', 'income'])
+const MEAL_PERIOD_SET: ReadonlySet<string> = new Set(['breakfast', 'lunch', 'dinner'])
 const ICON_KEY_SET: ReadonlySet<string> = new Set([
-  'fork-spoon', 'car', 'house', 'gamepad', 'first-aid', 'shopping-bag', 'book', 'tag',
+  'fork-spoon',
+  'car',
+  'house',
+  'gamepad',
+  'first-aid',
+  'shopping-bag',
+  'book',
+  'tag',
 ])
 const COLOR_KEY_SET: ReadonlySet<string> = new Set([
-  'amber', 'blue', 'mint', 'coral', 'red', 'purple', 'teal', 'gray',
+  'amber',
+  'blue',
+  'mint',
+  'coral',
+  'red',
+  'purple',
+  'teal',
+  'gray',
 ])
+
+/** 云端滚动发布期间的原始账目允许缺少餐次；归一化后才成为严格页面类型。 */
+export type LedgerEntryResponse = Omit<LedgerEntrySummary, 'mealPeriod'> & {
+  mealPeriod?: LedgerMealPeriod | null
+}
+type LedgerEntryDetailResponse = Omit<LedgerEntryDetail, 'mealPeriod'> & {
+  mealPeriod?: LedgerMealPeriod | null
+}
 
 function isPersonAvatarId(value: unknown): value is string {
   return typeof value === 'string' && (value === 'person-neutral' || /^person-\d{2}$/.test(value))
@@ -131,13 +156,20 @@ function isPayerDisplay(value: unknown): boolean {
   return true
 }
 
-export function isLedgerEntry(value: unknown): value is LedgerEntrySummary {
+export function isLedgerEntry(value: unknown): value is LedgerEntryResponse {
   if (!value || typeof value !== 'object') return false
   const v = value as Record<string, unknown>
   if (typeof v.id !== 'string') return false
   if (typeof v.type !== 'string' || !ENTRY_TYPE_SET.has(v.type)) return false
   if (typeof v.amountCents !== 'number' || !Number.isInteger(v.amountCents) || v.amountCents < 0) return false
   if (typeof v.categoryId !== 'string') return false
+  // 分阶段发布时旧云端可能缺字段；缺省/null 可兼容，未知值必须拒绝。
+  if (
+    v.mealPeriod !== undefined &&
+    v.mealPeriod !== null &&
+    (typeof v.mealPeriod !== 'string' || !MEAL_PERIOD_SET.has(v.mealPeriod))
+  )
+    return false
   if (typeof v.note !== 'string') return false
   if (typeof v.occurredAt !== 'string') return false
   if (v.receiptMediaId !== null && typeof v.receiptMediaId !== 'string') return false
@@ -147,7 +179,7 @@ export function isLedgerEntry(value: unknown): value is LedgerEntrySummary {
   return true
 }
 
-function isLedgerEntryDetail(value: unknown): value is LedgerEntryDetail {
+function isLedgerEntryDetail(value: unknown): value is LedgerEntryDetailResponse {
   if (!isLedgerEntry(value)) return false
   const v = value as unknown as Record<string, unknown>
   if (typeof v.updatedAt !== 'string') return false
@@ -183,10 +215,14 @@ function isLedgerStats(value: unknown): value is LedgerStats {
   return true
 }
 
-function isLedgerFailure(value: unknown): value is { status: string; retryable: boolean; errorMessage: string } {
+function isLedgerFailure(
+  value: unknown,
+): value is { status: string; retryable: boolean; errorMessage: string } {
   if (!value || typeof value !== 'object') return false
   const v = value as Record<string, unknown>
-  return typeof v.status === 'string' && typeof v.retryable === 'boolean' && typeof v.errorMessage === 'string'
+  return (
+    typeof v.status === 'string' && typeof v.retryable === 'boolean' && typeof v.errorMessage === 'string'
+  )
 }
 
 async function callLedger<TRes>(action: string, payload: Record<string, unknown>): Promise<TRes> {
@@ -227,7 +263,14 @@ async function callLedger<TRes>(action: string, payload: Record<string, unknown>
 
 function ensureEntry(value: unknown, action: string): LedgerEntrySummary {
   if (!isLedgerEntry(value)) throw new LedgerCloudError('INVALID_RESPONSE', `${action} 响应格式错误`)
-  return value
+  return normaliseEntryMealPeriod(value)
+}
+
+/** 把旧响应缺失的餐次补成 null，调用页面无需区分 undefined。 */
+function normaliseEntryMealPeriod(entry: LedgerEntryDetailResponse): LedgerEntryDetail
+function normaliseEntryMealPeriod(entry: LedgerEntryResponse): LedgerEntrySummary
+function normaliseEntryMealPeriod(entry: LedgerEntryResponse): LedgerEntrySummary {
+  return { ...entry, mealPeriod: entry.mealPeriod ?? null }
 }
 
 function ensureCategory(value: unknown, action: string): LedgerCategory {
@@ -235,13 +278,17 @@ function ensureCategory(value: unknown, action: string): LedgerCategory {
   return value
 }
 
-export async function initLedgerCategoriesInCloud(input: InitLedgerCategoriesRequest): Promise<InitLedgerCategoriesResult> {
+export async function initLedgerCategoriesInCloud(
+  input: InitLedgerCategoriesRequest,
+): Promise<InitLedgerCategoriesResult> {
   const raw = await callLedger<unknown>('initCategories', { ...input })
-  if (!raw || typeof raw !== 'object') throw new LedgerCloudError('INVALID_RESPONSE', 'initCategories 响应格式错误')
+  if (!raw || typeof raw !== 'object')
+    throw new LedgerCloudError('INVALID_RESPONSE', 'initCategories 响应格式错误')
   const r = raw as Record<string, unknown>
   if (r.status === 'INITED' && Array.isArray(r.categories)) {
     const cats = r.categories.filter(isLedgerCategory)
-    if (cats.length !== r.categories.length) throw new LedgerCloudError('INVALID_RESPONSE', 'initCategories 响应包含非法类目')
+    if (cats.length !== r.categories.length)
+      throw new LedgerCloudError('INVALID_RESPONSE', 'initCategories 响应包含非法类目')
     return { status: 'INITED', categories: cats as LedgerCategory[] }
   }
   if (isLedgerFailure(r)) return r as unknown as InitLedgerCategoriesResult
@@ -259,9 +306,12 @@ export async function addLedgerEntryInCloud(input: AddLedgerEntryRequest): Promi
   throw new LedgerCloudError('INVALID_RESPONSE', 'addEntry 响应格式错误')
 }
 
-export async function updateLedgerEntryInCloud(input: UpdateLedgerEntryRequest): Promise<UpdateLedgerEntryResult> {
+export async function updateLedgerEntryInCloud(
+  input: UpdateLedgerEntryRequest,
+): Promise<UpdateLedgerEntryResult> {
   const raw = await callLedger<unknown>('updateEntry', { ...input })
-  if (!raw || typeof raw !== 'object') throw new LedgerCloudError('INVALID_RESPONSE', 'updateEntry 响应格式错误')
+  if (!raw || typeof raw !== 'object')
+    throw new LedgerCloudError('INVALID_RESPONSE', 'updateEntry 响应格式错误')
   const r = raw as Record<string, unknown>
   if (r.status === 'UPDATED') {
     return { status: 'UPDATED', entry: ensureEntry(r.entry, 'updateEntry') }
@@ -270,9 +320,12 @@ export async function updateLedgerEntryInCloud(input: UpdateLedgerEntryRequest):
   throw new LedgerCloudError('INVALID_RESPONSE', 'updateEntry 响应格式错误')
 }
 
-export async function deleteLedgerEntryInCloud(input: DeleteLedgerEntryRequest): Promise<DeleteLedgerEntryResult> {
+export async function deleteLedgerEntryInCloud(
+  input: DeleteLedgerEntryRequest,
+): Promise<DeleteLedgerEntryResult> {
   const raw = await callLedger<unknown>('deleteEntry', { ...input })
-  if (!raw || typeof raw !== 'object') throw new LedgerCloudError('INVALID_RESPONSE', 'deleteEntry 响应格式错误')
+  if (!raw || typeof raw !== 'object')
+    throw new LedgerCloudError('INVALID_RESPONSE', 'deleteEntry 响应格式错误')
   const r = raw as Record<string, unknown>
   if (r.status === 'DELETED' && typeof r.entryId === 'string' && typeof r.deletedAt === 'string') {
     return { status: 'DELETED', entryId: r.entryId, deletedAt: r.deletedAt }
@@ -281,9 +334,12 @@ export async function deleteLedgerEntryInCloud(input: DeleteLedgerEntryRequest):
   throw new LedgerCloudError('INVALID_RESPONSE', 'deleteEntry 响应格式错误')
 }
 
-export async function restoreLedgerEntryInCloud(input: RestoreLedgerEntryRequest): Promise<RestoreLedgerEntryResult> {
+export async function restoreLedgerEntryInCloud(
+  input: RestoreLedgerEntryRequest,
+): Promise<RestoreLedgerEntryResult> {
   const raw = await callLedger<unknown>('restoreEntry', { ...input })
-  if (!raw || typeof raw !== 'object') throw new LedgerCloudError('INVALID_RESPONSE', 'restoreEntry 响应格式错误')
+  if (!raw || typeof raw !== 'object')
+    throw new LedgerCloudError('INVALID_RESPONSE', 'restoreEntry 响应格式错误')
   const r = raw as Record<string, unknown>
   if (r.status === 'RESTORED') {
     return { status: 'RESTORED', entry: ensureEntry(r.entry, 'restoreEntry') }
@@ -292,19 +348,24 @@ export async function restoreLedgerEntryInCloud(input: RestoreLedgerEntryRequest
   throw new LedgerCloudError('INVALID_RESPONSE', 'restoreEntry 响应格式错误')
 }
 
-export async function listLedgerEntriesInCloud(input: ListLedgerEntriesRequest): Promise<ListLedgerEntriesResult> {
+export async function listLedgerEntriesInCloud(
+  input: ListLedgerEntriesRequest,
+): Promise<ListLedgerEntriesResult> {
   const raw = await callLedger<unknown>('listEntries', { ...input })
-  if (!raw || typeof raw !== 'object') throw new LedgerCloudError('INVALID_RESPONSE', 'listEntries 响应格式错误')
+  if (!raw || typeof raw !== 'object')
+    throw new LedgerCloudError('INVALID_RESPONSE', 'listEntries 响应格式错误')
   const r = raw as Record<string, unknown>
   if (r.status === 'LISTED' && Array.isArray(r.entries) && Array.isArray(r.deletedEntries)) {
-    const entries = r.entries.filter(isLedgerEntry) as LedgerEntrySummary[]
-    const deletedEntries = r.deletedEntries.filter(isLedgerEntry) as LedgerEntrySummary[]
-    if (entries.length !== r.entries.length || deletedEntries.length !== r.deletedEntries.length) {
+    const validEntries = r.entries.filter(isLedgerEntry)
+    const validDeletedEntries = r.deletedEntries.filter(isLedgerEntry)
+    if (validEntries.length !== r.entries.length || validDeletedEntries.length !== r.deletedEntries.length) {
       throw new LedgerCloudError('INVALID_RESPONSE', 'listEntries 响应包含非法账目')
     }
     if (r.hasMore !== undefined && typeof r.hasMore !== 'boolean') {
       throw new LedgerCloudError('INVALID_RESPONSE', 'listEntries 分页信息错误')
     }
+    const entries = validEntries.map(normaliseEntryMealPeriod)
+    const deletedEntries = validDeletedEntries.map(normaliseEntryMealPeriod)
     return { status: 'LISTED', entries, deletedEntries, hasMore: r.hasMore as boolean | undefined }
   }
   if (isLedgerFailure(r)) return r as unknown as ListLedgerEntriesResult
@@ -316,15 +377,18 @@ export async function getLedgerEntryInCloud(input: GetLedgerEntryRequest): Promi
   if (!raw || typeof raw !== 'object') throw new LedgerCloudError('INVALID_RESPONSE', 'getEntry 响应格式错误')
   const r = raw as Record<string, unknown>
   if (r.status === 'LOADED' && isLedgerEntryDetail(r.detail)) {
-    return { status: 'LOADED', detail: r.detail }
+    return { status: 'LOADED', detail: normaliseEntryMealPeriod(r.detail) }
   }
   if (isLedgerFailure(r)) return r as unknown as GetLedgerEntryResult
   throw new LedgerCloudError('INVALID_RESPONSE', 'getEntry 响应格式错误')
 }
 
-export async function addLedgerCategoryInCloud(input: AddLedgerCategoryRequest): Promise<AddLedgerCategoryResult> {
+export async function addLedgerCategoryInCloud(
+  input: AddLedgerCategoryRequest,
+): Promise<AddLedgerCategoryResult> {
   const raw = await callLedger<unknown>('addCategory', { ...input })
-  if (!raw || typeof raw !== 'object') throw new LedgerCloudError('INVALID_RESPONSE', 'addCategory 响应格式错误')
+  if (!raw || typeof raw !== 'object')
+    throw new LedgerCloudError('INVALID_RESPONSE', 'addCategory 响应格式错误')
   const r = raw as Record<string, unknown>
   if (r.status === 'ADDED') {
     return { status: 'ADDED', category: ensureCategory(r.category, 'addCategory') }
@@ -333,9 +397,12 @@ export async function addLedgerCategoryInCloud(input: AddLedgerCategoryRequest):
   throw new LedgerCloudError('INVALID_RESPONSE', 'addCategory 响应格式错误')
 }
 
-export async function updateLedgerCategoryInCloud(input: UpdateLedgerCategoryRequest): Promise<UpdateLedgerCategoryResult> {
+export async function updateLedgerCategoryInCloud(
+  input: UpdateLedgerCategoryRequest,
+): Promise<UpdateLedgerCategoryResult> {
   const raw = await callLedger<unknown>('updateCategory', { ...input })
-  if (!raw || typeof raw !== 'object') throw new LedgerCloudError('INVALID_RESPONSE', 'updateCategory 响应格式错误')
+  if (!raw || typeof raw !== 'object')
+    throw new LedgerCloudError('INVALID_RESPONSE', 'updateCategory 响应格式错误')
   const r = raw as Record<string, unknown>
   if (r.status === 'UPDATED' && isLedgerCategory(r.category) && typeof r.hiddenByMe === 'boolean') {
     return { status: 'UPDATED', category: r.category, hiddenByMe: r.hiddenByMe }
@@ -344,9 +411,12 @@ export async function updateLedgerCategoryInCloud(input: UpdateLedgerCategoryReq
   throw new LedgerCloudError('INVALID_RESPONSE', 'updateCategory 响应格式错误')
 }
 
-export async function removeLedgerCategoryInCloud(input: RemoveLedgerCategoryRequest): Promise<RemoveLedgerCategoryResult> {
+export async function removeLedgerCategoryInCloud(
+  input: RemoveLedgerCategoryRequest,
+): Promise<RemoveLedgerCategoryResult> {
   const raw = await callLedger<unknown>('removeCategory', { ...input })
-  if (!raw || typeof raw !== 'object') throw new LedgerCloudError('INVALID_RESPONSE', 'removeCategory 响应格式错误')
+  if (!raw || typeof raw !== 'object')
+    throw new LedgerCloudError('INVALID_RESPONSE', 'removeCategory 响应格式错误')
   const r = raw as Record<string, unknown>
   if (r.status === 'REMOVED' && typeof r.categoryId === 'string') {
     return { status: 'REMOVED', categoryId: r.categoryId }
@@ -368,17 +438,28 @@ export async function getLedgerStatsInCloud(input: GetLedgerStatsRequest): Promi
 
 export function humaniseLedgerError(code: string | undefined): string {
   switch (code) {
-    case 'LEDGER_NOT_FOUND': return '账目不存在'
-    case 'LEDGER_FORBIDDEN': return '你已经没有这个家庭的访问权限'
-    case 'LEDGER_CATEGORY_NOT_FOUND': return '类目不存在'
-    case 'LEDGER_CATEGORY_IN_USE': return '该类目下还有账目，请先修改或删除账目'
-    case 'LEDGER_CATEGORY_NAME_TAKEN': return '类目名已被使用'
-    case 'LEDGER_PAYER_NOT_MEMBER': return '付款人不是当前家庭成员'
-    case 'LEDGER_AMOUNT_INVALID': return '金额格式不正确'
-    case 'LEDGER_TIME_INVALID': return '时间格式不正确'
-    case 'LEDGER_RECEIPT_TOO_LARGE': return '凭证图过大'
-    case 'LEDGER_TEMPORARY_FAILURE': return '暂时无法完成账目操作，请稍后重试'
-    default: return '请求暂时无法处理，请稍后重试'
+    case 'LEDGER_NOT_FOUND':
+      return '账目不存在'
+    case 'LEDGER_FORBIDDEN':
+      return '你已经没有这个家庭的访问权限'
+    case 'LEDGER_CATEGORY_NOT_FOUND':
+      return '类目不存在'
+    case 'LEDGER_CATEGORY_IN_USE':
+      return '该类目下还有账目，请先修改或删除账目'
+    case 'LEDGER_CATEGORY_NAME_TAKEN':
+      return '类目名已被使用'
+    case 'LEDGER_PAYER_NOT_MEMBER':
+      return '付款人不是当前家庭成员'
+    case 'LEDGER_AMOUNT_INVALID':
+      return '金额格式不正确'
+    case 'LEDGER_TIME_INVALID':
+      return '时间格式不正确'
+    case 'LEDGER_RECEIPT_TOO_LARGE':
+      return '凭证图过大'
+    case 'LEDGER_TEMPORARY_FAILURE':
+      return '暂时无法完成账目操作，请稍后重试'
+    default:
+      return '请求暂时无法处理，请稍后重试'
   }
 }
 

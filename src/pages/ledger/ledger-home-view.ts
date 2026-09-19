@@ -2,7 +2,13 @@
 // 模式与 task/task-detail-view 一致：纯函数 + 不持有状态。
 // 负责：类目色/图标映射、成员筛选、日期分组、金额格式化（消费 utils/format）。
 
-import type { LedgerCategory, LedgerCategoryColorKey, LedgerCategoryIconKey, LedgerEntrySummary } from '../../types/ledger'
+import type {
+  LedgerCategory,
+  LedgerCategoryColorKey,
+  LedgerCategoryIconKey,
+  LedgerEntrySummary,
+  LedgerMealPeriod,
+} from '../../types/ledger'
 import { formatDateGroupLabel, formatYuan } from '../../utils/format'
 
 /** 8 个类目 colorKey → CSS hex 颜色值。
@@ -10,14 +16,14 @@ import { formatDateGroupLabel, formatYuan } from '../../utils/format'
  *  - 其余颜色用同色系低饱和度，避开过于鲜艳的纯色
  */
 export const LEDGER_CATEGORY_COLOR_MAP: Record<LedgerCategoryColorKey, string> = {
-  amber: '#E8B647',   // 餐饮
-  blue: '#4A90E2',    // 交通
-  mint: '#5BBE93',    // 居家
-  coral: '#E78A7B',   // 娱乐
-  red: '#BA564B',     // 医疗
-  purple: '#9575CD',  // 服饰
-  teal: '#4DB6AC',    // 教育
-  gray: '#74847D',    // 其他
+  amber: '#E8B647', // 餐饮
+  blue: '#4A90E2', // 交通
+  mint: '#5BBE93', // 居家
+  coral: '#E78A7B', // 娱乐
+  red: '#BA564B', // 医疗
+  purple: '#9575CD', // 服饰
+  teal: '#4DB6AC', // 教育
+  gray: '#74847D', // 其他
 }
 
 /** 8 个类目 iconKey → Wot UI 内置 icon 名称。
@@ -25,18 +31,19 @@ export const LEDGER_CATEGORY_COLOR_MAP: Record<LedgerCategoryColorKey, string> =
  */
 export const LEDGER_CATEGORY_ICON_MAP: Record<LedgerCategoryIconKey, string> = {
   'fork-spoon': 'fork-spoon',
-  'car': 'car',
-  'house': 'house',
-  'gamepad': 'gamepad',
+  car: 'car',
+  house: 'house',
+  gamepad: 'gamepad',
   'first-aid': 'first-aid',
   'shopping-bag': 'shopping-bag',
-  'book': 'book',
-  'tag': 'tag',
+  book: 'book',
+  tag: 'tag',
 }
 
 /** 类目显示名（固定 8 个 + 自定义沿用 name 字段） */
 export interface CategoryView {
   id: string
+  key: string
   name: string
   iconKey: LedgerCategoryIconKey
   colorKey: LedgerCategoryColorKey
@@ -48,6 +55,7 @@ export interface CategoryView {
 export function describeCategory(c: LedgerCategory): CategoryView {
   return {
     id: c.id,
+    key: c.key,
     name: c.name,
     iconKey: c.iconKey,
     colorKey: c.colorKey,
@@ -55,6 +63,21 @@ export function describeCategory(c: LedgerCategory): CategoryView {
     colorHex: LEDGER_CATEGORY_COLOR_MAP[c.colorKey] || LEDGER_CATEGORY_COLOR_MAP.gray,
     iconName: LEDGER_CATEGORY_ICON_MAP[c.iconKey] || LEDGER_CATEGORY_ICON_MAP.tag,
   }
+}
+
+/** 餐次展示文案；历史空值或未知值都不展示占位。 */
+export function describeMealPeriodLabel(mealPeriod: LedgerMealPeriod | null | undefined): string {
+  if (mealPeriod === 'breakfast') return '早餐'
+  if (mealPeriod === 'lunch') return '午餐'
+  if (mealPeriod === 'dinner') return '晚餐'
+  return ''
+}
+
+/** 列表类目名：有餐次时追加说明，历史账目保持原类目名。 */
+export function describeEntryCategoryName(entry: LedgerEntrySummary, category: CategoryView): string {
+  if (category.key !== 'dining' || category.isCustom) return category.name
+  const mealLabel = describeMealPeriodLabel(entry.mealPeriod)
+  return mealLabel ? `${category.name} · ${mealLabel}` : category.name
 }
 
 /** 把账目按 "今天 / 昨天 / 2026-08-15" 等日期标签分组。 */
@@ -79,7 +102,9 @@ export function groupEntriesByDate(entries: LedgerEntrySummary[], now: Date = ne
 
 /** 格式化金额显示。type=expense 用 -，type=income 用 +，合计/统计用 'none' */
 export function describeEntryAmount(type: 'expense' | 'income', amountCents: number): string {
-  return formatYuan(amountCents, { sign: type === 'expense' ? 'expense' : type === 'income' ? 'income' : 'none' })
+  return formatYuan(amountCents, {
+    sign: type === 'expense' ? 'expense' : type === 'income' ? 'income' : 'none',
+  })
 }
 
 /** 付款人字段描述。type 决定动词（付款 / 入账），hasLeft 决定是否追加"（已离开）"。

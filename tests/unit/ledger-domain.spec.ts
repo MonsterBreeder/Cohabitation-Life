@@ -19,7 +19,15 @@ const {
 
 type RecordMap = Map<string, any>
 
-function createRepository(initial: { entries?: any[]; categories?: any[]; operations?: any[]; households?: any[]; users?: any[] } = {}) {
+function createRepository(
+  initial: {
+    entries?: any[]
+    categories?: any[]
+    operations?: any[]
+    households?: any[]
+    users?: any[]
+  } = {},
+) {
   const entries: RecordMap = new Map((initial.entries || []).map((e) => [e._id, structuredClone(e)]))
   const categories: RecordMap = new Map((initial.categories || []).map((c) => [c._id, structuredClone(c)]))
   const operations: RecordMap = new Map((initial.operations || []).map((o) => [o._id, structuredClone(o)]))
@@ -83,8 +91,11 @@ function createRepository(initial: { entries?: any[]; categories?: any[]; operat
       if (filter?.limit > 0) list = list.slice(0, filter.limit)
       return list
     }),
-    countEntriesByCategory: jest.fn(async (categoryId: string, householdId: string) =>
-      [...entries.values()].filter((e) => e.categoryId === categoryId && e.householdId === householdId && !e.deletedAt).length,
+    countEntriesByCategory: jest.fn(
+      async (categoryId: string, householdId: string) =>
+        [...entries.values()].filter(
+          (e) => e.categoryId === categoryId && e.householdId === householdId && !e.deletedAt,
+        ).length,
     ),
     getProfileForMember: jest.fn(async (memberKey: string) => {
       if (memberKey && memberKey.startsWith('user_')) return users.get(memberKey) || null
@@ -146,9 +157,12 @@ function createRepository(initial: { entries?: any[]; categories?: any[]; operat
         },
       }
       const result = await work(transaction)
-      entries.clear(); entryDraft.forEach((v, k) => entries.set(k, v))
-      operations.clear(); opDraft.forEach((v, k) => operations.set(k, v))
-      categories.clear(); catDraft.forEach((v, k) => categories.set(k, v))
+      entries.clear()
+      entryDraft.forEach((v, k) => entries.set(k, v))
+      operations.clear()
+      opDraft.forEach((v, k) => operations.set(k, v))
+      categories.clear()
+      catDraft.forEach((v, k) => categories.set(k, v))
       return result
     }),
   }
@@ -161,9 +175,11 @@ const OTHER = 'user_other'
 const NOW = new Date('2026-08-17T10:00:00.000Z')
 
 function makeDependencies(overrides: any = {}) {
-  const repo = overrides.repository || createRepository({
-    households: [{ _id: HOUSEHOLD_ID, name: '我们的小家', memberKeys: [SELF, OTHER] }],
-  })
+  const repo =
+    overrides.repository ||
+    createRepository({
+      households: [{ _id: HOUSEHOLD_ID, name: '我们的小家', memberKeys: [SELF, OTHER] }],
+    })
   return {
     identityKey: SELF,
     selfMemberKey: SELF,
@@ -197,42 +213,201 @@ describe('addEntry', () => {
   it('creates entry with valid input', async () => {
     const repo = createRepository({
       households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF, OTHER] }],
-      categories: [{ _id: 'cat_xxxxxxxxxxxxx_dining', householdId: HOUSEHOLD_ID, key: 'dining', name: '餐饮', iconKey: 'fork-spoon', colorKey: 'amber', isCustom: false, sortOrder: 0 }],
+      categories: [
+        {
+          _id: 'cat_xxxxxxxxxxxxx_dining',
+          householdId: HOUSEHOLD_ID,
+          key: 'dining',
+          name: '餐饮',
+          iconKey: 'fork-spoon',
+          colorKey: 'amber',
+          isCustom: false,
+          sortOrder: 0,
+        },
+      ],
     })
     const deps = makeDependencies({ repository: repo })
-    const result = await addEntry({
-      requestId: 'req_xxxxxxxxxxx_add_1',
-      operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxadd_1',
-      type: 'expense',
-      amountCents: 5000,
-      categoryId: 'cat_xxxxxxxxxxxxx_dining',
-      payerMemberKey: SELF,
-      note: '买菜',
-      occurredAt: NOW.toISOString(),
-      receiptMediaId: null,
-    }, deps)
+    const result = await addEntry(
+      {
+        requestId: 'req_xxxxxxxxxxx_add_1',
+        operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxadd_1',
+        type: 'expense',
+        amountCents: 5000,
+        categoryId: 'cat_xxxxxxxxxxxxx_dining',
+        payerMemberKey: SELF,
+        note: '买菜',
+        occurredAt: NOW.toISOString(),
+        receiptMediaId: null,
+      },
+      deps,
+    )
     expect(result.status).toBe('ADDED')
     expect(result.entry.amountCents).toBe(5000)
     expect(result.entry.note).toBe('买菜')
+    // 旧客户端没有餐次字段时，云端必须补成 null，保证历史调用继续可用。
+    expect(result.entry.mealPeriod).toBeNull()
+  })
+
+  // 餐次只属于系统预设餐饮类目；同名自定义类目也不能绕过稳定 key 校验。
+  it.each(['breakfast', 'lunch', 'dinner'])(
+    'saves valid meal period %s for the preset dining category',
+    async (mealPeriod) => {
+      const repo = createRepository({
+        households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF, OTHER] }],
+        categories: [
+          {
+            _id: 'cat_xxxxxxxxxxxxx_dining',
+            householdId: HOUSEHOLD_ID,
+            key: 'dining',
+            name: '餐饮',
+            iconKey: 'fork-spoon',
+            colorKey: 'amber',
+            isCustom: false,
+            sortOrder: 0,
+          },
+        ],
+      })
+      const result = await addEntry(
+        {
+          requestId: `req_xxxxxxxxxxx_meal_${mealPeriod}`,
+          type: 'expense',
+          amountCents: 2800,
+          categoryId: 'cat_xxxxxxxxxxxxx_dining',
+          payerMemberKey: SELF,
+          mealPeriod,
+          note: '午饭',
+          occurredAt: NOW.toISOString(),
+          receiptMediaId: null,
+        },
+        makeDependencies({ repository: repo }),
+      )
+
+      expect(result.entry.mealPeriod).toBe(mealPeriod)
+    },
+  )
+
+  it('rejects a meal period for a non-dining category', async () => {
+    const repo = createRepository({
+      households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF, OTHER] }],
+      categories: [
+        {
+          _id: 'cat_xxxxxxxxxxxxx_transport',
+          householdId: HOUSEHOLD_ID,
+          key: 'transport',
+          name: '交通',
+          iconKey: 'car',
+          colorKey: 'blue',
+          isCustom: false,
+          sortOrder: 1,
+        },
+      ],
+    })
+
+    await expect(
+      addEntry(
+        {
+          requestId: 'req_xxxxxxxxxxx_meal_2',
+          type: 'expense',
+          amountCents: 2800,
+          categoryId: 'cat_xxxxxxxxxxxxx_transport',
+          payerMemberKey: SELF,
+          mealPeriod: 'dinner',
+          note: '',
+          occurredAt: NOW.toISOString(),
+          receiptMediaId: null,
+        },
+        makeDependencies({ repository: repo }),
+      ),
+    ).rejects.toThrow(/LEDGER_INVALID_REQUEST/)
+  })
+
+  it('rejects an unknown meal period and a custom category using the dining name', async () => {
+    const diningCategory = {
+      _id: 'cat_xxxxxxxxxxxxx_dining',
+      householdId: HOUSEHOLD_ID,
+      key: 'dining',
+      name: '餐饮',
+      iconKey: 'fork-spoon',
+      colorKey: 'amber',
+      isCustom: false,
+    }
+    const customDining = {
+      _id: 'cat_xxxxxxxxxxxxx_custom',
+      householdId: HOUSEHOLD_ID,
+      key: 'custom-dining',
+      name: '餐饮',
+      iconKey: 'tag',
+      colorKey: 'gray',
+      isCustom: true,
+    }
+    const repo = createRepository({
+      households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF] }],
+      categories: [diningCategory, customDining],
+    })
+    const baseInput = {
+      type: 'expense',
+      amountCents: 1800,
+      payerMemberKey: SELF,
+      note: '',
+      occurredAt: NOW.toISOString(),
+      receiptMediaId: null,
+    }
+
+    await expect(
+      addEntry(
+        {
+          ...baseInput,
+          requestId: 'req_xxxxxxxxxxx_unknown_meal',
+          categoryId: diningCategory._id,
+          mealPeriod: 'snack',
+        },
+        makeDependencies({ repository: repo }),
+      ),
+    ).rejects.toThrow(/LEDGER_INVALID_REQUEST/)
+    await expect(
+      addEntry(
+        {
+          ...baseInput,
+          requestId: 'req_xxxxxxxxxxx_custom_dining',
+          categoryId: customDining._id,
+          mealPeriod: 'lunch',
+        },
+        makeDependencies({ repository: repo }),
+      ),
+    ).rejects.toThrow(/LEDGER_INVALID_REQUEST/)
   })
 
   // 保护图中这类七位数收入：客户端放行后，云端也必须按同一上限接受。
   it('creates a seven-digit income entry', async () => {
     const repo = createRepository({
       households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF, OTHER] }],
-      categories: [{ _id: 'cat_xxxxxxxxxxxxx_dining', householdId: HOUSEHOLD_ID, key: 'dining', name: '餐饮', iconKey: 'fork-spoon', colorKey: 'amber', isCustom: false, sortOrder: 0 }],
+      categories: [
+        {
+          _id: 'cat_xxxxxxxxxxxxx_dining',
+          householdId: HOUSEHOLD_ID,
+          key: 'dining',
+          name: '餐饮',
+          iconKey: 'fork-spoon',
+          colorKey: 'amber',
+          isCustom: false,
+          sortOrder: 0,
+        },
+      ],
     })
     const deps = makeDependencies({ repository: repo })
-    const result = await addEntry({
-      requestId: 'req_xxxxxxxxxxx_income_7_digits',
-      type: 'income',
-      amountCents: 555_584_100,
-      categoryId: 'cat_xxxxxxxxxxxxx_dining',
-      payerMemberKey: SELF,
-      note: '大额收入',
-      occurredAt: NOW.toISOString(),
-      receiptMediaId: null,
-    }, deps)
+    const result = await addEntry(
+      {
+        requestId: 'req_xxxxxxxxxxx_income_7_digits',
+        type: 'income',
+        amountCents: 555_584_100,
+        categoryId: 'cat_xxxxxxxxxxxxx_dining',
+        payerMemberKey: SELF,
+        note: '大额收入',
+        occurredAt: NOW.toISOString(),
+        receiptMediaId: null,
+      },
+      deps,
+    )
     expect(result.status).toBe('ADDED')
     expect(result.entry.amountCents).toBe(555_584_100)
   })
@@ -242,19 +417,33 @@ describe('addEntry', () => {
   it('succeeds without operationToken (creation-lock uses requestId)', async () => {
     const repo = createRepository({
       households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF, OTHER] }],
-      categories: [{ _id: 'cat_xxxxxxxxxxxxx_dining', householdId: HOUSEHOLD_ID, key: 'dining', name: '餐饮', iconKey: 'fork-spoon', colorKey: 'amber', isCustom: false, sortOrder: 0 }],
+      categories: [
+        {
+          _id: 'cat_xxxxxxxxxxxxx_dining',
+          householdId: HOUSEHOLD_ID,
+          key: 'dining',
+          name: '餐饮',
+          iconKey: 'fork-spoon',
+          colorKey: 'amber',
+          isCustom: false,
+          sortOrder: 0,
+        },
+      ],
     })
     const deps = makeDependencies({ repository: repo })
-    const result = await addEntry({
-      requestId: 'req_xxxxxxxxxxx_add_no_op',
-      type: 'expense',
-      amountCents: 3500,
-      categoryId: 'cat_xxxxxxxxxxxxx_dining',
-      payerMemberKey: SELF,
-      note: '没传 operationToken 也要成功',
-      occurredAt: NOW.toISOString(),
-      receiptMediaId: null,
-    }, deps)
+    const result = await addEntry(
+      {
+        requestId: 'req_xxxxxxxxxxx_add_no_op',
+        type: 'expense',
+        amountCents: 3500,
+        categoryId: 'cat_xxxxxxxxxxxxx_dining',
+        payerMemberKey: SELF,
+        note: '没传 operationToken 也要成功',
+        occurredAt: NOW.toISOString(),
+        receiptMediaId: null,
+      },
+      deps,
+    )
     expect(result.status).toBe('ADDED')
     expect(result.entry.amountCents).toBe(3500)
   })
@@ -262,38 +451,140 @@ describe('addEntry', () => {
   it('rejects when not household member', async () => {
     const repo = createRepository({ households: [{ _id: HOUSEHOLD_ID, memberKeys: [OTHER] }] })
     const deps = makeDependencies({ repository: repo })
-    await expect(addEntry({
-      requestId: 'req_xxxxxxxxxxx_xxxxxxxxxxxxxxx1', operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxx1', type: 'expense', amountCents: 100, categoryId: 'cat_xxxxxxxxxxxxx_xxxxxxxxxxxxx_1', payerMemberKey: SELF, note: '', occurredAt: NOW.toISOString(), receiptMediaId: null,
-    }, deps)).rejects.toThrow(LedgerDomainError)
+    await expect(
+      addEntry(
+        {
+          requestId: 'req_xxxxxxxxxxx_xxxxxxxxxxxxxxx1',
+          operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxx1',
+          type: 'expense',
+          amountCents: 100,
+          categoryId: 'cat_xxxxxxxxxxxxx_xxxxxxxxxxxxx_1',
+          payerMemberKey: SELF,
+          note: '',
+          occurredAt: NOW.toISOString(),
+          receiptMediaId: null,
+        },
+        deps,
+      ),
+    ).rejects.toThrow(LedgerDomainError)
   })
 
   it('rejects when category not in household', async () => {
     const repo = createRepository({
       households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF] }],
-      categories: [{ _id: 'cat_xxxxxxxxxxxxx_other', householdId: 'home_other', key: 'dining', name: '餐饮', iconKey: 'fork-spoon', colorKey: 'amber' }],
+      categories: [
+        {
+          _id: 'cat_xxxxxxxxxxxxx_other',
+          householdId: 'home_other',
+          key: 'dining',
+          name: '餐饮',
+          iconKey: 'fork-spoon',
+          colorKey: 'amber',
+        },
+      ],
     })
     const deps = makeDependencies({ repository: repo })
-    await expect(addEntry({
-      requestId: 'req_xxxxxxxxxxx_xxxxxxxxxxxxxxx1', operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxx1', type: 'expense', amountCents: 100, categoryId: 'cat_xxxxxxxxxxxxx_other', payerMemberKey: SELF, note: '', occurredAt: NOW.toISOString(), receiptMediaId: null,
-    }, deps)).rejects.toThrow(/LEDGER_CATEGORY_NOT_FOUND/)
+    await expect(
+      addEntry(
+        {
+          requestId: 'req_xxxxxxxxxxx_xxxxxxxxxxxxxxx1',
+          operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxx1',
+          type: 'expense',
+          amountCents: 100,
+          categoryId: 'cat_xxxxxxxxxxxxx_other',
+          payerMemberKey: SELF,
+          note: '',
+          occurredAt: NOW.toISOString(),
+          receiptMediaId: null,
+        },
+        deps,
+      ),
+    ).rejects.toThrow(/LEDGER_CATEGORY_NOT_FOUND/)
   })
 
   it('rejects when payer not a member', async () => {
     const repo = createRepository({
       households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF] }],
-      categories: [{ _id: 'cat_xxxxxxxxxxxxx_xxxxxxxxxxxxx_1', householdId: HOUSEHOLD_ID, key: 'dining', name: '餐饮', iconKey: 'fork-spoon', colorKey: 'amber' }],
+      categories: [
+        {
+          _id: 'cat_xxxxxxxxxxxxx_xxxxxxxxxxxxx_1',
+          householdId: HOUSEHOLD_ID,
+          key: 'dining',
+          name: '餐饮',
+          iconKey: 'fork-spoon',
+          colorKey: 'amber',
+        },
+      ],
     })
     const deps = makeDependencies({ repository: repo })
-    await expect(addEntry({
-      requestId: 'req_xxxxxxxxxxx_xxxxxxxxxxxxxxx1', operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxx1', type: 'expense', amountCents: 100, categoryId: 'cat_xxxxxxxxxxxxx_xxxxxxxxxxxxx_1', payerMemberKey: 'user_stranger', note: '', occurredAt: NOW.toISOString(), receiptMediaId: null,
-    }, deps)).rejects.toThrow(/LEDGER_PAYER_NOT_MEMBER/)
+    await expect(
+      addEntry(
+        {
+          requestId: 'req_xxxxxxxxxxx_xxxxxxxxxxxxxxx1',
+          operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxx1',
+          type: 'expense',
+          amountCents: 100,
+          categoryId: 'cat_xxxxxxxxxxxxx_xxxxxxxxxxxxx_1',
+          payerMemberKey: 'user_stranger',
+          note: '',
+          occurredAt: NOW.toISOString(),
+          receiptMediaId: null,
+        },
+        deps,
+      ),
+    ).rejects.toThrow(/LEDGER_PAYER_NOT_MEMBER/)
   })
 
   it('rejects invalid amount (zero / negative / non-integer)', async () => {
     const deps = makeDependencies()
-    await expect(addEntry({ requestId: 'r_xxxxxxxxxxxxxx', operationToken: 'o_xxxxxxxxxxxxxx', type: 'expense', amountCents: 0, categoryId: 'c_xxxxxxxxxxxxxx', payerMemberKey: SELF, note: '', occurredAt: NOW.toISOString(), receiptMediaId: null }, deps)).rejects.toThrow(/LEDGER_AMOUNT_INVALID/)
-    await expect(addEntry({ requestId: 'r_xxxxxxxxxxxxxx', operationToken: 'o_xxxxxxxxxxxxxx', type: 'expense', amountCents: -1, categoryId: 'c_xxxxxxxxxxxxxx', payerMemberKey: SELF, note: '', occurredAt: NOW.toISOString(), receiptMediaId: null }, deps)).rejects.toThrow(/LEDGER_AMOUNT_INVALID/)
-    await expect(addEntry({ requestId: 'r_xxxxxxxxxxxxxx', operationToken: 'o_xxxxxxxxxxxxxx', type: 'expense', amountCents: 1.5, categoryId: 'c_xxxxxxxxxxxxxx', payerMemberKey: SELF, note: '', occurredAt: NOW.toISOString(), receiptMediaId: null }, deps)).rejects.toThrow(/LEDGER_AMOUNT_INVALID/)
+    await expect(
+      addEntry(
+        {
+          requestId: 'r_xxxxxxxxxxxxxx',
+          operationToken: 'o_xxxxxxxxxxxxxx',
+          type: 'expense',
+          amountCents: 0,
+          categoryId: 'c_xxxxxxxxxxxxxx',
+          payerMemberKey: SELF,
+          note: '',
+          occurredAt: NOW.toISOString(),
+          receiptMediaId: null,
+        },
+        deps,
+      ),
+    ).rejects.toThrow(/LEDGER_AMOUNT_INVALID/)
+    await expect(
+      addEntry(
+        {
+          requestId: 'r_xxxxxxxxxxxxxx',
+          operationToken: 'o_xxxxxxxxxxxxxx',
+          type: 'expense',
+          amountCents: -1,
+          categoryId: 'c_xxxxxxxxxxxxxx',
+          payerMemberKey: SELF,
+          note: '',
+          occurredAt: NOW.toISOString(),
+          receiptMediaId: null,
+        },
+        deps,
+      ),
+    ).rejects.toThrow(/LEDGER_AMOUNT_INVALID/)
+    await expect(
+      addEntry(
+        {
+          requestId: 'r_xxxxxxxxxxxxxx',
+          operationToken: 'o_xxxxxxxxxxxxxx',
+          type: 'expense',
+          amountCents: 1.5,
+          categoryId: 'c_xxxxxxxxxxxxxx',
+          payerMemberKey: SELF,
+          note: '',
+          occurredAt: NOW.toISOString(),
+          receiptMediaId: null,
+        },
+        deps,
+      ),
+    ).rejects.toThrow(/LEDGER_AMOUNT_INVALID/)
   })
 })
 
@@ -313,7 +604,14 @@ describe('updateEntry / deleteEntry / restoreEntry', () => {
     updatedAt: NOW.toISOString(),
     deletedAt: null,
   }
-  const baseCategory = { _id: 'cat_xxxxxxxxxxxxx_dining', householdId: HOUSEHOLD_ID, key: 'dining', name: '餐饮', iconKey: 'fork-spoon', colorKey: 'amber' }
+  const baseCategory = {
+    _id: 'cat_xxxxxxxxxxxxx_dining',
+    householdId: HOUSEHOLD_ID,
+    key: 'dining',
+    name: '餐饮',
+    iconKey: 'fork-spoon',
+    colorKey: 'amber',
+  }
 
   it('updateEntry succeeds for own entry', async () => {
     const repo = createRepository({
@@ -322,11 +620,168 @@ describe('updateEntry / deleteEntry / restoreEntry', () => {
       entries: [baseEntry],
     })
     const deps = makeDependencies({ repository: repo })
-    const result = await updateEntry({
-      entryId: 'entry_xxxxxxxxxxxx_1', operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxup_1', amountCents: 8000, categoryId: 'cat_xxxxxxxxxxxxx_dining', note: '买菜改', occurredAt: NOW.toISOString(), receiptMediaId: null,
-    }, deps)
+    const result = await updateEntry(
+      {
+        entryId: 'entry_xxxxxxxxxxxx_1',
+        operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxup_1',
+        amountCents: 8000,
+        categoryId: 'cat_xxxxxxxxxxxxx_dining',
+        note: '买菜改',
+        occurredAt: NOW.toISOString(),
+        receiptMediaId: null,
+      },
+      deps,
+    )
     expect(result.status).toBe('UPDATED')
     expect(result.entry.amountCents).toBe(8000)
+    // 历史空值由旧客户端编辑时继续为空，不根据当前时间补写。
+    expect(result.entry.mealPeriod).toBeNull()
+  })
+
+  // 旧客户端编辑新数据时不会携带 mealPeriod，云端必须保留原餐次，不能静默清空。
+  it('updateEntry preserves the existing meal period when the field is absent', async () => {
+    const repo = createRepository({
+      households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF] }],
+      categories: [baseCategory],
+      entries: [{ ...baseEntry, mealPeriod: 'breakfast' }],
+    })
+    const result = await updateEntry(
+      {
+        entryId: 'entry_xxxxxxxxxxxx_1',
+        operationToken: 'op_xxxxxxxxxxx_meal_keep',
+        amountCents: 5200,
+        categoryId: 'cat_xxxxxxxxxxxxx_dining',
+        note: '只改金额',
+        occurredAt: NOW.toISOString(),
+        receiptMediaId: null,
+      },
+      makeDependencies({ repository: repo }),
+    )
+
+    expect(result.entry.mealPeriod).toBe('breakfast')
+  })
+
+  // 模拟旧客户端先读到早餐后暂停，新客户端把餐次改成午餐，旧请求随后只改备注。
+  // 旧请求不能把事务外读到的早餐再次写回，数据库最终必须保留午餐。
+  it('does not overwrite a concurrent meal change when an old client omits the field', async () => {
+    const repo = createRepository({
+      households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF] }],
+      categories: [baseCategory],
+      entries: [{ ...baseEntry, mealPeriod: 'breakfast' }],
+    })
+    const originalFindCategory = repo.findCategoryById.getMockImplementation()!
+    let releaseOldRequest: (() => void) | undefined
+    const oldRequestPaused = new Promise<void>((resolve) => {
+      releaseOldRequest = resolve
+    })
+    let firstLookup = true
+    repo.findCategoryById.mockImplementation(async (id: string) => {
+      if (firstLookup) {
+        firstLookup = false
+        await oldRequestPaused
+      }
+      return originalFindCategory(id)
+    })
+    const deps = makeDependencies({ repository: repo })
+    const oldClientUpdate = updateEntry(
+      {
+        entryId: baseEntry._id,
+        operationToken: 'op_xxxxxxxxxxx_old_concurrent',
+        amountCents: 5000,
+        categoryId: baseCategory._id,
+        note: '旧客户端改备注',
+        occurredAt: NOW.toISOString(),
+        receiptMediaId: null,
+      },
+      deps,
+    )
+    await Promise.resolve()
+    await updateEntry(
+      {
+        entryId: baseEntry._id,
+        operationToken: 'op_xxxxxxxxxxx_new_concurrent',
+        amountCents: 5000,
+        categoryId: baseCategory._id,
+        mealPeriod: 'lunch',
+        note: '新版改午餐',
+        occurredAt: NOW.toISOString(),
+        receiptMediaId: null,
+      },
+      deps,
+    )
+    releaseOldRequest?.()
+    const oldClientResult = await oldClientUpdate
+
+    expect((await repo.getEntry(baseEntry._id)).mealPeriod).toBe('lunch')
+    expect(oldClientResult.entry.mealPeriod).toBe('lunch')
+  })
+
+  it('updateEntry clears the meal period when switching to a non-dining category', async () => {
+    const transportCategory = {
+      _id: 'cat_xxxxxxxxxxxxx_transport',
+      householdId: HOUSEHOLD_ID,
+      key: 'transport',
+      name: '交通',
+      iconKey: 'car',
+      colorKey: 'blue',
+      isCustom: false,
+    }
+    const repo = createRepository({
+      households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF] }],
+      categories: [baseCategory, transportCategory],
+      entries: [{ ...baseEntry, mealPeriod: 'dinner' }],
+    })
+    const result = await updateEntry(
+      {
+        entryId: 'entry_xxxxxxxxxxxx_1',
+        operationToken: 'op_xxxxxxxxxxx_meal_clear',
+        amountCents: 5000,
+        categoryId: transportCategory._id,
+        note: '改成交通',
+        occurredAt: NOW.toISOString(),
+        receiptMediaId: null,
+      },
+      makeDependencies({ repository: repo }),
+    )
+
+    expect(result.entry.mealPeriod).toBeNull()
+  })
+
+  it('updateEntry accepts an explicit meal period change and explicit clearing', async () => {
+    const repo = createRepository({
+      households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF] }],
+      categories: [baseCategory],
+      entries: [{ ...baseEntry, mealPeriod: 'breakfast' }],
+    })
+    const changed = await updateEntry(
+      {
+        entryId: 'entry_xxxxxxxxxxxx_1',
+        operationToken: 'op_xxxxxxxxxxx_meal_change',
+        amountCents: 5000,
+        categoryId: baseCategory._id,
+        mealPeriod: 'lunch',
+        note: '',
+        occurredAt: NOW.toISOString(),
+        receiptMediaId: null,
+      },
+      makeDependencies({ repository: repo }),
+    )
+    expect(changed.entry.mealPeriod).toBe('lunch')
+
+    const cleared = await updateEntry(
+      {
+        entryId: 'entry_xxxxxxxxxxxx_1',
+        operationToken: 'op_xxxxxxxxxxx_meal_null',
+        amountCents: 5000,
+        categoryId: baseCategory._id,
+        mealPeriod: null,
+        note: '',
+        occurredAt: NOW.toISOString(),
+        receiptMediaId: null,
+      },
+      makeDependencies({ repository: repo }),
+    )
+    expect(cleared.entry.mealPeriod).toBeNull()
   })
 
   it('updateEntry rejects entry not in household', async () => {
@@ -336,7 +791,20 @@ describe('updateEntry / deleteEntry / restoreEntry', () => {
       entries: [{ ...baseEntry, householdId: 'home_other' }],
     })
     const deps = makeDependencies({ repository: repo })
-    await expect(updateEntry({ entryId: 'entry_xxxxxxxxxxxx_1', operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxup_1', amountCents: 8000, categoryId: 'cat_xxxxxxxxxxxxx_dining', note: '', occurredAt: NOW.toISOString(), receiptMediaId: null }, deps)).rejects.toThrow(/LEDGER_NOT_FOUND/)
+    await expect(
+      updateEntry(
+        {
+          entryId: 'entry_xxxxxxxxxxxx_1',
+          operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxup_1',
+          amountCents: 8000,
+          categoryId: 'cat_xxxxxxxxxxxxx_dining',
+          note: '',
+          occurredAt: NOW.toISOString(),
+          receiptMediaId: null,
+        },
+        deps,
+      ),
+    ).rejects.toThrow(/LEDGER_NOT_FOUND/)
   })
 
   // Bug 2：编辑记账时，付款人修改为对方时，保存后必须生效。
@@ -345,20 +813,23 @@ describe('updateEntry / deleteEntry / restoreEntry', () => {
     const repo = createRepository({
       households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF, OTHER] }],
       categories: [baseCategory],
-      entries: [baseEntry],  // baseEntry 的 payerMemberKey 是 SELF
+      entries: [baseEntry], // baseEntry 的 payerMemberKey 是 SELF
       users: [{ _id: OTHER, nickname: '对方', avatar: { kind: 'builtin', id: 'person-neutral' } }],
     })
     const deps = makeDependencies({ repository: repo })
-    const result = await updateEntry({
-      entryId: 'entry_xxxxxxxxxxxx_1',
-      operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxup_other',
-      amountCents: 5000,
-      categoryId: 'cat_xxxxxxxxxxxxx_dining',
-      payerMemberKey: 'other',
-      note: '买菜',
-      occurredAt: NOW.toISOString(),
-      receiptMediaId: null,
-    }, deps)
+    const result = await updateEntry(
+      {
+        entryId: 'entry_xxxxxxxxxxxx_1',
+        operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxup_other',
+        amountCents: 5000,
+        categoryId: 'cat_xxxxxxxxxxxxx_dining',
+        payerMemberKey: 'other',
+        note: '买菜',
+        occurredAt: NOW.toISOString(),
+        receiptMediaId: null,
+      },
+      deps,
+    )
     expect(result.status).toBe('UPDATED')
     expect(result.entry.payer.memberKey).toBe(OTHER)
     expect(result.entry.payer.nickname).toBe('对方')
@@ -367,25 +838,32 @@ describe('updateEntry / deleteEntry / restoreEntry', () => {
   // 编辑时把"对方"切回"我"：payerMemberKey='self' 映射为 identityKey。
   // 必须是创建者本人编辑（updateEntry 的权限闸），所以用 OTHER 视角去编辑 OTHER 记的账。
   it('updateEntry with payerMemberKey="self" reassigns payer to the current user', async () => {
-    const entryByOther = { ...baseEntry, payerMemberKey: OTHER, payer: { memberKey: OTHER, nickname: '对方', avatar: { kind: 'builtin', id: 'person-neutral' } } }
+    const entryByOther = {
+      ...baseEntry,
+      payerMemberKey: OTHER,
+      payer: { memberKey: OTHER, nickname: '对方', avatar: { kind: 'builtin', id: 'person-neutral' } },
+    }
     const repo = createRepository({
       households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF, OTHER] }],
       categories: [baseCategory],
       entries: [entryByOther],
     })
     const deps = { ...makeDependencies({ repository: repo }), identityKey: OTHER }
-    const result = await updateEntry({
-      entryId: 'entry_xxxxxxxxxxxx_1',
-      operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxup_self',
-      amountCents: 5000,
-      categoryId: 'cat_xxxxxxxxxxxxx_dining',
-      payerMemberKey: 'self',
-      note: '买菜',
-      occurredAt: NOW.toISOString(),
-      receiptMediaId: null,
-    }, deps)
+    const result = await updateEntry(
+      {
+        entryId: 'entry_xxxxxxxxxxxx_1',
+        operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxup_self',
+        amountCents: 5000,
+        categoryId: 'cat_xxxxxxxxxxxxx_dining',
+        payerMemberKey: 'self',
+        note: '买菜',
+        occurredAt: NOW.toISOString(),
+        receiptMediaId: null,
+      },
+      deps,
+    )
     expect(result.status).toBe('UPDATED')
-    expect(result.entry.payer.memberKey).toBe(OTHER)  // OTHER 视角调用，'self' → OTHER
+    expect(result.entry.payer.memberKey).toBe(OTHER) // OTHER 视角调用，'self' → OTHER
   })
 
   // 编辑时把 payerMemberKey 设为不在家庭里的陌生人：必须被 LEDGER_PAYER_NOT_MEMBER 拒绝。
@@ -396,16 +874,21 @@ describe('updateEntry / deleteEntry / restoreEntry', () => {
       entries: [baseEntry],
     })
     const deps = makeDependencies({ repository: repo })
-    await expect(updateEntry({
-      entryId: 'entry_xxxxxxxxxxxx_1',
-      operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxup_stranger',
-      amountCents: 5000,
-      categoryId: 'cat_xxxxxxxxxxxxx_dining',
-      payerMemberKey: 'user_stranger',
-      note: '买菜',
-      occurredAt: NOW.toISOString(),
-      receiptMediaId: null,
-    }, deps)).rejects.toThrow(/LEDGER_PAYER_NOT_MEMBER/)
+    await expect(
+      updateEntry(
+        {
+          entryId: 'entry_xxxxxxxxxxxx_1',
+          operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxup_stranger',
+          amountCents: 5000,
+          categoryId: 'cat_xxxxxxxxxxxxx_dining',
+          payerMemberKey: 'user_stranger',
+          note: '买菜',
+          occurredAt: NOW.toISOString(),
+          receiptMediaId: null,
+        },
+        deps,
+      ),
+    ).rejects.toThrow(/LEDGER_PAYER_NOT_MEMBER/)
   })
 
   // 编辑时不传 payerMemberKey：保持原 payer 不变（兼容旧调用）。
@@ -413,19 +896,22 @@ describe('updateEntry / deleteEntry / restoreEntry', () => {
     const repo = createRepository({
       households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF, OTHER] }],
       categories: [baseCategory],
-      entries: [baseEntry],  // payerMemberKey === SELF
+      entries: [baseEntry], // payerMemberKey === SELF
     })
     const deps = makeDependencies({ repository: repo })
-    const result = await updateEntry({
-      entryId: 'entry_xxxxxxxxxxxx_1',
-      operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxup_keep',
-      amountCents: 6000,
-      categoryId: 'cat_xxxxxxxxxxxxx_dining',
-      // 不传 payerMemberKey
-      note: '买菜改金额',
-      occurredAt: NOW.toISOString(),
-      receiptMediaId: null,
-    }, deps)
+    const result = await updateEntry(
+      {
+        entryId: 'entry_xxxxxxxxxxxx_1',
+        operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxup_keep',
+        amountCents: 6000,
+        categoryId: 'cat_xxxxxxxxxxxxx_dining',
+        // 不传 payerMemberKey
+        note: '买菜改金额',
+        occurredAt: NOW.toISOString(),
+        receiptMediaId: null,
+      },
+      deps,
+    )
     expect(result.status).toBe('UPDATED')
     expect(result.entry.payer.memberKey).toBe(SELF)
     expect(result.entry.amountCents).toBe(6000)
@@ -437,9 +923,15 @@ describe('updateEntry / deleteEntry / restoreEntry', () => {
       entries: [baseEntry],
     })
     const deps = makeDependencies({ repository: repo })
-    const r1 = await deleteEntry({ entryId: 'entry_xxxxxxxxxxxx_1', operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxd_1' }, deps)
+    const r1 = await deleteEntry(
+      { entryId: 'entry_xxxxxxxxxxxx_1', operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxd_1' },
+      deps,
+    )
     expect(r1.status).toBe('DELETED')
-    const r2 = await deleteEntry({ entryId: 'entry_xxxxxxxxxxxx_1', operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxd_1' }, deps)
+    const r2 = await deleteEntry(
+      { entryId: 'entry_xxxxxxxxxxxx_1', operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxd_1' },
+      deps,
+    )
     expect(r2.status).toBe('DELETED')
   })
 
@@ -447,11 +939,15 @@ describe('updateEntry / deleteEntry / restoreEntry', () => {
   it('deleteEntry rejects non-creator household member (PRD 008)', async () => {
     const repo = createRepository({
       households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF, OTHER] }],
-      entries: [baseEntry],  // baseEntry 的 payerMemberKey 是 SELF
+      entries: [baseEntry], // baseEntry 的 payerMemberKey 是 SELF
     })
     const deps = { ...makeDependencies({ repository: repo }), identityKey: OTHER }
-    await expect(deleteEntry({ entryId: 'entry_xxxxxxxxxxxx_1', operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxd_other' }, deps))
-      .rejects.toThrow(/LEDGER_FORBIDDEN/)
+    await expect(
+      deleteEntry(
+        { entryId: 'entry_xxxxxxxxxxxx_1', operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxd_other' },
+        deps,
+      ),
+    ).rejects.toThrow(/LEDGER_FORBIDDEN/)
   })
 
   // 撤销删除（restoreEntry）任何成员都可做——这条不变。
@@ -462,7 +958,10 @@ describe('updateEntry / deleteEntry / restoreEntry', () => {
       entries: [deleted],
     })
     const deps = { ...makeDependencies({ repository: repo }), identityKey: OTHER }
-    const result = await restoreEntry({ entryId: 'entry_xxxxxxxxxxxx_1', operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxr_other' }, deps)
+    const result = await restoreEntry(
+      { entryId: 'entry_xxxxxxxxxxxx_1', operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxr_other' },
+      deps,
+    )
     expect(result.status).toBe('RESTORED')
   })
 
@@ -473,7 +972,10 @@ describe('updateEntry / deleteEntry / restoreEntry', () => {
       entries: [deleted],
     })
     const deps = makeDependencies({ repository: repo })
-    const result = await restoreEntry({ entryId: 'entry_xxxxxxxxxxxx_1', operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxr_1' }, deps)
+    const result = await restoreEntry(
+      { entryId: 'entry_xxxxxxxxxxxx_1', operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxr_1' },
+      deps,
+    )
     expect(result.status).toBe('RESTORED')
   })
 })
@@ -481,12 +983,24 @@ describe('updateEntry / deleteEntry / restoreEntry', () => {
 describe('listEntries / getEntry', () => {
   const entryActive = {
     _id: 'entry_xxxxxxxxxxxxx_active',
-    householdId: HOUSEHOLD_ID, type: 'expense', amountCents: 5000, categoryId: 'cat_xxxxxxxxxxxxx_dining',
-    payerMemberKey: SELF, note: '', occurredAt: NOW.toISOString(), receiptMediaId: null,
+    householdId: HOUSEHOLD_ID,
+    type: 'expense',
+    amountCents: 5000,
+    categoryId: 'cat_xxxxxxxxxxxxx_dining',
+    payerMemberKey: SELF,
+    note: '',
+    occurredAt: NOW.toISOString(),
+    receiptMediaId: null,
     payer: { memberKey: SELF, nickname: '我', avatar: { kind: 'builtin', id: 'person-neutral' } },
-    createdAt: NOW.toISOString(), updatedAt: NOW.toISOString(), deletedAt: null,
+    createdAt: NOW.toISOString(),
+    updatedAt: NOW.toISOString(),
+    deletedAt: null,
   }
-  const entryDeleted = { ...entryActive, _id: 'entry_xxxxxxxxxxxxx_deleted', deletedAt: '2026-08-10T10:00:00.000Z' }
+  const entryDeleted = {
+    ...entryActive,
+    _id: 'entry_xxxxxxxxxxxxx_deleted',
+    deletedAt: '2026-08-10T10:00:00.000Z',
+  }
 
   it('listEntries excludes soft-deleted by default', async () => {
     const repo = createRepository({
@@ -505,7 +1019,10 @@ describe('listEntries / getEntry', () => {
       entries: [entryActive, entryDeleted],
     })
     const deps = makeDependencies({ repository: repo })
-    const result = await listEntries({ month: 'all', payerMode: 'all', categoryIds: [], includeDeleted: true }, deps)
+    const result = await listEntries(
+      { month: 'all', payerMode: 'all', categoryIds: [], includeDeleted: true },
+      deps,
+    )
     expect(result.entries).toHaveLength(1)
     expect(result.deletedEntries).toHaveLength(1)
   })
@@ -520,7 +1037,10 @@ describe('listEntries / getEntry', () => {
       entries: [entryActive, incomeEntry],
     })
     const deps = makeDependencies({ repository: repo })
-    const result = await listEntries({ month: 'all', payerMode: 'all', typeFilter: 'income', categoryIds: [] }, deps)
+    const result = await listEntries(
+      { month: 'all', payerMode: 'all', typeFilter: 'income', categoryIds: [] },
+      deps,
+    )
     expect(result.entries.map((e: any) => e.id)).toEqual(['entry_xxxxxxxxxxxx_income'])
     expect(result.entries.every((e: any) => e.type === 'income')).toBe(true)
   })
@@ -532,7 +1052,10 @@ describe('listEntries / getEntry', () => {
       entries: [entryActive, incomeEntry],
     })
     const deps = makeDependencies({ repository: repo })
-    const result = await listEntries({ month: 'all', payerMode: 'all', typeFilter: 'expense', categoryIds: [] }, deps)
+    const result = await listEntries(
+      { month: 'all', payerMode: 'all', typeFilter: 'expense', categoryIds: [] },
+      deps,
+    )
     expect(result.entries.map((e: any) => e.id)).toEqual(['entry_xxxxxxxxxxxxx_active'])
     expect(result.entries.every((e: any) => e.type === 'expense')).toBe(true)
   })
@@ -546,11 +1069,19 @@ describe('listEntries / getEntry', () => {
       receiptMediaId: index === 0 ? 'cloud://receipt-first' : null,
     }))
     const repo = createRepository({ households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF] }], entries })
-    const getTempFileUrls = jest.fn(async () => ({ 'cloud://receipt-first': 'https://temp.example/receipt-first.jpg' }))
+    const getTempFileUrls = jest.fn(async () => ({
+      'cloud://receipt-first': 'https://temp.example/receipt-first.jpg',
+    }))
     const deps = makeDependencies({ repository: repo, getTempFileUrls })
 
-    const first = await listEntries({ month: 'all', payerMode: 'all', categoryIds: [], page: 1, pageSize: 20 }, deps)
-    const second = await listEntries({ month: 'all', payerMode: 'all', categoryIds: [], page: 2, pageSize: 20 }, deps)
+    const first = await listEntries(
+      { month: 'all', payerMode: 'all', categoryIds: [], page: 1, pageSize: 20 },
+      deps,
+    )
+    const second = await listEntries(
+      { month: 'all', payerMode: 'all', categoryIds: [], page: 2, pageSize: 20 },
+      deps,
+    )
 
     expect(first.entries).toHaveLength(20)
     expect(first.hasMore).toBe(true)
@@ -573,14 +1104,23 @@ describe('listEntries / getEntry', () => {
   it('getEntry sets canEdit/canDelete=true for the creator', async () => {
     const repo = createRepository({
       households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF, OTHER] }],
-      entries: [{
-        _id: 'entry_xxxxxxxxxxxx_active',
-        householdId: HOUSEHOLD_ID,
-        type: 'expense', amountCents: 1000, categoryId: 'cat_xxxxxxxxxxxxx_dining',
-        payerMemberKey: SELF, note: '', occurredAt: NOW.toISOString(), receiptMediaId: null,
-        payer: { memberKey: SELF, nickname: '我', avatar: { kind: 'builtin', id: 'person-neutral' } },
-        createdAt: NOW.toISOString(), updatedAt: NOW.toISOString(), deletedAt: null,
-      }],
+      entries: [
+        {
+          _id: 'entry_xxxxxxxxxxxx_active',
+          householdId: HOUSEHOLD_ID,
+          type: 'expense',
+          amountCents: 1000,
+          categoryId: 'cat_xxxxxxxxxxxxx_dining',
+          payerMemberKey: SELF,
+          note: '',
+          occurredAt: NOW.toISOString(),
+          receiptMediaId: null,
+          payer: { memberKey: SELF, nickname: '我', avatar: { kind: 'builtin', id: 'person-neutral' } },
+          createdAt: NOW.toISOString(),
+          updatedAt: NOW.toISOString(),
+          deletedAt: null,
+        },
+      ],
     })
     const deps = makeDependencies({ repository: repo })
     const result = await getEntry({ entryId: 'entry_xxxxxxxxxxxx_active' }, deps)
@@ -592,14 +1132,23 @@ describe('listEntries / getEntry', () => {
   it('getEntry sets canEdit/canDelete=false for non-creator household member', async () => {
     const repo = createRepository({
       households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF, OTHER] }],
-      entries: [{
-        _id: 'entry_xxxxxxxxxxxx_active',
-        householdId: HOUSEHOLD_ID,
-        type: 'expense', amountCents: 1000, categoryId: 'cat_xxxxxxxxxxxxx_dining',
-        payerMemberKey: SELF, note: '', occurredAt: NOW.toISOString(), receiptMediaId: null,
-        payer: { memberKey: SELF, nickname: '我', avatar: { kind: 'builtin', id: 'person-neutral' } },
-        createdAt: NOW.toISOString(), updatedAt: NOW.toISOString(), deletedAt: null,
-      }],
+      entries: [
+        {
+          _id: 'entry_xxxxxxxxxxxx_active',
+          householdId: HOUSEHOLD_ID,
+          type: 'expense',
+          amountCents: 1000,
+          categoryId: 'cat_xxxxxxxxxxxxx_dining',
+          payerMemberKey: SELF,
+          note: '',
+          occurredAt: NOW.toISOString(),
+          receiptMediaId: null,
+          payer: { memberKey: SELF, nickname: '我', avatar: { kind: 'builtin', id: 'person-neutral' } },
+          createdAt: NOW.toISOString(),
+          updatedAt: NOW.toISOString(),
+          deletedAt: null,
+        },
+      ],
     })
     // 切换到 OTHER 视角调用
     const deps = { ...makeDependencies({ repository: repo }), identityKey: OTHER }
@@ -614,14 +1163,23 @@ describe('listEntries / getEntry', () => {
   it('getEntry sets isCurrentUserPayer=true when entry payer is the current user', async () => {
     const repo = createRepository({
       households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF, OTHER] }],
-      entries: [{
-        _id: 'entry_xxxxxxxxxxxx_active',
-        householdId: HOUSEHOLD_ID,
-        type: 'expense', amountCents: 1000, categoryId: 'cat_xxxxxxxxxxxxx_dining',
-        payerMemberKey: SELF, note: '', occurredAt: NOW.toISOString(), receiptMediaId: null,
-        payer: { memberKey: SELF, nickname: '我', avatar: { kind: 'builtin', id: 'person-neutral' } },
-        createdAt: NOW.toISOString(), updatedAt: NOW.toISOString(), deletedAt: null,
-      }],
+      entries: [
+        {
+          _id: 'entry_xxxxxxxxxxxx_active',
+          householdId: HOUSEHOLD_ID,
+          type: 'expense',
+          amountCents: 1000,
+          categoryId: 'cat_xxxxxxxxxxxxx_dining',
+          payerMemberKey: SELF,
+          note: '',
+          occurredAt: NOW.toISOString(),
+          receiptMediaId: null,
+          payer: { memberKey: SELF, nickname: '我', avatar: { kind: 'builtin', id: 'person-neutral' } },
+          createdAt: NOW.toISOString(),
+          updatedAt: NOW.toISOString(),
+          deletedAt: null,
+        },
+      ],
     })
     const deps = makeDependencies({ repository: repo })
     const result = await getEntry({ entryId: 'entry_xxxxxxxxxxxx_active' }, deps)
@@ -631,14 +1189,23 @@ describe('listEntries / getEntry', () => {
   it('getEntry sets isCurrentUserPayer=false when entry payer is the other member', async () => {
     const repo = createRepository({
       households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF, OTHER] }],
-      entries: [{
-        _id: 'entry_xxxxxxxxxxxx_other',
-        householdId: HOUSEHOLD_ID,
-        type: 'expense', amountCents: 1000, categoryId: 'cat_xxxxxxxxxxxxx_dining',
-        payerMemberKey: OTHER, note: '', occurredAt: NOW.toISOString(), receiptMediaId: null,
-        payer: { memberKey: OTHER, nickname: '对方', avatar: { kind: 'builtin', id: 'person-neutral' } },
-        createdAt: NOW.toISOString(), updatedAt: NOW.toISOString(), deletedAt: null,
-      }],
+      entries: [
+        {
+          _id: 'entry_xxxxxxxxxxxx_other',
+          householdId: HOUSEHOLD_ID,
+          type: 'expense',
+          amountCents: 1000,
+          categoryId: 'cat_xxxxxxxxxxxxx_dining',
+          payerMemberKey: OTHER,
+          note: '',
+          occurredAt: NOW.toISOString(),
+          receiptMediaId: null,
+          payer: { memberKey: OTHER, nickname: '对方', avatar: { kind: 'builtin', id: 'person-neutral' } },
+          createdAt: NOW.toISOString(),
+          updatedAt: NOW.toISOString(),
+          deletedAt: null,
+        },
+      ],
     })
     const deps = makeDependencies({ repository: repo })
     const result = await getEntry({ entryId: 'entry_xxxxxxxxxxxx_other' }, deps)
@@ -647,7 +1214,17 @@ describe('listEntries / getEntry', () => {
 })
 
 describe('addCategory / updateCategory / removeCategory', () => {
-  const baseCategory = { _id: 'cat_xxxxxxxxxxxxx_preset', householdId: HOUSEHOLD_ID, key: 'dining', name: '餐饮', iconKey: 'fork-spoon', colorKey: 'amber', isCustom: false, sortOrder: 0, isHiddenBy: [] }
+  const baseCategory = {
+    _id: 'cat_xxxxxxxxxxxxx_preset',
+    householdId: HOUSEHOLD_ID,
+    key: 'dining',
+    name: '餐饮',
+    iconKey: 'fork-spoon',
+    colorKey: 'amber',
+    isCustom: false,
+    sortOrder: 0,
+    isHiddenBy: [],
+  }
 
   it('addCategory rejects name duplicate', async () => {
     const repo = createRepository({
@@ -655,7 +1232,12 @@ describe('addCategory / updateCategory / removeCategory', () => {
       categories: [baseCategory],
     })
     const deps = makeDependencies({ repository: repo })
-    await expect(addCategory({ requestId: 'r_xxxxxxxxxxxxxx', name: '餐饮', iconKey: 'fork-spoon', colorKey: 'amber' }, deps)).rejects.toThrow(/LEDGER_CATEGORY_NAME_TAKEN/)
+    await expect(
+      addCategory(
+        { requestId: 'r_xxxxxxxxxxxxxx', name: '餐饮', iconKey: 'fork-spoon', colorKey: 'amber' },
+        deps,
+      ),
+    ).rejects.toThrow(/LEDGER_CATEGORY_NAME_TAKEN/)
   })
 
   // 回归测试：addCategory 是"创建类"action，幂等锁只用 requestId（creationLockId），
@@ -666,12 +1248,15 @@ describe('addCategory / updateCategory / removeCategory', () => {
       categories: [baseCategory],
     })
     const deps = makeDependencies({ repository: repo })
-    const result = await addCategory({
-      requestId: 'r_xxxxxxxxxxxxxx_no_op',
-      name: '宠物',
-      iconKey: 'tag',
-      colorKey: 'gray',
-    }, deps)
+    const result = await addCategory(
+      {
+        requestId: 'r_xxxxxxxxxxxxxx_no_op',
+        name: '宠物',
+        iconKey: 'tag',
+        colorKey: 'gray',
+      },
+      deps,
+    )
     expect(result.status).toBe('ADDED')
     expect(result.category.name).toBe('宠物')
     // 保护真机链路：返回给记账页的编号必须就是数据库中可查询的编号。
@@ -688,23 +1273,29 @@ describe('addCategory / updateCategory / removeCategory', () => {
       users: [{ _id: SELF, nickname: '我' }],
     })
     const deps = makeDependencies({ repository: repo })
-    const categoryResult = await addCategory({
-      requestId: 'r_xxxxxxxxxxxxxx_new_cat',
-      name: '追星',
-      iconKey: 'tag',
-      colorKey: 'gray',
-    }, deps)
+    const categoryResult = await addCategory(
+      {
+        requestId: 'r_xxxxxxxxxxxxxx_new_cat',
+        name: '追星',
+        iconKey: 'tag',
+        colorKey: 'gray',
+      },
+      deps,
+    )
 
-    const entryResult = await addEntry({
-      requestId: 'r_xxxxxxxxxxxxxx_new_entry',
-      type: 'expense',
-      amountCents: 33700,
-      categoryId: categoryResult.category.id,
-      payerMemberKey: 'self',
-      note: '周边',
-      occurredAt: NOW.toISOString(),
-      receiptMediaId: null,
-    }, deps)
+    const entryResult = await addEntry(
+      {
+        requestId: 'r_xxxxxxxxxxxxxx_new_entry',
+        type: 'expense',
+        amountCents: 33700,
+        categoryId: categoryResult.category.id,
+        payerMemberKey: 'self',
+        note: '周边',
+        occurredAt: NOW.toISOString(),
+        receiptMediaId: null,
+      },
+      deps,
+    )
 
     expect(entryResult.status).toBe('ADDED')
     expect(entryResult.entry.categoryId).toBe(categoryResult.category.id)
@@ -716,7 +1307,14 @@ describe('addCategory / updateCategory / removeCategory', () => {
       categories: [baseCategory],
     })
     const deps = makeDependencies({ repository: repo })
-    const result = await updateCategory({ categoryId: 'cat_xxxxxxxxxxxxx_preset', operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxh_1', setHiddenByMe: true }, deps)
+    const result = await updateCategory(
+      {
+        categoryId: 'cat_xxxxxxxxxxxxx_preset',
+        operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxh_1',
+        setHiddenByMe: true,
+      },
+      deps,
+    )
     expect(result.status).toBe('UPDATED')
     expect(result.hiddenByMe).toBe(true)
   })
@@ -727,16 +1325,44 @@ describe('addCategory / updateCategory / removeCategory', () => {
       categories: [baseCategory],
     })
     const deps = makeDependencies({ repository: repo })
-    await expect(updateCategory({ categoryId: 'cat_xxxxxxxxxxxxx_preset', operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxn_1', name: '饮' }, deps)).rejects.toThrow(/LEDGER_INVALID_REQUEST/)
+    await expect(
+      updateCategory(
+        {
+          categoryId: 'cat_xxxxxxxxxxxxx_preset',
+          operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxn_1',
+          name: '饮',
+        },
+        deps,
+      ),
+    ).rejects.toThrow(/LEDGER_INVALID_REQUEST/)
   })
 
   it('removeCategory rejects when in use', async () => {
-    const custom = { _id: 'cat_xxxxxxxxxxxxx_custom', householdId: HOUSEHOLD_ID, key: 'custom_x', name: '宠物', iconKey: 'tag', colorKey: 'gray', isCustom: true, sortOrder: 100, isHiddenBy: [] }
+    const custom = {
+      _id: 'cat_xxxxxxxxxxxxx_custom',
+      householdId: HOUSEHOLD_ID,
+      key: 'custom_x',
+      name: '宠物',
+      iconKey: 'tag',
+      colorKey: 'gray',
+      isCustom: true,
+      sortOrder: 100,
+      isHiddenBy: [],
+    }
     const entry = {
-      _id: 'entry_xxxxxxxxxxxx_1', householdId: HOUSEHOLD_ID, type: 'expense', amountCents: 1000, categoryId: 'cat_xxxxxxxxxxxxx_custom',
-      payerMemberKey: SELF, note: '', occurredAt: NOW.toISOString(), receiptMediaId: null,
+      _id: 'entry_xxxxxxxxxxxx_1',
+      householdId: HOUSEHOLD_ID,
+      type: 'expense',
+      amountCents: 1000,
+      categoryId: 'cat_xxxxxxxxxxxxx_custom',
+      payerMemberKey: SELF,
+      note: '',
+      occurredAt: NOW.toISOString(),
+      receiptMediaId: null,
       payer: { memberKey: SELF, nickname: '我', avatar: { kind: 'builtin', id: 'person-neutral' } },
-      createdAt: NOW.toISOString(), updatedAt: NOW.toISOString(), deletedAt: null,
+      createdAt: NOW.toISOString(),
+      updatedAt: NOW.toISOString(),
+      deletedAt: null,
     }
     const repo = createRepository({
       households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF] }],
@@ -744,30 +1370,104 @@ describe('addCategory / updateCategory / removeCategory', () => {
       entries: [entry],
     })
     const deps = makeDependencies({ repository: repo })
-    await expect(removeCategory({ categoryId: 'cat_xxxxxxxxxxxxx_custom', operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxrm_1' }, deps)).rejects.toThrow(/LEDGER_CATEGORY_IN_USE/)
+    await expect(
+      removeCategory(
+        { categoryId: 'cat_xxxxxxxxxxxxx_custom', operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxrm_1' },
+        deps,
+      ),
+    ).rejects.toThrow(/LEDGER_CATEGORY_IN_USE/)
   })
 
   it('removeCategory succeeds for unused custom', async () => {
-    const custom = { _id: 'cat_xxxxxxxxxxxxx_custom', householdId: HOUSEHOLD_ID, key: 'custom_x', name: '宠物', iconKey: 'tag', colorKey: 'gray', isCustom: true, sortOrder: 100, isHiddenBy: [] }
+    const custom = {
+      _id: 'cat_xxxxxxxxxxxxx_custom',
+      householdId: HOUSEHOLD_ID,
+      key: 'custom_x',
+      name: '宠物',
+      iconKey: 'tag',
+      colorKey: 'gray',
+      isCustom: true,
+      sortOrder: 100,
+      isHiddenBy: [],
+    }
     const repo = createRepository({
       households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF] }],
       categories: [custom],
     })
     const deps = makeDependencies({ repository: repo })
-    const result = await removeCategory({ categoryId: 'cat_xxxxxxxxxxxxx_custom', operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxrm_2' }, deps)
+    const result = await removeCategory(
+      { categoryId: 'cat_xxxxxxxxxxxxx_custom', operationToken: 'op_xxxxxxxxxxx_xxxxxxxxxxxxxxxrm_2' },
+      deps,
+    )
     expect(result.status).toBe('REMOVED')
   })
 })
 
 describe('getStats', () => {
-  const catDining = { _id: 'cat_xxxxxxxxxxxxx_dining', householdId: HOUSEHOLD_ID, key: 'dining', name: '餐饮', iconKey: 'fork-spoon', colorKey: 'amber' }
-  const catTransport = { _id: 'cat_xxxxxxxxxxxxx_transport', householdId: HOUSEHOLD_ID, key: 'transport', name: '交通', iconKey: 'car', colorKey: 'blue' }
+  const catDining = {
+    _id: 'cat_xxxxxxxxxxxxx_dining',
+    householdId: HOUSEHOLD_ID,
+    key: 'dining',
+    name: '餐饮',
+    iconKey: 'fork-spoon',
+    colorKey: 'amber',
+  }
+  const catTransport = {
+    _id: 'cat_xxxxxxxxxxxxx_transport',
+    householdId: HOUSEHOLD_ID,
+    key: 'transport',
+    name: '交通',
+    iconKey: 'car',
+    colorKey: 'blue',
+  }
 
   it('aggregates expense / income / by category / by payer', async () => {
     const entries = [
-      { _id: 'entry_xxxxxxxxxxx_1', householdId: HOUSEHOLD_ID, type: 'expense', amountCents: 5000, categoryId: 'cat_xxxxxxxxxxxxx_dining', payerMemberKey: SELF, note: '', occurredAt: NOW.toISOString(), receiptMediaId: null, createdAt: NOW.toISOString(), updatedAt: NOW.toISOString(), deletedAt: null, payer: { memberKey: SELF } },
-      { _id: 'entry_xxxxxxxxxxx_2', householdId: HOUSEHOLD_ID, type: 'expense', amountCents: 3000, categoryId: 'cat_xxxxxxxxxxxxx_transport', payerMemberKey: OTHER, note: '', occurredAt: NOW.toISOString(), receiptMediaId: null, createdAt: NOW.toISOString(), updatedAt: NOW.toISOString(), deletedAt: null, payer: { memberKey: OTHER } },
-      { _id: 'entry_xxxxxxxxxxx_3', householdId: HOUSEHOLD_ID, type: 'income', amountCents: 10000, categoryId: 'cat_xxxxxxxxxxxxx_dining', payerMemberKey: SELF, note: '', occurredAt: NOW.toISOString(), receiptMediaId: null, createdAt: NOW.toISOString(), updatedAt: NOW.toISOString(), deletedAt: null, payer: { memberKey: SELF } },
+      {
+        _id: 'entry_xxxxxxxxxxx_1',
+        householdId: HOUSEHOLD_ID,
+        type: 'expense',
+        amountCents: 5000,
+        categoryId: 'cat_xxxxxxxxxxxxx_dining',
+        payerMemberKey: SELF,
+        note: '',
+        occurredAt: NOW.toISOString(),
+        receiptMediaId: null,
+        createdAt: NOW.toISOString(),
+        updatedAt: NOW.toISOString(),
+        deletedAt: null,
+        payer: { memberKey: SELF },
+      },
+      {
+        _id: 'entry_xxxxxxxxxxx_2',
+        householdId: HOUSEHOLD_ID,
+        type: 'expense',
+        amountCents: 3000,
+        categoryId: 'cat_xxxxxxxxxxxxx_transport',
+        payerMemberKey: OTHER,
+        note: '',
+        occurredAt: NOW.toISOString(),
+        receiptMediaId: null,
+        createdAt: NOW.toISOString(),
+        updatedAt: NOW.toISOString(),
+        deletedAt: null,
+        payer: { memberKey: OTHER },
+      },
+      {
+        _id: 'entry_xxxxxxxxxxx_3',
+        householdId: HOUSEHOLD_ID,
+        type: 'income',
+        amountCents: 10000,
+        categoryId: 'cat_xxxxxxxxxxxxx_dining',
+        payerMemberKey: SELF,
+        note: '',
+        occurredAt: NOW.toISOString(),
+        receiptMediaId: null,
+        createdAt: NOW.toISOString(),
+        updatedAt: NOW.toISOString(),
+        deletedAt: null,
+        payer: { memberKey: SELF },
+      },
     ]
     const repo = createRepository({
       households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF, OTHER] }],
@@ -783,16 +1483,46 @@ describe('getStats', () => {
     expect(result.stats.byCategory).toHaveLength(2)
     expect(result.stats.byPayer).toHaveLength(2)
     // 统计结果用安全别名区分付款人，页面才能映射真实昵称且不会拿到成员编号。
-    expect(result.stats.byPayer).toEqual(expect.arrayContaining([
-      expect.objectContaining({ payerMemberKey: 'self', expenseCents: 5000 }),
-      expect.objectContaining({ payerMemberKey: 'other', expenseCents: 3000 }),
-    ]))
+    expect(result.stats.byPayer).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ payerMemberKey: 'self', expenseCents: 5000 }),
+        expect.objectContaining({ payerMemberKey: 'other', expenseCents: 3000 }),
+      ]),
+    )
   })
 
   it('PRD 008 优化 R5: typeFilter=expense 只算支出', async () => {
     const entries = [
-      { _id: 'entry_xxxxxxxxxxx_e1', householdId: HOUSEHOLD_ID, type: 'expense', amountCents: 5000, categoryId: 'cat_xxxxxxxxxxxxx_dining', payerMemberKey: SELF, note: '', occurredAt: NOW.toISOString(), receiptMediaId: null, createdAt: NOW.toISOString(), updatedAt: NOW.toISOString(), deletedAt: null, payer: { memberKey: SELF } },
-      { _id: 'entry_xxxxxxxxxxx_i1', householdId: HOUSEHOLD_ID, type: 'income', amountCents: 10000, categoryId: 'cat_xxxxxxxxxxxxx_dining', payerMemberKey: SELF, note: '', occurredAt: NOW.toISOString(), receiptMediaId: null, createdAt: NOW.toISOString(), updatedAt: NOW.toISOString(), deletedAt: null, payer: { memberKey: SELF } },
+      {
+        _id: 'entry_xxxxxxxxxxx_e1',
+        householdId: HOUSEHOLD_ID,
+        type: 'expense',
+        amountCents: 5000,
+        categoryId: 'cat_xxxxxxxxxxxxx_dining',
+        payerMemberKey: SELF,
+        note: '',
+        occurredAt: NOW.toISOString(),
+        receiptMediaId: null,
+        createdAt: NOW.toISOString(),
+        updatedAt: NOW.toISOString(),
+        deletedAt: null,
+        payer: { memberKey: SELF },
+      },
+      {
+        _id: 'entry_xxxxxxxxxxx_i1',
+        householdId: HOUSEHOLD_ID,
+        type: 'income',
+        amountCents: 10000,
+        categoryId: 'cat_xxxxxxxxxxxxx_dining',
+        payerMemberKey: SELF,
+        note: '',
+        occurredAt: NOW.toISOString(),
+        receiptMediaId: null,
+        createdAt: NOW.toISOString(),
+        updatedAt: NOW.toISOString(),
+        deletedAt: null,
+        payer: { memberKey: SELF },
+      },
     ]
     const repo = createRepository({
       households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF] }],
@@ -807,8 +1537,36 @@ describe('getStats', () => {
 
   it('PRD 008 优化 R5: payerMode=me 只算当前用户', async () => {
     const entries = [
-      { _id: 'entry_xxxxxxxxxxx_me', householdId: HOUSEHOLD_ID, type: 'expense', amountCents: 5000, categoryId: 'cat_xxxxxxxxxxxxx_dining', payerMemberKey: SELF, note: '', occurredAt: NOW.toISOString(), receiptMediaId: null, createdAt: NOW.toISOString(), updatedAt: NOW.toISOString(), deletedAt: null, payer: { memberKey: SELF } },
-      { _id: 'entry_xxxxxxxxxxx_other', householdId: HOUSEHOLD_ID, type: 'expense', amountCents: 3000, categoryId: 'cat_xxxxxxxxxxxxx_dining', payerMemberKey: OTHER, note: '', occurredAt: NOW.toISOString(), receiptMediaId: null, createdAt: NOW.toISOString(), updatedAt: NOW.toISOString(), deletedAt: null, payer: { memberKey: OTHER } },
+      {
+        _id: 'entry_xxxxxxxxxxx_me',
+        householdId: HOUSEHOLD_ID,
+        type: 'expense',
+        amountCents: 5000,
+        categoryId: 'cat_xxxxxxxxxxxxx_dining',
+        payerMemberKey: SELF,
+        note: '',
+        occurredAt: NOW.toISOString(),
+        receiptMediaId: null,
+        createdAt: NOW.toISOString(),
+        updatedAt: NOW.toISOString(),
+        deletedAt: null,
+        payer: { memberKey: SELF },
+      },
+      {
+        _id: 'entry_xxxxxxxxxxx_other',
+        householdId: HOUSEHOLD_ID,
+        type: 'expense',
+        amountCents: 3000,
+        categoryId: 'cat_xxxxxxxxxxxxx_dining',
+        payerMemberKey: OTHER,
+        note: '',
+        occurredAt: NOW.toISOString(),
+        receiptMediaId: null,
+        createdAt: NOW.toISOString(),
+        updatedAt: NOW.toISOString(),
+        deletedAt: null,
+        payer: { memberKey: OTHER },
+      },
     ]
     const repo = createRepository({
       households: [{ _id: HOUSEHOLD_ID, memberKeys: [SELF, OTHER] }],

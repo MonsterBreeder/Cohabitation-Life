@@ -1,34 +1,51 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import {
-  QUICK_ADD_ACTIONS,
-  navigateToQuickAdd,
-  returnAfterQuickCreate,
-} from '../../src/utils/quick-add'
+import { QUICK_ADD_ACTIONS, navigateToQuickAdd, returnAfterQuickCreate } from '../../src/utils/quick-add'
 
 describe('全局快速新增', () => {
   const navigateTo = jest.fn()
   const navigateBack = jest.fn()
+  const reLaunch = jest.fn()
   const showToast = jest.fn()
 
   beforeEach(() => {
     navigateTo.mockReset()
     navigateBack.mockReset()
+    reLaunch.mockReset()
     showToast.mockReset()
-    ;(globalThis as typeof globalThis & {
-      uni: {
-        navigateTo: typeof navigateTo
-        navigateBack: typeof navigateBack
-        showToast: typeof showToast
+    ;(globalThis as typeof globalThis & { getCurrentPages: () => unknown[] }).getCurrentPages = () => [{}, {}]
+    ;(
+      globalThis as typeof globalThis & {
+        uni: {
+          navigateTo: typeof navigateTo
+          navigateBack: typeof navigateBack
+          reLaunch: typeof reLaunch
+          showToast: typeof showToast
+        }
       }
-    }).uni = { navigateTo, navigateBack, showToast }
+    ).uni = { navigateTo, navigateBack, reLaunch, showToast }
   })
 
   it('按使用频率固定展示记账、记事项、记足迹，并复用现有填写页', () => {
     expect(QUICK_ADD_ACTIONS).toEqual([
-      expect.objectContaining({ key: 'ledger', label: '记账', icon: 'book', url: '/subpackages/ledger/ledger-add/index' }),
-      expect.objectContaining({ key: 'task', label: '记事项', icon: 'tags', url: '/subpackages/task/add-task/index' }),
-      expect.objectContaining({ key: 'footprint', label: '记足迹', icon: 'location', url: '/subpackages/footprint/footprint-form/index' }),
+      expect.objectContaining({
+        key: 'ledger',
+        label: '记账',
+        icon: 'book',
+        url: '/subpackages/ledger/ledger-add/index',
+      }),
+      expect.objectContaining({
+        key: 'task',
+        label: '记事项',
+        icon: 'tags',
+        url: '/subpackages/task/add-task/index',
+      }),
+      expect.objectContaining({
+        key: 'footprint',
+        label: '记足迹',
+        icon: 'location',
+        url: '/subpackages/footprint/footprint-form/index',
+      }),
     ])
   })
 
@@ -58,6 +75,17 @@ describe('全局快速新增', () => {
       message: '内容已保存，请手动返回',
     })
     expect(showToast).toHaveBeenCalledWith({ title: '内容已保存，请手动返回', icon: 'none' })
+  })
+
+  // 开发者工具可以直接把新增页当作启动页；此时没有上一页，不能继续调用返回。
+  it('直接打开新增页时，保存成功后进入指定兜底页', async () => {
+    ;(globalThis as typeof globalThis & { getCurrentPages: () => unknown[] }).getCurrentPages = () => [{}]
+    reLaunch.mockImplementationOnce((options) => options.success())
+
+    await expect(returnAfterQuickCreate('已记账', '/pages/ledger/index')).resolves.toEqual({ ok: true })
+    expect(navigateBack).not.toHaveBeenCalled()
+    expect(reLaunch).toHaveBeenCalledWith(expect.objectContaining({ url: '/pages/ledger/index' }))
+    expect(showToast).toHaveBeenCalledWith({ title: '已记账', icon: 'success' })
   })
 
   it('公共组件使用 Wot UI 悬浮按钮、遮罩与根节点承载，并包含防连点状态', () => {
@@ -120,12 +148,18 @@ describe('全局快速新增', () => {
 
   it('三个新建页返回发起页，编辑分支仍保持原有返回方式', () => {
     const task = readFileSync(resolve(__dirname, '../../src/subpackages/task/add-task/index.vue'), 'utf8')
-    const ledger = readFileSync(resolve(__dirname, '../../src/subpackages/ledger/ledger-add/index.vue'), 'utf8')
-    const footprint = readFileSync(resolve(__dirname, '../../src/subpackages/footprint/footprint-form/index.vue'), 'utf8')
+    const ledger = readFileSync(
+      resolve(__dirname, '../../src/subpackages/ledger/ledger-add/index.vue'),
+      'utf8',
+    )
+    const footprint = readFileSync(
+      resolve(__dirname, '../../src/subpackages/footprint/footprint-form/index.vue'),
+      'utf8',
+    )
 
     expect(task).toContain("await returnAfterQuickCreate('事项已添加')")
     expect(task).toContain("mode.value === 'edit'")
-    expect(ledger).toContain("await returnAfterQuickCreate('已记账')")
+    expect(ledger).toContain("await returnAfterQuickCreate('已记账', '/pages/ledger/index')")
     expect(ledger).toContain('if (isEditMode.value && editingEntryId.value)')
     expect(footprint).toContain("await returnAfterQuickCreate('足迹已保存')")
     expect(footprint).toContain("toast.success('足迹已更新')")

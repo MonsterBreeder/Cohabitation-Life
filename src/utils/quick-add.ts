@@ -53,21 +53,34 @@ export function navigateToQuickAdd(action: QuickAddAction): Promise<QuickAddNavi
 
 /**
  * 新建成功后只返回一级，确保回到真正的发起页面。
- * 返回失败时数据已经保存，不能重试保存，只提示用户手动返回。
+ * 开发者工具直接把新增页当作启动页时没有上一页，改为进入业务首页。
+ * 导航失败时数据已经保存，不能重试保存，只提示用户手动返回。
  */
-export function returnAfterQuickCreate(successMessage: string): Promise<QuickAddNavigationResult> {
+export function returnAfterQuickCreate(
+  successMessage: string,
+  fallbackUrl?: string,
+): Promise<QuickAddNavigationResult> {
   return new Promise((resolve) => {
+    const onSuccess = (): void => {
+      uni.showToast({ title: successMessage, icon: 'success' })
+      resolve({ ok: true })
+    }
+    const onFailure = (): void => {
+      const message = '内容已保存，请手动返回'
+      uni.showToast({ title: message, icon: 'none' })
+      resolve({ ok: false, message })
+    }
+
+    // 直接调试分包页时页面栈只有一层，调用 navigateBack 会让微信运行时读取空页面。
+    if (fallbackUrl && getCurrentPages().length <= 1) {
+      uni.reLaunch({ url: fallbackUrl, success: onSuccess, fail: onFailure })
+      return
+    }
+
     uni.navigateBack({
       delta: 1,
-      success: () => {
-        uni.showToast({ title: successMessage, icon: 'success' })
-        resolve({ ok: true })
-      },
-      fail: () => {
-        const message = '内容已保存，请手动返回'
-        uni.showToast({ title: message, icon: 'none' })
-        resolve({ ok: false, message })
-      },
+      success: onSuccess,
+      fail: onFailure,
     })
   })
 }

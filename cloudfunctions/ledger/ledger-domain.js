@@ -14,6 +14,7 @@ const { filterActive, normaliseEntry, normaliseEntryDetail, normaliseCategory, w
 const CREDENTIAL_PATTERN = /^[A-Za-z0-9_-]{16,128}$/
 const ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/
 const ENTRY_TYPE_SET = new Set(['expense', 'income'])
+const MEAL_PERIOD_SET = new Set(['breakfast', 'lunch', 'dinner'])
 const NOTE_MAX_LENGTH = 100
 const CATEGORY_NAME_MIN = 2
 const CATEGORY_NAME_MAX = 8
@@ -72,6 +73,16 @@ function validateAmount(amountCents) {
     throw new LedgerDomainError('LEDGER_AMOUNT_INVALID', false)
   }
   return amountCents
+}
+
+/** 按类目约束餐次：只有系统预设餐饮可写入，缺省和 null 均归一为空。 */
+function resolveMealPeriod(value, category) {
+  const isPresetDining = category && category.key === 'dining' && category.isCustom !== true
+  if (value == null) return null
+  if (!isPresetDining || !MEAL_PERIOD_SET.has(value)) {
+    throw new LedgerDomainError('LEDGER_INVALID_REQUEST', false)
+  }
+  return value
 }
 
 function validateOccurredAt(occurredAt) {
@@ -210,6 +221,7 @@ async function addEntry(input, dependencies) {
   const category = await repo.findCategoryById(input.categoryId)
   if (!category) throw new LedgerDomainError('LEDGER_CATEGORY_NOT_FOUND', false)
   if (category.householdId !== dependencies.householdId) throw new LedgerDomainError('LEDGER_CATEGORY_NOT_FOUND', false)
+  const mealPeriod = resolveMealPeriod(input.mealPeriod, category)
   const household = await repo.getHousehold(dependencies.householdId)
   if (!household) throw new LedgerDomainError('LEDGER_FORBIDDEN', false)
   // 前端 chip 用 'self' / 'other' 字面量标识付款人；这里映射到真实 memberKey。
@@ -246,6 +258,7 @@ async function addEntry(input, dependencies) {
     type: input.type,
     amountCents,
     categoryId: input.categoryId,
+    mealPeriod,
     note,
     occurredAt,
     receiptMediaId,
@@ -311,6 +324,16 @@ async function updateEntry(input, dependencies) {
   if (!category) throw new LedgerDomainError('LEDGER_CATEGORY_NOT_FOUND', false)
   if (category.householdId !== dependencies.householdId) throw new LedgerDomainError('LEDGER_CATEGORY_NOT_FOUND', false)
 
+  // 缺省字段代表旧客户端编辑：餐饮类目保留原值；切到非餐饮时必须主动清空。
+  const hasMealPeriod = Object.prototype.hasOwnProperty.call(input, 'mealPeriod')
+  const isPresetDining = category.key === 'dining' && category.isCustom !== true
+  let mealPeriod = null
+  if (isPresetDining && !hasMealPeriod) {
+    mealPeriod = MEAL_PERIOD_SET.has(existing.mealPeriod) ? existing.mealPeriod : null
+  } else {
+    mealPeriod = resolveMealPeriod(input.mealPeriod, category)
+  }
+
   // 解析 payerMemberKey（可选）。保持 addEntry 的 'self'/'other' 字面量映射，
   // 这样编辑表单不需要持有真实 memberKey 也能表达"切给对方"。
   let resolvedPayerMemberKey = existing.payerMemberKey
@@ -351,6 +374,9 @@ async function updateEntry(input, dependencies) {
     receiptMediaId,
     updatedAt: now,
   }
+  // 旧客户端省略字段且仍为餐饮时不要写回事务外读到的旧值，避免并发覆盖新版餐次。
+  // 显式传值/清空，或切到非餐饮需要清空时，才把餐次放进更新内容。
+  if (hasMealPeriod || !isPresetDining) updates.mealPeriod = mealPeriod
   // payer 改了：重新拉取 profile、构建 payer 展示；同步把 payerMemberKey 也写进去。
   let newPayer = existing.payer
   if (payerChanged) {
@@ -371,7 +397,13 @@ async function updateEntry(input, dependencies) {
       at: now,
     })
   })
-  return { status: 'UPDATED', retryable: false, entry: normaliseEntry({ ...existing, ...updates }) }
+  // 事务后重新读取，确保省略餐次的旧请求也返回当前持久化值，而不是事务外快照。
+  const persisted = await repo.getEntry(input.entryId)
+  return {
+    status: 'UPDATED',
+    retryable: false,
+    entry: normaliseEntry(persisted || { ...existing, ...updates }),
+  }
 }
 
 /** 软删除账目。PRD 008：只创建者可软删（与 updateEntry 权限一致）。
