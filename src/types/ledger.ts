@@ -8,16 +8,14 @@ export type LedgerEntryType = 'expense' | 'income'
 
 export const LEDGER_ENTRY_TYPES: readonly LedgerEntryType[] = ['expense', 'income'] as const
 
+/** 餐饮账目的餐次；仅系统预设 dining 类目允许填写。 */
+export type LedgerMealPeriod = 'breakfast' | 'lunch' | 'dinner'
+
+export const LEDGER_MEAL_PERIODS: readonly LedgerMealPeriod[] = ['breakfast', 'lunch', 'dinner'] as const
+
 /** 类目的预设图标 key。MVP 锁定 8 个（Wot UI 内置图标集）；自定义类目不可上传图标。 */
 export type LedgerCategoryIconKey =
-  | 'fork-spoon'
-  | 'car'
-  | 'house'
-  | 'gamepad'
-  | 'first-aid'
-  | 'shopping-bag'
-  | 'book'
-  | 'tag'
+  'fork-spoon' | 'car' | 'house' | 'gamepad' | 'first-aid' | 'shopping-bag' | 'book' | 'tag'
 
 /** 类目的预设颜色 key；颜色池与 docs/brand/visual-standard.md 对齐。 */
 export type LedgerCategoryColorKey = 'amber' | 'blue' | 'mint' | 'coral' | 'red' | 'purple' | 'teal' | 'gray'
@@ -39,6 +37,8 @@ export interface LedgerEntrySummary {
   /** 整数分；展示时 formatYuan。 */
   amountCents: number
   categoryId: string
+  /** 餐饮餐次；非餐饮及历史未填写数据统一为 null。 */
+  mealPeriod: LedgerMealPeriod | null
   /** 0-100 字；空时为 ''。 */
   note: string
   /** 账目发生时间，ISO 字符串；用于按日期分组。 */
@@ -120,6 +120,8 @@ export interface AddLedgerEntryRequest {
   type: LedgerEntryType
   amountCents: number
   categoryId: string
+  /** 缺省兼容旧客户端；显式 null 表示清空。 */
+  mealPeriod?: LedgerMealPeriod | null
   payerMemberKey: string
   note: string
   occurredAt: string
@@ -138,6 +140,8 @@ export interface UpdateLedgerEntryRequest {
   /** MVP 不允许改 type；云端会忽略此字段。 */
   amountCents: number
   categoryId: string
+  /** 缺省时保留原值；显式 null 表示清空。 */
+  mealPeriod?: LedgerMealPeriod | null
   /**
    * 修改付款人（可选）：
    * - 'self'  → 当前用户（云端映射到 identityKey）
@@ -296,11 +300,37 @@ export interface LedgerResultBase {
 }
 
 export interface LedgerSuccessResult extends LedgerResultBase {
-  status: Exclude<LedgerResultStatus, 'LEDGER_INVALID_REQUEST' | 'LEDGER_NOT_FOUND' | 'LEDGER_FORBIDDEN' | 'LEDGER_CATEGORY_NOT_FOUND' | 'LEDGER_CATEGORY_IN_USE' | 'LEDGER_CATEGORY_NAME_TAKEN' | 'LEDGER_PAYER_NOT_MEMBER' | 'LEDGER_AMOUNT_INVALID' | 'LEDGER_TIME_INVALID' | 'LEDGER_RECEIPT_TOO_LARGE' | 'LEDGER_TEMPORARY_FAILURE'>
+  status: Exclude<
+    LedgerResultStatus,
+    | 'LEDGER_INVALID_REQUEST'
+    | 'LEDGER_NOT_FOUND'
+    | 'LEDGER_FORBIDDEN'
+    | 'LEDGER_CATEGORY_NOT_FOUND'
+    | 'LEDGER_CATEGORY_IN_USE'
+    | 'LEDGER_CATEGORY_NAME_TAKEN'
+    | 'LEDGER_PAYER_NOT_MEMBER'
+    | 'LEDGER_AMOUNT_INVALID'
+    | 'LEDGER_TIME_INVALID'
+    | 'LEDGER_RECEIPT_TOO_LARGE'
+    | 'LEDGER_TEMPORARY_FAILURE'
+  >
 }
 
 export interface LedgerFailureResult extends LedgerResultBase {
-  status: Extract<LedgerResultStatus, 'LEDGER_INVALID_REQUEST' | 'LEDGER_NOT_FOUND' | 'LEDGER_FORBIDDEN' | 'LEDGER_CATEGORY_NOT_FOUND' | 'LEDGER_CATEGORY_IN_USE' | 'LEDGER_CATEGORY_NAME_TAKEN' | 'LEDGER_PAYER_NOT_MEMBER' | 'LEDGER_AMOUNT_INVALID' | 'LEDGER_TIME_INVALID' | 'LEDGER_RECEIPT_TOO_LARGE' | 'LEDGER_TEMPORARY_FAILURE'>
+  status: Extract<
+    LedgerResultStatus,
+    | 'LEDGER_INVALID_REQUEST'
+    | 'LEDGER_NOT_FOUND'
+    | 'LEDGER_FORBIDDEN'
+    | 'LEDGER_CATEGORY_NOT_FOUND'
+    | 'LEDGER_CATEGORY_IN_USE'
+    | 'LEDGER_CATEGORY_NAME_TAKEN'
+    | 'LEDGER_PAYER_NOT_MEMBER'
+    | 'LEDGER_AMOUNT_INVALID'
+    | 'LEDGER_TIME_INVALID'
+    | 'LEDGER_RECEIPT_TOO_LARGE'
+    | 'LEDGER_TEMPORARY_FAILURE'
+  >
   errorMessage: string
 }
 
@@ -312,10 +342,18 @@ export type LedgerAddedResult = LedgerResultBase & { status: 'ADDED'; entry: Led
 export type LedgerUpdatedResult = LedgerResultBase & { status: 'UPDATED'; entry: LedgerEntrySummary }
 export type LedgerDeletedResult = LedgerResultBase & { status: 'DELETED'; entryId: string; deletedAt: string }
 export type LedgerRestoredResult = LedgerResultBase & { status: 'RESTORED'; entry: LedgerEntrySummary }
-export type LedgerListedResult = LedgerResultBase & { status: 'LISTED'; entries: LedgerEntrySummary[]; deletedEntries: LedgerEntrySummary[] }
+export type LedgerListedResult = LedgerResultBase & {
+  status: 'LISTED'
+  entries: LedgerEntrySummary[]
+  deletedEntries: LedgerEntrySummary[]
+}
 export type LedgerLoadedResult = LedgerResultBase & { status: 'LOADED'; detail: LedgerEntryDetail }
 export type LedgerCategoryAddedResult = LedgerResultBase & { status: 'ADDED'; category: LedgerCategory }
-export type LedgerCategoryUpdatedResult = LedgerResultBase & { status: 'UPDATED'; category: LedgerCategory; hiddenByMe: boolean }
+export type LedgerCategoryUpdatedResult = LedgerResultBase & {
+  status: 'UPDATED'
+  category: LedgerCategory
+  hiddenByMe: boolean
+}
 export type LedgerCategoryRemovedResult = LedgerResultBase & { status: 'REMOVED'; categoryId: string }
 export type LedgerStatsLoadedResult = LedgerResultBase & { status: 'LOADED'; stats: LedgerStats }
 export type LedgerInitedResult = LedgerResultBase & { status: 'INITED'; categories: LedgerCategory[] }

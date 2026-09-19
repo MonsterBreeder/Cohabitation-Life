@@ -3,7 +3,10 @@
 
 import type { LedgerEntryDetail, LedgerEntryType } from '../../../types/ledger'
 import { formatYuan } from '../../../utils/format'
-import { describePayerLine as describePayerLineByType } from '../../../pages/ledger/ledger-home-view'
+import {
+  describeMealPeriodLabel,
+  describePayerLine as describePayerLineByType,
+} from '../../../pages/ledger/ledger-home-view'
 
 export type DetailAction = 'edit' | 'delete'
 
@@ -48,6 +51,11 @@ export function describeDeleteConfirmMessage(detail: LedgerEntryDetail | undefin
 export function describePayerLine(detail: LedgerEntryDetail | undefined): string {
   if (!detail) return ''
   return describePayerLineByType(detail.type, detail.payer)
+}
+
+/** 详情页只在真实存在餐次时展示，不给历史数据补“未分类”。 */
+export function describeMealPeriod(detail: LedgerEntryDetail | undefined): string {
+  return describeMealPeriodLabel(detail?.mealPeriod)
 }
 
 /** 状态描述：当前账目所属时间窗口（今天 / 昨天 / M月D日 / yyyy-MM-dd）。PRD 008 后期决定账本不记时分，只到日期。 */
