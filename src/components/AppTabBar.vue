@@ -14,21 +14,26 @@
     <wd-tabbar-item name="ledger" title="账本" icon="book" />
     <!-- 足迹使用已确认有字形的 location 线稿图标，保持四个入口风格一致。 -->
     <wd-tabbar-item name="footprint" title="足迹" icon="location" />
+    <!-- 生活承载固定的共同生活应用，apps 图标与现有线稿风格一致。 -->
+    <wd-tabbar-item name="life" title="生活" icon="apps" />
     <wd-tabbar-item name="mine" title="我的" icon="user" />
   </wd-tabbar>
 </template>
 
 <script setup lang="ts">
-type TabName = 'home' | 'ledger' | 'footprint' | 'mine'
+type TabName = 'home' | 'ledger' | 'footprint' | 'life' | 'mine'
 
-interface Props { active: TabName }
+interface Props {
+  active: TabName
+}
 const props = defineProps<Props>()
 
-/** 四个主入口路径表；完整业务编辑页继续放入对应分包。 */
+/** 五个主入口路径表；完整业务编辑页继续放入对应分包。 */
 const TAB_PATHS: Record<TabName, string> = {
   home: '/pages/index/index',
   ledger: '/pages/ledger/index',
   footprint: '/pages/footprint/index',
+  life: '/pages/life/index',
   mine: '/pages/profile/index',
 }
 

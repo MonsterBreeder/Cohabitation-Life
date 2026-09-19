@@ -7,22 +7,49 @@ import { parse } from '@vue/compiler-sfc'
 // 编译真实页面模板验证条件分支；将原生/Wot 标签当作不展开的边界，不模拟地图瓦片或云端请求。
 const source = readFileSync(resolve(__dirname, '../../src/pages/footprint/index.vue'), 'utf8')
 const template = parse(source).descriptor.template!.content
-const { code } = compile(template, { mode: 'function', prefixIdentifiers: true, isCustomElement: (tag) => !['wd-segmented', 'wd-popup'].includes(tag) })
+const { code } = compile(template, {
+  mode: 'function',
+  prefixIdentifiers: true,
+  isCustomElement: (tag) => !['wd-segmented', 'wd-popup'].includes(tag),
+})
 // 带 v-model 的边界保留组件编译语义，其内部交互不是本次模板回归的验证目标。
 const render = new Function('Vue', code)({ ...Vue, resolveComponent: (name: string) => name })
 
 function renderPage(overrides: Record<string, unknown> = {}) {
   const context = {
-    checkingHome: false, household: { id: 'test-home' }, pageError: '', phase: 'idle',
-    summary: { placeCount: 0 }, mode: 'map', modeLabel: '地图', modeOptions: ['地图', '列表'],
-    mapError: null, listError: null, places: [], visibleMarkers: [], includePoints: [],
-    mapCenter: { latitude: 23.1291, longitude: 113.2644 }, selectedPlace: null,
-    filterPlaceKey: '', pending: {}, entries: [], displayEntries: [], photoUrls: {},
-    entriesCursor: null, historyNoticeOpen: false, goAdd: jest.fn(), ...overrides,
+    checkingHome: false,
+    household: { id: 'test-home' },
+    pageError: '',
+    phase: 'idle',
+    summary: { placeCount: 0 },
+    mode: 'map',
+    modeLabel: '地图',
+    modeOptions: ['地图', '列表'],
+    mapError: null,
+    listError: null,
+    places: [],
+    hikes: [],
+    markerResult: { markers: [] },
+    visibleMarkers: [],
+    includePoints: [],
+    mapCenter: { latitude: 23.1291, longitude: 113.2644 },
+    selectedPlace: null,
+    filterPlaceKey: '',
+    pending: {},
+    entries: [],
+    displayEntries: [],
+    photoUrls: {},
+    entriesCursor: null,
+    historyNoticeOpen: false,
+    goAdd: jest.fn(),
+    ...overrides,
   }
   const nodes: Vue.VNode[] = []
   function visit(node: unknown): void {
-    if (Array.isArray(node)) { node.forEach(visit); return }
+    if (Array.isArray(node)) {
+      node.forEach(visit)
+      return
+    }
     if (!Vue.isVNode(node)) return
     nodes.push(node)
     if (Array.isArray(node.children)) node.children.forEach(visit)

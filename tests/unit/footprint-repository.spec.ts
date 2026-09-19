@@ -1,45 +1,88 @@
-const { createRepository, encodeCursor, decodeCursor } = require('../../cloudfunctions/footprint/repository-data')
+const {
+  createRepository,
+  encodeCursor,
+  decodeCursor,
+  mergeTimelineRows,
+} = require('../../cloudfunctions/footprint/repository-data')
 const domain = require('../../cloudfunctions/footprint/footprint-domain')
 
 // 只替换数据库传输，使用真正的领域函数和事务适配，验证跨层提交与回滚。
 function fixture() {
   const tables = new Map<string, Map<string, any>>()
-  const table = (name: string) => { if (!tables.has(name)) tables.set(name, new Map()); return tables.get(name)! }
+  const table = (name: string) => {
+    if (!tables.has(name)) tables.set(name, new Map())
+    return tables.get(name)!
+  }
   const command = { aggregate: {}, inc: (by: number) => ({ increment: by }) }
-  const collection = (name: string) => ({ doc: (id: string) => ({
-    get: async () => ({ data: structuredClone(table(name).get(id) || null) }),
-    set: async ({ data }: any) => { table(name).set(id, { ...structuredClone(data), _id: id }) },
-    update: async ({ data }: any) => {
-      const current = table(name).get(id)
-      if (!current) throw new Error('document not exist')
-      for (const [key, value] of Object.entries(data)) current[key] = value && typeof value === 'object' && 'increment' in value ? (current[key] || 0) + Number(value.increment) : structuredClone(value)
-    },
-  }) })
+  const collection = (name: string) => ({
+    doc: (id: string) => ({
+      get: async () => ({ data: structuredClone(table(name).get(id) || null) }),
+      set: async ({ data }: any) => {
+        table(name).set(id, { ...structuredClone(data), _id: id })
+      },
+      update: async ({ data }: any) => {
+        const current = table(name).get(id)
+        if (!current) throw new Error('document not exist')
+        for (const [key, value] of Object.entries(data))
+          current[key] =
+            value && typeof value === 'object' && 'increment' in value
+              ? (current[key] || 0) + Number(value.increment)
+              : structuredClone(value)
+      },
+    }),
+  })
   let queue = Promise.resolve()
-  const db = { command, collection, runTransaction: (work: any) => {
-    const pending = queue.then(async () => {
-      const snapshot = structuredClone(tables)
-      try { return await work({ collection }) } catch (error) { tables.clear(); snapshot.forEach((value, key) => tables.set(key, value)); throw error }
-    })
-    queue = pending.catch(() => undefined); return pending
-  } }
+  const db = {
+    command,
+    collection,
+    runTransaction: (work: any) => {
+      const pending = queue.then(async () => {
+        const snapshot = structuredClone(tables)
+        try {
+          return await work({ collection })
+        } catch (error) {
+          tables.clear()
+          snapshot.forEach((value, key) => tables.set(key, value))
+          throw error
+        }
+      })
+      queue = pending.catch(() => undefined)
+      return pending
+    },
+  }
   const home = { _id: 'home_a', memberKeys: ['user_a', 'user_b'] }
   table('households').set(home._id, home)
   const repository = createRepository(db)
-  repository.findHouseholdByMember = async (actor: string) => home.memberKeys.includes(actor) ? home : null
-  const dependencies = { repository, identityKey: 'user_a', now: () => new Date('2026-09-03T08:00:00Z'), checkText: async () => true }
+  repository.findHouseholdByMember = async (actor: string) => (home.memberKeys.includes(actor) ? home : null)
+  const dependencies = {
+    repository,
+    identityKey: 'user_a',
+    now: () => new Date('2026-09-03T08:00:00Z'),
+    checkText: async () => true,
+  }
   return { table, home, repository, dependencies }
 }
-const input = { requestId: 'request_1234567890', place: { name: '公园', address: '广州', latitude: 23, longitude: 113 }, visitedAt: '2026-09-01' }
+const input = {
+  requestId: 'request_1234567890',
+  place: { name: '公园', address: '广州', latitude: 23, longitude: 113 },
+  visitedAt: '2026-09-01',
+}
 
 // wx-server-sdk 将聚合结果放在 list，普通查询才使用 data；不能混用底层 CloudBase 的返回格式。
 function queryFixture(aggregateList: any[], records: any[] = []) {
-  const aggregate: any = { end: jest.fn(async () => ({ list: aggregateList, errMsg: 'collection.aggregate:ok' })) }
-  for (const method of ['match', 'group', 'count', 'sort', 'limit']) aggregate[method] = jest.fn(() => aggregate)
+  const aggregate: any = {
+    end: jest.fn(async () => ({ list: aggregateList, errMsg: 'collection.aggregate:ok' })),
+  }
+  for (const method of ['match', 'group', 'count', 'sort', 'limit'])
+    aggregate[method] = jest.fn(() => aggregate)
   const query: any = { get: jest.fn(async () => ({ data: records })) }
   for (const method of ['where', 'orderBy', 'limit']) query[method] = jest.fn(() => query)
   return createRepository({
-    command: { aggregate: { first: (value: any) => value, sum: (value: any) => value }, gt: (value: any) => value },
+    command: {
+      aggregate: { first: (value: any) => value, sum: (value: any) => value },
+      gt: (value: any) => value,
+      exists: (value: boolean) => ({ exists: value }),
+    },
     collection: () => ({ ...query, aggregate: () => aggregate }),
   })
 }
@@ -49,38 +92,125 @@ describe('微信云端聚合结果格式', () => {
     await expect(queryFixture([]).getSummary('home_a')).resolves.toEqual({ placeCount: 0, latestEntry: null })
   })
   it('摘要从 list 读取地点数量', async () => {
-    await expect(queryFixture([{ placeCount: 3 }]).getSummary('home_a')).resolves.toEqual({ placeCount: 3, latestEntry: null })
+    await expect(queryFixture([{ placeCount: 3 }]).getSummary('home_a')).resolves.toEqual({
+      placeCount: 3,
+      latestEntry: null,
+    })
   })
   it('空地点列表能够正常返回', async () => {
-    await expect(queryFixture([]).listPlaces('home_a', null, 100)).resolves.toEqual({ items: [], cursor: null })
+    await expect(queryFixture([]).listPlaces('home_a', null, 100)).resolves.toEqual({
+      items: [],
+      cursor: null,
+    })
   })
   it('地点分组从 list 读取并保留下一页游标', async () => {
-    const entry = { _id: `footprint_${'a'.repeat(32)}`, placeKey: 'a'.repeat(64), place: input.place, visitedAt: input.visitedAt, memory: '', photoRefs: [], createdAt: '2026-09-03T00:00:00Z', updatedAt: '2026-09-03T00:00:00Z', editVersion: 1 }
-    const groups = ['a', 'b'].map((key) => ({ _id: key.repeat(64), place: input.place, visitCount: 2, latestEntry: entry }))
+    const entry = {
+      _id: `footprint_${'a'.repeat(32)}`,
+      placeKey: 'a'.repeat(64),
+      place: input.place,
+      visitedAt: input.visitedAt,
+      memory: '',
+      photoRefs: [],
+      createdAt: '2026-09-03T00:00:00Z',
+      updatedAt: '2026-09-03T00:00:00Z',
+      editVersion: 1,
+    }
+    const groups = ['a', 'b'].map((key) => ({
+      _id: key.repeat(64),
+      place: input.place,
+      visitCount: 2,
+      latestEntry: entry,
+    }))
     const page = await queryFixture(groups).listPlaces('home_a', null, 1)
     expect(page.items).toHaveLength(1)
-    expect(page.items[0]).toMatchObject({ placeKey: 'a'.repeat(64), visitCount: 2, latestEntry: { id: entry._id } })
+    expect(page.items[0]).toMatchObject({
+      placeKey: 'a'.repeat(64),
+      visitCount: 2,
+      latestEntry: { id: entry._id },
+    })
     expect(decodeCursor(page.cursor, 'places')).toEqual({ kind: 'places', id: 'a'.repeat(64) })
+  })
+})
+
+describe('地点与徒步联合时间线', () => {
+  it('按共同日期排序并把下一页游标放在最后一条已展示记录上', () => {
+    const place = {
+      _id: `footprint_${'a'.repeat(32)}`,
+      placeKey: 'a'.repeat(64),
+      place: input.place,
+      visitedAt: '2026-09-15',
+      memory: '',
+      createdAt: '2026-09-15T01:00:00Z',
+      updatedAt: '2026-09-15T01:00:00Z',
+      editVersion: 1,
+    }
+    const hike = {
+      _id: `footprint_${'b'.repeat(32)}`,
+      entryKind: 'hike',
+      name: '山路',
+      hikedAt: '2026-09-16',
+      sortDate: '2026-09-16',
+      place: null,
+      mapPoint: null,
+      memory: '',
+      metrics: {},
+      createdAt: '2026-09-16T01:00:00Z',
+      updatedAt: '2026-09-16T01:00:00Z',
+      editVersion: 1,
+    }
+    const page = mergeTimelineRows([place], [hike], 1)
+    expect(page.items[0]).toMatchObject({ id: hike._id, entryKind: 'hike' })
+    expect(decodeCursor(page.cursor, 'timeline')).toEqual({
+      kind: 'timeline',
+      id: hike._id,
+      sortDate: hike.sortDate,
+      createdAt: hike.createdAt,
+    })
   })
 })
 
 describe('足迹事务适配', () => {
   it('concurrent duplicate creates commit exactly one entry', async () => {
     const f = fixture()
-    const [a, b] = await Promise.all([domain.createEntry(input, f.dependencies), domain.createEntry(input, f.dependencies)])
+    const [a, b] = await Promise.all([
+      domain.createEntry(input, f.dependencies),
+      domain.createEntry(input, f.dependencies),
+    ])
     expect(a.entry.id).toBe(b.entry.id)
     expect(f.table('footprintEntries').size).toBe(1)
   })
   it('checks membership again after text checking and before committing', async () => {
     const f = fixture()
-    await expect(domain.createEntry(input, { ...f.dependencies, checkText: async () => { f.home.memberKeys = ['user_b']; return true } })).rejects.toMatchObject({ code: 'NO_HOME' })
+    await expect(
+      domain.createEntry(input, {
+        ...f.dependencies,
+        checkText: async () => {
+          f.home.memberKeys = ['user_b']
+          return true
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'NO_HOME' })
     expect(f.table('footprintEntries').size).toBe(0)
   })
   it('does not link a photo already claimed by cleanup', async () => {
     const f = fixture()
-    const photo = { _id: `footphoto_${'a'.repeat(32)}`, state: 'cleaning', ownerKey: 'user_a', householdId: 'home_a', digest: 'digest', expiresAt: '2026-09-04T00:00:00Z' }
+    const photo = {
+      _id: `footphoto_${'a'.repeat(32)}`,
+      state: 'cleaning',
+      ownerKey: 'user_a',
+      householdId: 'home_a',
+      digest: 'digest',
+      expiresAt: '2026-09-04T00:00:00Z',
+    }
     f.table('footprintMedia').set(photo._id, photo)
-    await expect(f.repository.createEntryWithOperation({ _id: 'entry', householdId: 'home_a', createdAt: '2026-09-03T00:00:00Z' }, { _id: 'op' }, [{ ...photo, state: 'approved' }], 'user_a')).rejects.toMatchObject({ code: 'FOOTPRINT_MEDIA_INVALID' })
+    await expect(
+      f.repository.createEntryWithOperation(
+        { _id: 'entry', householdId: 'home_a', createdAt: '2026-09-03T00:00:00Z' },
+        { _id: 'op' },
+        [{ ...photo, state: 'approved' }],
+        'user_a',
+      ),
+    ).rejects.toMatchObject({ code: 'FOOTPRINT_MEDIA_INVALID' })
     expect(f.table('footprintEntries').size).toBe(0)
   })
   it('deletes the latest photo set, not a stale edit snapshot', async () => {
@@ -93,14 +223,73 @@ describe('足迹事务适配', () => {
     await f.repository.softDeleteEntry(stale, '2026-09-03T00:00:00Z', 'user_b')
     expect(f.table('footprintMedia').get(id).state).toBe('deleted')
   })
+  it('replaces a hiking route atomically and detaches the old route', async () => {
+    const f = fixture()
+    const entry = {
+      _id: `footprint_${'c'.repeat(32)}`,
+      householdId: 'home_a',
+      entryKind: 'hike',
+      editVersion: 1,
+      deletedAt: null,
+      photoResourceIds: [],
+      routeResourceId: `footroute_${'a'.repeat(32)}`,
+    }
+    const oldRoute = { _id: entry.routeResourceId, state: 'linked', entryId: entry._id }
+    const newRoute = {
+      _id: `footroute_${'b'.repeat(32)}`,
+      state: 'approved',
+      ownerKey: 'user_a',
+      householdId: 'home_a',
+      expiresAt: '2026-09-04T00:00:00Z',
+      digest: 'new-digest',
+    }
+    f.table('footprintEntries').set(entry._id, entry)
+    f.table('footprintRouteMedia').set(oldRoute._id, oldRoute)
+    f.table('footprintRouteMedia').set(newRoute._id, newRoute)
+    const updated = await f.repository.updateEntryVersioned(
+      entry,
+      {
+        routeResourceId: newRoute._id,
+        photoResourceIds: [],
+        updatedAt: '2026-09-03T00:00:00Z',
+        editVersion: 2,
+      },
+      [],
+      'user_a',
+      { _id: 'route-operation', entryId: entry._id },
+      newRoute,
+    )
+    expect(updated.routeResourceId).toBe(newRoute._id)
+    expect(f.table('footprintRouteMedia').get(oldRoute._id)).toMatchObject({
+      state: 'detached',
+      entryId: null,
+    })
+    expect(f.table('footprintRouteMedia').get(newRoute._id)).toMatchObject({
+      state: 'linked',
+      entryId: entry._id,
+    })
+  })
   it('enforces pending photo quotas across concurrent reservations', async () => {
     const f = fixture()
-    const results = await Promise.allSettled(Array.from({ length: 7 }, (_, index) => f.repository.reserveMedia({ _id: `photo_${index}`, ownerKey: 'user_a', householdId: 'home_a', state: 'prepared', createdAt: '2026-09-03T00:00:00Z', expiresAt: '2026-09-03T02:00:00Z' })))
+    const results = await Promise.allSettled(
+      Array.from({ length: 7 }, (_, index) =>
+        f.repository.reserveMedia({
+          _id: `photo_${index}`,
+          ownerKey: 'user_a',
+          householdId: 'home_a',
+          state: 'prepared',
+          createdAt: '2026-09-03T00:00:00Z',
+          expiresAt: '2026-09-03T02:00:00Z',
+        }),
+      ),
+    )
     expect(results.filter((item) => item.status === 'fulfilled')).toHaveLength(6)
     expect(f.table('footprintMedia').size).toBe(6)
   })
   it('rejects malformed cursors instead of silently starting from the beginning', () => {
     expect(() => decodeCursor('20', 'entries')).toThrow()
-    expect(decodeCursor(encodeCursor({ kind: 'places', id: 'a'.repeat(64) }), 'places').id).toBe('a'.repeat(64))
+    expect(decodeCursor(encodeCursor({ kind: 'places', id: 'a'.repeat(64) }), 'places').id).toBe(
+      'a'.repeat(64),
+    )
   })
 })
