@@ -10,13 +10,19 @@
       <wd-button size="small" variant="plain" @click="loadPage">重新加载</wd-button>
     </view>
 
-    <template v-else>
+    <view v-else class="life-page__content">
       <view class="life-page__hero">
         <view class="life-page__hero-copy">
           <text class="life-page__eyebrow">两个人的生活工具箱</text>
           <text class="life-page__title">把喜欢的日子，一起记下来</text>
           <text class="life-page__copy">这里没有陌生人动态，只有属于这个家的共同记录。</text>
         </view>
+        <image
+          class="life-page__hero-image"
+          src="/static/warm-life/life/hiking-shelf.png"
+          mode="aspectFit"
+          aria-label="一双一起出发的徒步鞋"
+        />
         <!-- 山径装饰延续足迹页的路线语言，只承担氛围，不作为操作入口。 -->
         <view class="life-page__trail" aria-hidden="true">
           <view class="life-page__trail-dot" />
@@ -26,8 +32,8 @@
       </view>
 
       <view class="life-page__section-heading">
-        <text class="life-page__section-title">共同生活应用</text>
-        <text class="life-page__section-note">第一站，从徒步开始</text>
+        <text class="life-page__section-title">共同生活小架子</text>
+        <text class="life-page__section-note">先从一起徒步开始</text>
       </view>
 
       <view class="life-page__grid">
@@ -35,7 +41,10 @@
           v-for="app in LIFE_APPS"
           :key="app.id"
           class="life-page__card"
-          :class="[`life-page__card--${app.tone}`, { 'life-page__card--disabled': !app.enabled }]"
+          :class="[
+            `life-page__card--${app.tone}`,
+            { 'life-page__card--featured': app.enabled, 'life-page__card--disabled': !app.enabled },
+          ]"
           :aria-disabled="!app.enabled"
           @click="openApp(app.id)"
         >
@@ -51,7 +60,7 @@
           </view>
         </view>
       </view>
-    </template>
+    </view>
 
     <AppTabBar active="life" />
   </view>
@@ -118,6 +127,10 @@ onShow(() => void loadPage())
     text-align: center;
   }
 
+  &__content {
+    animation: life-content-rise 0.28s ease-out both;
+  }
+
   // 顶部像一页共同生活手账，路线元素与足迹模块建立视觉联系。
   &__hero {
     position: relative;
@@ -133,8 +146,16 @@ onShow(() => void loadPage())
     position: relative;
     z-index: 1;
     display: flex;
-    max-width: 520rpx;
+    max-width: 370rpx;
     flex-direction: column;
+  }
+  &__hero-image {
+    position: absolute;
+    right: 8rpx;
+    bottom: 0;
+    width: 250rpx;
+    height: 210rpx;
+    opacity: 0.94;
   }
   &__eyebrow {
     color: $brand-color-action;
@@ -224,6 +245,12 @@ onShow(() => void loadPage())
     opacity: 0.72;
     box-shadow: none;
   }
+  &__card--featured {
+    grid-column: 1 / -1;
+    min-height: 230rpx;
+    border-color: rgba($brand-color-primary, 0.2);
+    background: #effbf5;
+  }
   &__card--disabled:active {
     transform: none;
   }
@@ -284,6 +311,18 @@ onShow(() => void loadPage())
     color: $brand-color-action;
     font-size: 23rpx;
     font-weight: 700;
+  }
+
+  // 生活页作为一个整体轻微出现，禁用卡片本身仍保持静止且不响应按压反馈。
+  @keyframes life-content-rise {
+    from {
+      opacity: 0;
+      transform: translateY(10rpx);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 }
 </style>
