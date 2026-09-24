@@ -5,6 +5,7 @@ import {
   createHomeTimelineShare,
   householdAvatarSource,
   profileAvatarSource,
+  isCurrentMemberAvatarRequest,
   resolveHomeLoadDestination,
 } from '../../src/pages/index/home-view'
 
@@ -41,5 +42,32 @@ describe('home view rules', () => {
   it('registers friend and timeline share hooks on the home page', () => {
     expect(homePageSource).toContain('onShareAppMessage(() => createHomeShareMessage())')
     expect(homePageSource).toContain('onShareTimeline(() => createHomeTimelineShare())')
+  })
+
+  it('只接受当前家庭当前批次的成员头像结果', () => {
+    expect(
+      isCurrentMemberAvatarRequest({
+        requestVersion: 2,
+        currentVersion: 2,
+        requestHouseholdId: 'home-a',
+        currentHouseholdId: 'home-a',
+      }),
+    ).toBe(true)
+    expect(
+      isCurrentMemberAvatarRequest({
+        requestVersion: 1,
+        currentVersion: 2,
+        requestHouseholdId: 'home-a',
+        currentHouseholdId: 'home-a',
+      }),
+    ).toBe(false)
+    expect(
+      isCurrentMemberAvatarRequest({
+        requestVersion: 2,
+        currentVersion: 2,
+        requestHouseholdId: 'home-a',
+        currentHouseholdId: 'home-b',
+      }),
+    ).toBe(false)
   })
 })

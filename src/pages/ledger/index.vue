@@ -198,11 +198,19 @@
       </view>
 
       <!-- ③ 列表 -->
-      <view v-if="monthEntries.length === 0" class="ledger-home__empty" data-testid="ledger-home-empty">
-        <wd-icon name="list" size="68rpx" color="#43c89a" />
-        <text class="ledger-home__empty-title">本月还没有账目</text>
-        <text class="ledger-home__empty-copy">点右下角"记一笔"开始记录</text>
-      </view>
+      <WarmEmptyState
+        v-if="monthEntries.length === 0"
+        image-src="/static/warm-life/scenes/empty-ledger.png"
+        :title="hasLedgerFilter ? '没有找到符合条件的账目' : '本月还没有账目'"
+        :copy="
+          hasLedgerFilter ? '换个日期或筛选条件，再看看共同账本。' : '点右下角“记一笔”，把今天的收支记下来。'
+        "
+        data-testid="ledger-home-empty"
+      >
+        <wd-button v-if="hasLedgerFilter" size="small" round plain @click="clearLedgerFilters">
+          清除筛选
+        </wd-button>
+      </WarmEmptyState>
 
       <view v-else class="ledger-home__list" data-testid="ledger-home-list">
         <view
@@ -211,7 +219,17 @@
           class="ledger-home__group"
           :data-testid="`ledger-home-group-${groupIdx}`"
         >
-          <text class="ledger-home__group-label">{{ group.label }}</text>
+          <view class="ledger-home__group-heading">
+            <text class="ledger-home__group-label">{{ group.label }}</text>
+            <!-- 插画只装饰第一天的日期标题，不在筛选区和列表间形成额外内容行。 -->
+            <image
+              v-if="groupIdx === 0"
+              class="ledger-home__group-illustration"
+              src="/static/warm-life/scenes/empty-ledger.png"
+              mode="aspectFit"
+              data-testid="ledger-home-scene"
+            />
+          </view>
           <view v-for="entry in group.entries" :key="entry.id" class="ledger-home__entry-wrap">
             <LedgerEntryItem
               :entry="entry"
@@ -355,6 +373,7 @@ import LedgerEntryItem from '../../components/ledger/LedgerEntryItem.vue'
 import RestorableEntryItem from './RestorableEntryItem.vue'
 import AppTabBar from '../../components/AppTabBar.vue'
 import GlobalQuickAdd from '../../components/GlobalQuickAdd.vue'
+import WarmEmptyState from '../../components/WarmEmptyState.vue'
 import { useHouseholdStore } from '../../store/modules/household'
 import { useLedgerStore } from '../../store/modules/ledger'
 import { formatYuan, formatLedgerMonth } from '../../utils/format'
@@ -368,6 +387,7 @@ import {
   describeLedgerAiEntry,
   describeTypeFilterOptions,
   groupEntriesByDate,
+  hasActiveLedgerFilter,
   shiftMonth,
   shiftDay,
   STATS_ENTRY_URL,
@@ -510,6 +530,15 @@ const aiEntry = describeLedgerAiEntry()
 // 筛选弹层按钮文字：单按钮显示"我付的 · 支出"这种组合，默认"全部人 · 全部类型"。
 // 至少有一个维度被设成非 all 时，按钮高亮（active 色）让用户知道筛选生效。
 const isFilterActive = computed(() => payerMode.value !== 'all' || typeFilter.value !== 'all')
+// 日期、付款人、收支类型或类目任一生效，都属于筛选后的空结果，不误导成从未记账。
+const hasLedgerFilter = computed(() =>
+  hasActiveLedgerFilter({
+    payerMode: payerMode.value,
+    typeFilter: typeFilter.value,
+    selectedDate: selectedDate.value,
+    selectedCategoryIds: selectedCategoryIds.value,
+  }),
+)
 const filterLabel = computed(() => {
   // payer 维度中文
   const payerLabel = payerMode.value === 'me' ? '我付的' : payerMode.value === 'other' ? '对方付的' : '全部人'
@@ -604,6 +633,15 @@ function onCategoriesChange(ids: string[]): void {
 /** 清除类目筛选：把 selectedCategoryIds 置空，UI 状态保持 categoryOpen 让用户看到结果。 */
 function onClearCategories(): void {
   ledgerStore.setSelectedCategoryIds([])
+}
+
+/** 空结果中的一键清除恢复到当月全部账目，具体刷新交给现有监听统一处理。 */
+function clearLedgerFilters(): void {
+  ledgerStore.setSelectedDate('')
+  ledgerStore.setPayerMode('all')
+  ledgerStore.setTypeFilter('all')
+  ledgerStore.setSelectedCategoryIds([])
+  categoryOpen.value = false
 }
 
 async function reload(): Promise<void> {
@@ -1032,11 +1070,23 @@ onReachBottom(() => {
     flex-direction: column;
     gap: 12rpx;
   }
-  &__group-label {
+  &__group-heading {
+    display: flex;
+    min-height: 52rpx;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16rpx;
     padding-left: 8rpx;
+  }
+  &__group-label {
     color: $brand-color-text-secondary;
     font-size: 24rpx;
     font-weight: 600;
+  }
+  &__group-illustration {
+    width: 66rpx;
+    height: 52rpx;
+    flex: 0 0 auto;
   }
   &__entry-wrap {
   }

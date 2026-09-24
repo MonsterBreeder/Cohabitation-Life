@@ -7,14 +7,18 @@
     :data-testid="`task-summary-${task.id}`"
     @click="emit('press', task.id)"
   >
-    <view class="task-summary-card__mark" :class="`task-summary-card__mark--${taskTypeName}`" />
+    <view class="task-summary-card__mark" :class="`task-summary-card__mark--${taskTypeName}`">
+      <wd-icon :name="typeIcon" size="30rpx" color="#FFFFFF" />
+    </view>
     <view class="task-summary-card__content">
       <text class="task-summary-card__title">{{ task.title }}</text>
-      <text class="task-summary-card__meta">
-        {{ typeLabel }} · {{ dueLabel }} · {{ statusLabel }}
-      </text>
+      <text class="task-summary-card__meta">{{ typeLabel }} · {{ dueLabel }} · {{ statusLabel }}</text>
     </view>
-    <view v-if="task.isOverdueOrToday" class="task-summary-card__priority" data-testid="task-summary-priority">
+    <view
+      v-if="task.isOverdueOrToday"
+      class="task-summary-card__priority"
+      data-testid="task-summary-priority"
+    >
       <text class="task-summary-card__priority-text">{{ task.isOverdueOrToday ? '今天/逾期' : '' }}</text>
     </view>
   </button>
@@ -25,7 +29,9 @@ import { computed } from 'vue'
 import type { TaskSummary } from '../../types/task'
 import { TASK_TYPES_DISPLAY } from './task-shared'
 
-interface Props { task: TaskSummary }
+interface Props {
+  task: TaskSummary
+}
 const props = defineProps<Props>()
 const emit = defineEmits<{ press: [taskId: string] }>()
 // 业务值使用下划线，样式类统一转换为 BEM 要求的短横线写法。
@@ -35,6 +41,16 @@ const typeLabel = computed(() => {
   const opt = TASK_TYPES_DISPLAY.find((item) => item.value === props.task.type)
   return opt ? opt.label : ''
 })
+
+/** 事项类别用小图标辅助扫读，仍保留文字标签照顾首次使用。 */
+const typeIcon = computed(
+  () =>
+    ({
+      low_stock: 'store',
+      to_handle: 'check',
+      expiring: 'time-line',
+    })[props.task.type] || 'tags',
+)
 
 const dueLabel = computed(() => {
   if (!props.task.dueDate) return '无截止'
@@ -67,10 +83,14 @@ const statusLabel = computed(() => {
     border: 0;
   }
   &__mark {
-    width: 12rpx;
-    align-self: stretch;
+    display: flex;
+    width: 54rpx;
+    height: 54rpx;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
     margin-right: 18rpx;
-    border-radius: 6rpx;
+    border-radius: 16rpx;
   }
   &__mark--low-stock {
     background: #d99833;

@@ -37,6 +37,18 @@ export function resolveHomeLoadDestination(hasLogin: boolean, status?: string): 
   return 'stay'
 }
 
+/** 头像异步结果只有同时属于当前请求和当前家庭时才能写回页面。 */
+export function isCurrentMemberAvatarRequest(input: {
+  requestVersion: number
+  currentVersion: number
+  requestHouseholdId: string
+  currentHouseholdId: string | undefined
+}): boolean {
+  return (
+    input.requestVersion === input.currentVersion && input.requestHouseholdId === input.currentHouseholdId
+  )
+}
+
 /** 好友转发只使用公开品牌文案和固定首页路径，避免把当前家庭资料带入分享卡片。 */
 export function createHomeShareMessage(): { title: string; path: string } {
   return {

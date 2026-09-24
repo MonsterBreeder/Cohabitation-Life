@@ -14,6 +14,7 @@ import {
   describeLedgerAiEntry,
   describeTypeFilterOptions,
   groupEntriesByDate,
+  hasActiveLedgerFilter,
   LEDGER_CATEGORY_COLOR_MAP,
   LEDGER_CATEGORY_ICON_MAP,
   shiftDay,
@@ -210,6 +211,28 @@ describe('describeTypeFilterOptions (PRD 008 优化 R1 双维度 chip 第二行)
       { value: 'expense', label: '支出' },
       { value: 'income', label: '收入' },
     ])
+  })
+})
+
+describe('hasActiveLedgerFilter', () => {
+  const defaults = {
+    payerMode: 'all' as const,
+    typeFilter: 'all' as const,
+    selectedDate: '',
+    selectedCategoryIds: [],
+  }
+
+  it('没有筛选时保留真正的空账本说明', () => {
+    expect(hasActiveLedgerFilter(defaults)).toBe(false)
+  })
+
+  it.each([
+    { ...defaults, payerMode: 'me' as const },
+    { ...defaults, typeFilter: 'expense' as const },
+    { ...defaults, selectedDate: '2026-09-23' },
+    { ...defaults, selectedCategoryIds: ['cat_food'] },
+  ])('任一筛选生效时使用筛选无结果说明', (input) => {
+    expect(hasActiveLedgerFilter(input)).toBe(true)
   })
 })
 

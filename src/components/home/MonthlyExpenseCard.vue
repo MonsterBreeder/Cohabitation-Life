@@ -12,11 +12,7 @@
   - empty（数据 null 且无 loading/error）：保持隐藏，由父组件 v-if 控制
 -->
 <template>
-  <view
-    v-if="loading"
-    class="monthly-expense-card"
-    data-testid="monthly-expense-card-loading"
-  >
+  <view v-if="loading" class="monthly-expense-card" data-testid="monthly-expense-card-loading">
     <view class="monthly-expense-card__icon">
       <wd-loading color="#267A5A" size="32rpx" />
     </view>
@@ -48,9 +44,7 @@
     @click="onPress"
   >
     <view class="monthly-expense-card__icon">
-      <!-- Wot UI iconfont 里 `wallet` 字符没字形会渲染为空（项目规则明确禁用）。
-           `book` 才是账本的语义替身。 -->
-      <wd-icon name="book" size="40rpx" color="#267A5A" />
+      <wd-icon name="book" size="42rpx" color="#267A5A" />
     </view>
     <view class="monthly-expense-card__text">
       <text class="monthly-expense-card__title">看看账本本月</text>
@@ -112,17 +106,19 @@ function onRetry(): void {
   padding: 24rpx 24rpx;
   border-radius: 20rpx;
   background: $brand-color-surface;
-  transition: transform .12s ease, background .15s ease;
+  transition:
+    transform 0.12s ease,
+    background 0.15s ease;
   &:active {
-    transform: scale(.99);
+    transform: scale(0.99);
     background: #effbf5;
   }
   &--error {
-    background: rgba($brand-color-surface, .95);
+    background: rgba($brand-color-surface, 0.95);
   }
   &__icon {
-    width: 64rpx;
-    height: 64rpx;
+    width: 72rpx;
+    height: 72rpx;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -179,7 +175,7 @@ function onRetry(): void {
   &__number-divider {
     width: 1rpx;
     height: 28rpx;
-    background: rgba($brand-color-text, .12);
+    background: rgba($brand-color-text, 0.12);
   }
   &__arrow {
     color: $brand-color-text-secondary;

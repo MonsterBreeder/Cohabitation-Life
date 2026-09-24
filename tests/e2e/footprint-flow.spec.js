@@ -6,14 +6,21 @@ suite('我们的足迹：微信预览入口', () => {
   let program
   function bounded(promise, label) {
     let timer
-    return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`${label}超时，请确认预览已编译且完成登录`)), 10000) })]).finally(() => clearTimeout(timer))
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label}超时，请确认预览已编译且完成登录`)), 10000)
+      }),
+    ]).finally(() => clearTimeout(timer))
   }
   beforeAll(async () => {
     const automator = require(process.env.MINIPROGRAM_AUTOMATOR_PATH || 'miniprogram-automator')
     program = await bounded(automator.connect({ wsEndpoint: 'ws://127.0.0.1:9420' }), '连接开发者工具')
   })
-  afterAll(() => { if (program) program.disconnect() })
-  test('首页卡片进入足迹后能看到地图、列表和四个底部入口', async () => {
+  afterAll(() => {
+    if (program) program.disconnect()
+  })
+  test('首页卡片进入足迹后能看到地图、列表和五个底部入口', async () => {
     const home = await bounded(program.reLaunch('/pages/index/index'), '打开首页')
     await bounded(home.waitFor('.home-footprint-card'), '读取首页足迹卡片')
     const card = await bounded(home.$('.home-footprint-card'), '查找足迹卡片')
@@ -27,6 +34,6 @@ suite('我们的足迹：微信预览入口', () => {
     await bounded(modes[1].tap(), '切换到列表')
     const bar = await bounded(footprints.$('app-tab-bar'), '读取底部入口')
     expect(bar).toBeTruthy()
-    expect(await bounded(bar.$$('wd-tabbar-item'), '核对四个入口')).toHaveLength(4)
+    expect(await bounded(bar.$$('wd-tabbar-item'), '核对五个入口')).toHaveLength(5)
   })
 })
