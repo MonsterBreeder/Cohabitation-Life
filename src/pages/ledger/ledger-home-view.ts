@@ -149,6 +149,21 @@ export function describeTypeFilterOptions(): TypeFilterOption[] {
   ]
 }
 
+/** 只要任一筛选维度生效，空列表就应解释为筛选无结果，而不是从未记账。 */
+export function hasActiveLedgerFilter(input: {
+  payerMode: PayerFilter
+  typeFilter: TypeFilterOption['value']
+  selectedDate: string
+  selectedCategoryIds: string[]
+}): boolean {
+  return Boolean(
+    input.selectedDate ||
+    input.payerMode !== 'all' ||
+    input.typeFilter !== 'all' ||
+    input.selectedCategoryIds.length > 0,
+  )
+}
+
 /** 月份格式化（yyyy-MM）。 */
 export function describeEntryMonth(entry: LedgerEntrySummary): string {
   const d = new Date(entry.occurredAt)

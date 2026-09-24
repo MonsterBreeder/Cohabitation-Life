@@ -15,7 +15,11 @@
       <wd-button type="primary" :loading="isLoading" @click="loadHome">重新加载</wd-button>
     </view>
 
-    <view v-else-if="household && profile" class="home-content" :data-testid="household.memberCount === 1 ? 'home-single-member' : 'home-two-members'">
+    <view
+      v-else-if="household && profile"
+      class="home-content"
+      :data-testid="household.memberCount === 1 ? 'home-single-member' : 'home-two-members'"
+    >
       <view class="hero">
         <!-- 品牌 logo 放在 eyebrow 行（与"睦录"同级），保持视觉但不喧宾夺主。
              旁边跟品牌主色文字 + 圆形描边占位，跟《品牌视觉标准》"Logo 周围应保留充足空白"对齐。 -->
@@ -32,12 +36,14 @@
         <text class="hero__copy">家不在大小，有人惦记就好。</text>
       </view>
 
-      <HomeSummaryCard
+      <HomeFamilyCover
         :name="household.name"
-        :avatar-src="resolvedAvatarSrc"
-        :avatar-loading="avatarLoading"
-        :member-count="household.memberCount"
-        @press="openHouseholdEditor"
+        :members="household.members"
+        :member-avatar-urls="memberAvatarUrls"
+        :member-avatar-loading="memberAvatarLoading"
+        :can-invite="household.currentMemberRole === 'owner'"
+        @edit="openHouseholdEditor"
+        @invite="openMemberManagement"
       />
 
       <!-- 本月账本小卡（PRD 008 优化 R11-R15 + 用户反馈：同时显示支出和收入）。无家庭时已在外层 v-if="household" 隐藏。 -->
@@ -62,19 +68,25 @@
       <!-- 事项区：单成员 / 双成员家庭都用同一套——只是单成员没有 "完成记录" 链接。
            不再把单成员锁在外面"等邀请另一半"——一个人也能记下自己的事。 -->
       <view v-if="taskCurrent" class="home-tasks">
-        <TaskList
-          v-if="hasAnyOpenTask"
-          :current="taskCurrent"
-          @press="onPressTask"
+        <template v-if="hasAnyOpenTask">
+          <TaskList :current="taskCurrent" @press="onPressTask" />
+        </template>
+        <WarmEmptyState
+          v-else
+          image-src="/static/warm-life/scenes/empty-tasks.png"
+          title="先记下一件事"
+          copy="生活里的小事记下来，才不会从聊天里溜走。"
+          compact
+          data-testid="home-tasks-empty"
         />
-        <view v-else class="home-empty" data-testid="home-tasks-empty">
-          <wd-icon name="tags" size="68rpx" color="#43c89a" />
-          <text class="home-empty__title">先记下一件事</text>
-          <text class="home-empty__copy">生活里的小事记下来，才不会从聊天里溜走。</text>
-        </view>
       </view>
       <view v-if="homeError" class="home-error" data-testid="home-tasks-error">{{ homeError }}</view>
-      <view v-if="hasCompletedLink" class="home-completed-link" data-testid="home-completed-link" @click="goCompleted">
+      <view
+        v-if="hasCompletedLink"
+        class="home-completed-link"
+        data-testid="home-completed-link"
+        @click="goCompleted"
+      >
         <view class="home-completed-link__icon">
           <wd-icon name="history" size="40rpx" color="#267A5A" />
         </view>
@@ -97,9 +109,10 @@
 import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { onShareAppMessage, onShareTimeline, onShow } from '@dcloudio/uni-app'
-import HomeSummaryCard from '../../components/home/HomeSummaryCard.vue'
 import MonthlyExpenseCard from '../../components/home/MonthlyExpenseCard.vue'
+import WarmEmptyState from '../../components/WarmEmptyState.vue'
 import HomeFootprintCard from './components/HomeFootprintCard.vue'
+import HomeFamilyCover from './components/HomeFamilyCover.vue'
 import AppTabBar from '../../components/AppTabBar.vue'
 import GlobalQuickAdd from '../../components/GlobalQuickAdd.vue'
 import TaskList from '../../components/task/TaskList.vue'
@@ -109,8 +122,14 @@ import { useTaskStore } from '../../store/modules/task'
 import { useLedgerStore } from '../../store/modules/ledger'
 import { useFootprintStore } from '../../store/modules/footprint'
 import { formatLedgerMonth } from '../../utils/format'
-import { createHomeShareMessage, createHomeTimelineShare, householdAvatarSource, resolveHomeLoadDestination } from './home-view'
+import {
+  createHomeShareMessage,
+  createHomeTimelineShare,
+  isCurrentMemberAvatarRequest,
+  resolveHomeLoadDestination,
+} from './home-view'
 import { getAvatarTemporaryUrl } from '../../services/avatar-media'
+import type { CustomAvatar, HouseholdMemberDisplay } from '../../types/household'
 import type { CurrentTasks } from '../../types/task'
 
 const authStore = useAuthStore()
@@ -122,7 +141,11 @@ const { hasCompletedLogin, errorMessage: authError } = storeToRefs(authStore)
 const { phase, household, profile, errorMessage: householdError } = storeToRefs(householdStore)
 const { current: taskCurrent, errorMessage: taskError } = storeToRefs(taskStore)
 const { stats: ledgerStats, phase: ledgerPhase, errorMessage: ledgerError } = storeToRefs(ledgerStore)
-const { summary: footprintSummary, pending: footprintPending, summaryError: footprintStoreError } = storeToRefs(footprintStore)
+const {
+  summary: footprintSummary,
+  pending: footprintPending,
+  summaryError: footprintStoreError,
+} = storeToRefs(footprintStore)
 
 // 首次进入且没有可展示资料时才显示整页加载；返回首页刷新时继续展示已确认内容，避免闪屏。
 const isLoading = computed(() => phase.value === 'checking' && !(household.value && profile.value))
@@ -130,17 +153,20 @@ const loadError = computed(() => authError.value || householdError.value)
 const homeError = computed(() => taskError.value || '')
 // 自定义头像 URL 由云端异步签发；sign 'empty' 期间不要让组件显示默认头像。
 // 用 avatarLoading 单独控制占位状态，householdAvatarUrl 仅在拿到真实 URL 时才赋值。
-const householdAvatarUrl = ref('')
-const avatarLoading = ref(false)
+const memberAvatarUrls = ref<Record<string, string>>({})
+const memberAvatarLoading = ref<Record<string, boolean>>({})
+const memberAvatarRequestVersion = ref(0)
 const footprintCoverUrl = ref('')
 
 const hasAnyOpenTask = computed(() => {
   const c = taskCurrent.value as CurrentTasks | undefined
   if (!c) return false
-  return c.priority.length > 0
-    || c.groups.low_stock.length > 0
-    || c.groups.to_handle.length > 0
-    || c.groups.expiring.length > 0
+  return (
+    c.priority.length > 0 ||
+    c.groups.low_stock.length > 0 ||
+    c.groups.to_handle.length > 0 ||
+    c.groups.expiring.length > 0
+  )
 })
 
 // 历史记录入口：有家庭时一直显示（单成员也能看自己做完的事），文案根据成员数变
@@ -156,19 +182,13 @@ const completedLinkTitle = computed(() =>
 const monthlyExpenseCents = computed(() => ledgerStats.value?.monthExpenseCents ?? null)
 const monthlyIncomeCents = computed(() => ledgerStats.value?.monthIncomeCents ?? null)
 const ledgerStatsLoading = computed(() => ledgerPhase.value === 'loading' && ledgerStats.value === null)
-const ledgerStatsError = computed(() => (ledgerError.value && ledgerStats.value === null ? ledgerError.value : null))
+const ledgerStatsError = computed(() =>
+  ledgerError.value && ledgerStats.value === null ? ledgerError.value : null,
+)
 const footprintLoading = computed(() => footprintPending.value.summary && footprintSummary.value === null)
-const footprintError = computed(() => (footprintStoreError.value && footprintSummary.value === null ? footprintStoreError.value : null))
-
-/** 给 HomeSummaryCard 喂头像 src。
- *  - 内置头像：直接本地路径
- *  - 自定义头像：只有 URL 拿到后才返回；否则返回空串（搭配 avatarLoading 走占位）
- *  这种"晚到一步"的方式避免出现"默认头像 → 自定义头像"的闪屏（用户反馈）。 */
-const resolvedAvatarSrc = computed(() => {
-  if (!household.value) return ''
-  if (household.value.avatar.kind === 'builtin') return householdAvatarSource(household.value.avatar.id)
-  return householdAvatarUrl.value
-})
+const footprintError = computed(() =>
+  footprintStoreError.value && footprintSummary.value === null ? footprintStoreError.value : null,
+)
 
 /** 使用重新进入页面清空错误页面历史，避免返回到失效身份状态。 */
 function relaunch(url: string): void {
@@ -205,7 +225,10 @@ async function loadFootprintSummary(householdId: string): Promise<void> {
   await footprintStore.loadSummary()
   if (version !== footprintStore.contextVersion) return
   const cover = footprintStore.summary?.latestEntry?.coverPhoto
-  if (!cover) { footprintCoverUrl.value = ''; return }
+  if (!cover) {
+    footprintCoverUrl.value = ''
+    return
+  }
   const urls = await footprintStore.hydratePhotoUrls([cover])
   if (version === footprintStore.contextVersion) footprintCoverUrl.value = urls[cover.resourceId] || ''
 }
@@ -223,18 +246,47 @@ function openHouseholdEditor(): void {
   uni.navigateTo({ url: '/subpackages/household/edit-household/index' })
 }
 
+/** 只有家庭创建者能从封面进入邀请管理，权限仍由云端在后续操作中再次确认。 */
+function openMemberManagement(): void {
+  if (household.value?.currentMemberRole !== 'owner') return
+  uni.navigateTo({ url: '/subpackages/household/member-management/index' })
+}
+
 /** 拉取自定义家庭头像 URL（云端异步签发）。失败兜底为空串 + 保持 loading=false，
  *  让 HomeSummaryCard 继续按空 src 渲染（占位圈由父组件决定）。 */
-async function loadCustomAvatarUrl(resourceId: string): Promise<void> {
-  avatarLoading.value = true
-  try {
-    const url = await getAvatarTemporaryUrl(resourceId)
-    householdAvatarUrl.value = url || ''
-  } catch {
-    householdAvatarUrl.value = ''
-  } finally {
-    avatarLoading.value = false
-  }
+async function loadMemberAvatarUrls(householdId: string, members: HouseholdMemberDisplay[]): Promise<void> {
+  const requestVersion = ++memberAvatarRequestVersion.value
+  const customMembers = members.filter(
+    (member): member is typeof member & { avatar: CustomAvatar } => member.avatar.kind === 'custom',
+  )
+  memberAvatarUrls.value = {}
+  memberAvatarLoading.value = Object.fromEntries(
+    customMembers.map((member) => [member.avatar.resourceId, true]),
+  )
+  await Promise.all(
+    customMembers.map(async (member) => {
+      const resourceId = member.avatar.resourceId
+      const canWriteResult = (): boolean =>
+        isCurrentMemberAvatarRequest({
+          requestVersion,
+          currentVersion: memberAvatarRequestVersion.value,
+          requestHouseholdId: householdId,
+          currentHouseholdId: household.value?.id,
+        })
+      try {
+        const url = await getAvatarTemporaryUrl(resourceId)
+        if (!canWriteResult()) return
+        memberAvatarUrls.value = { ...memberAvatarUrls.value, [resourceId]: url || '' }
+      } catch {
+        if (!canWriteResult()) return
+        memberAvatarUrls.value = { ...memberAvatarUrls.value, [resourceId]: '' }
+      } finally {
+        if (canWriteResult()) {
+          memberAvatarLoading.value = { ...memberAvatarLoading.value, [resourceId]: false }
+        }
+      }
+    }),
+  )
 }
 
 /** 登录确认和家庭查询串行执行，旧资料在查询开始时立即清空。
@@ -265,19 +317,18 @@ async function loadHome(): Promise<void> {
       ledgerStore.loadStats(month),
       loadFootprintSummary(result.household.id),
     ]
-    if (result.household.avatar.kind === 'custom') {
-      tasks.push(loadCustomAvatarUrl(result.household.avatar.resourceId))
-    } else {
-      // 内置头像无需异步 URL；显式置空避免上次离开时残留
-      householdAvatarUrl.value = ''
-      avatarLoading.value = false
-    }
+    tasks.push(loadMemberAvatarUrls(result.household.id, result.household.members))
     await Promise.all(tasks)
   } else {
-    if (result?.status === 'NO_HOME') { footprintStore.resetFootprintStore(); footprintCoverUrl.value = '' }
+    // 家庭离开或切换时先让旧头像请求失效，迟到结果不得写回新的封面。
+    memberAvatarRequestVersion.value += 1
+    if (result?.status === 'NO_HOME') {
+      footprintStore.resetFootprintStore()
+      footprintCoverUrl.value = ''
+    }
     // 非 HOME（如 NO_HOME）清空头像相关状态
-    householdAvatarUrl.value = ''
-    avatarLoading.value = false
+    memberAvatarUrls.value = {}
+    memberAvatarLoading.value = {}
   }
   const destination = resolveHomeLoadDestination(hasCompletedLogin.value, result?.status)
   if (destination === 'login') relaunch('/pages/login/index')
@@ -324,6 +375,19 @@ onShareTimeline(() => createHomeTimelineShare())
 .home-content {
   display: flex;
   flex-direction: column;
+  animation: home-content-rise 0.28s ease-out both;
+
+  // 整页只在内容首次挂载时轻微上移，避免每张卡片依次飞入影响查找效率。
+  @keyframes home-content-rise {
+    from {
+      opacity: 0;
+      transform: translateY(10rpx);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
 }
 .hero {
   display: flex;
@@ -360,32 +424,7 @@ onShareTimeline(() => createHomeTimelineShare())
     line-height: 1.6;
   }
 }
-.home-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin-top: 36rpx;
-  padding: 54rpx 32rpx;
-  border: 2rpx dashed $brand-color-border;
-  border-radius: $brand-radius-card;
-  background: rgba($brand-color-surface, .7);
-  text-align: center;
-  &__title {
-    margin-top: 20rpx;
-    color: $brand-color-text;
-    font-size: 30rpx;
-    font-weight: 700;
-  }
-  &__copy {
-    margin-top: 12rpx;
-    color: $brand-color-text-secondary;
-    font-size: 25rpx;
-    line-height: 1.6;
-  }
-}
 .home-tasks {
-  display: flex;
-  flex-direction: column;
   margin-top: 36rpx;
 }
 .home-error {
@@ -403,9 +442,11 @@ onShareTimeline(() => createHomeTimelineShare())
   padding: 24rpx 24rpx;
   border-radius: 20rpx;
   background: $brand-color-surface;
-  transition: transform .12s ease, background .15s ease;
+  transition:
+    transform 0.12s ease,
+    background 0.15s ease;
   &:active {
-    transform: scale(.99);
+    transform: scale(0.99);
     background: #effbf5;
   }
   &__icon {

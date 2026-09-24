@@ -29,6 +29,37 @@ describe('徒步 KML 解析', () => {
     expect(result.metrics.highestAltitudeMeters).toBeNull()
   })
 
+  it('解析带外部图标样式的 gx Track 轨迹，且不读取样式链接', () => {
+    // 二步路等软件会把轨迹导出为 gx:Track，图标 href 只是样式元数据。
+    const xml = `
+      <kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2">
+        <Document>
+          <Style><IconStyle><Icon><href>https://files.example.com/marker.png</href></Icon></IconStyle></Style>
+          <Placemark>
+            <gx:Track>
+              <gx:coord>112.982684 22.918248 2.000000</gx:coord>
+              <gx:coord>112.983684 22.919248 3.000000</gx:coord>
+            </gx:Track>
+          </Placemark>
+          <Placemark>
+            <gx:Track>
+              <gx:coord>112.980142 22.918455 72.000000</gx:coord>
+              <gx:coord>112.981142 22.919455 73.000000</gx:coord>
+            </gx:Track>
+          </Placemark>
+        </Document>
+      </kml>`
+    const result = parseHikingKml(xml, { fileName: '2bulu.kml' })
+    expect(result.segmentCount).toBe(2)
+    expect(result.pointCount).toBe(4)
+    expect(result.route.segments[0].points[0]).toEqual({
+      longitude: 112.982684,
+      latitude: 22.918248,
+      altitude: 2,
+    })
+    expect(result.metrics.elevationGainMeters).toBeNull()
+  })
+
   it.each([
     ['doctype-entity.kml', 'UNSAFE_XML'],
     ['invalid-coordinate.kml', 'INVALID_COORDINATE'],
@@ -41,13 +72,12 @@ describe('徒步 KML 解析', () => {
     }
   })
 
-  it('拒绝远程资源、gx Track、错误扩展名和超大文件', () => {
+  it('拒绝远程路线、错误扩展名和超大文件', () => {
     expect(() =>
       parseHikingKml(
         '<kml><NetworkLink><Link><href>https://example.com/a.kml</href></Link></NetworkLink></kml>',
       ),
     ).toThrow('不支持')
-    expect(() => parseHikingKml('<kml xmlns:gx="x"><gx:Track /></kml>')).toThrow('不支持')
     expect(() => parseHikingKml(fixture('valid-linestring.kml'), { fileName: 'route.kmz' })).toThrow(
       'KML 格式',
     )

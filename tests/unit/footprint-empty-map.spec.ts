@@ -68,6 +68,15 @@ describe('没有足迹时的地图展示', () => {
     expect(nodes.some((node) => node.props?.class === 'footprint-page__map-heading')).toBe(true)
   })
 
+  it('地图与列表切换不触发震动，并使用品牌主题色', () => {
+    const { nodes } = renderPage()
+    const segmented = nodes.find((node) => node.type === 'wd-segmented')
+    expect(segmented).toBeDefined()
+    expect(segmented!.props?.vibrateShort).not.toBe(true)
+    expect(source).toContain('--wot-segmented-item-color-active: #{$brand-color-action}')
+    expect(source).toContain('--wot-segmented-item-bg-active: #e7f7ef')
+  })
+
   it('零记录仍渲染地图，且不显示当前位置', () => {
     const { nodes } = renderPage()
     const map = nodes.find((node) => node.type === 'map')

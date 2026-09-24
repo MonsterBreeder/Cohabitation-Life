@@ -10,16 +10,22 @@ describe('家庭首页', () => {
 
     const home = await page.$('[data-testid="home-single-member"]')
     const household = await page.$('[data-testid="household-profile"]')
+    const realMembers = await page.$$('[data-testid="family-member-real"]')
+    const waitingMembers = await page.$$('[data-testid="family-member-waiting"]')
     const quickAdd = await page.$('[data-testid="global-quick-add"]')
     const text = await home.text()
 
     expect(home).toBeTruthy()
     expect(household).toBeTruthy()
+    expect(realMembers).toHaveLength(1)
+    expect(waitingMembers).toHaveLength(1)
     // 单人状态也必须显示全局快速新增入口和事项区空状态。
     expect(quickAdd).toBeTruthy()
     expect(text).toContain('先记下一件事')
-    // 单人状态不预先展示第二位成员的昵称或头像
-    expect(text).not.toMatch(/(第二位|另一位)/)
+    // 单人状态只保留空席提示，不预先伪造第二位成员的昵称或头像。
+    expect(text).toContain('等另一位加入')
+    expect(text).toContain('（我）')
+    expect(text).not.toContain('第二位成员')
   })
 
   e2eTest('双人家庭展示两位成员资料,且不再显示单人提示', async () => {

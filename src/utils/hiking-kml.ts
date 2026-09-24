@@ -1,4 +1,4 @@
-// KML 只在本机解析；拒绝实体、远程资源和非 LineString 内容，原文不会上传。
+// KML 只在本机解析；支持 LineString 与 gx:Track，不读取文件中的外部链接。
 import { XMLParser } from 'fast-xml-parser'
 import {
   HikingKmlError,
@@ -41,28 +41,41 @@ function textValue(value: unknown): string {
   return ''
 }
 
-function parseCoordinates(raw: string): HikingRoutePoint[] {
+/** 校验单个坐标点，两种 KML 轨迹格式共用同一套边界。 */
+function createPoint(parts: string[]): HikingRoutePoint {
+  if (parts.length < 2 || parts.length > 3)
+    throw new HikingKmlError('INVALID_COORDINATE', '路线中存在无法识别的坐标')
+  const longitude = Number(parts[0])
+  const latitude = Number(parts[1])
+  const altitude = parts[2] === undefined || parts[2] === '' ? undefined : Number(parts[2])
+  if (
+    !Number.isFinite(longitude) ||
+    !Number.isFinite(latitude) ||
+    (altitude !== undefined && !Number.isFinite(altitude)) ||
+    Math.abs(latitude) > 90 ||
+    Math.abs(longitude) > 180
+  )
+    throw new HikingKmlError('INVALID_COORDINATE', '路线中存在越界或无效坐标')
+  return { latitude, longitude, ...(altitude === undefined ? {} : { altitude }) }
+}
+
+function parseLineStringCoordinates(raw: string): HikingRoutePoint[] {
   const points = raw
     .trim()
     .split(/\s+/)
     .filter(Boolean)
-    .map((tuple) => {
-      const parts = tuple.split(',')
-      if (parts.length < 2 || parts.length > 3)
-        throw new HikingKmlError('INVALID_COORDINATE', '路线中存在无法识别的坐标')
-      const longitude = Number(parts[0])
-      const latitude = Number(parts[1])
-      const altitude = parts[2] === undefined || parts[2] === '' ? undefined : Number(parts[2])
-      if (
-        !Number.isFinite(longitude) ||
-        !Number.isFinite(latitude) ||
-        (altitude !== undefined && !Number.isFinite(altitude)) ||
-        Math.abs(latitude) > 90 ||
-        Math.abs(longitude) > 180
-      )
-        throw new HikingKmlError('INVALID_COORDINATE', '路线中存在越界或无效坐标')
-      return { latitude, longitude, ...(altitude === undefined ? {} : { altitude }) }
-    })
+    .map((tuple) => createPoint(tuple.split(',')))
+  if (points.length < 2) throw new HikingKmlError('NO_ROUTE', '每段路线至少需要两个有效坐标点')
+  return points
+}
+
+/** gx:coord 每个节点存一个“经度 纬度 海拔”坐标，与 LineString 的逗号格式不同。 */
+function parseTrackCoordinates(track: unknown): HikingRoutePoint[] {
+  const value = childValue(track, 'coord')
+  const coordinates = (Array.isArray(value) ? value : [value])
+    .map((item) => textValue(item).trim())
+    .filter(Boolean)
+  const points = coordinates.map((coordinate) => createPoint(coordinate.split(/\s+/)))
   if (points.length < 2) throw new HikingKmlError('NO_ROUTE', '每段路线至少需要两个有效坐标点')
   return points
 }
@@ -73,11 +86,8 @@ export function parseHikingKml(xml: string, options: ParseOptions = {}): HikingK
   const byteLength = options.byteLength ?? new TextEncoder().encode(xml).byteLength
   if (byteLength > HIKING_KML_MAX_BYTES) throw new HikingKmlError('FILE_TOO_LARGE', 'KML 文件不能超过 5 MB')
   if (/<!DOCTYPE|<!ENTITY/i.test(xml)) throw new HikingKmlError('UNSAFE_XML', '该文件包含不安全的 XML 声明')
-  // KML 命名空间本身是标准网址；只把内容节点里的外部地址视为远程资源。
-  if (
-    /<(?:\w+:)?(?:NetworkLink|Polygon|Track)\b/i.test(xml) ||
-    /<(?:\w+:)?href\b[^>]*>\s*(?:https?|file):\/\//i.test(xml)
-  ) {
+  // NetworkLink 会表示另一个远程路线，仍明确拒绝；样式图标 href 仅被忽略，不会访问网络。
+  if (/<(?:\w+:)?(?:NetworkLink|Polygon)\b/i.test(xml)) {
     throw new HikingKmlError('UNSUPPORTED_CONTENT', '文件包含首版不支持的路线内容')
   }
   let parsed: unknown
@@ -92,18 +102,25 @@ export function parseHikingKml(xml: string, options: ParseOptions = {}): HikingK
     throw new HikingKmlError('INVALID_XML', 'KML 文件已损坏或格式不完整')
   }
   const lineStrings: unknown[] = []
+  const tracks: unknown[] = []
   collectNamedNodes(parsed, 'LineString', lineStrings)
-  if (!lineStrings.length) throw new HikingKmlError('NO_ROUTE', '文件中没有可用的 LineString 路线')
-  if (lineStrings.length > HIKING_KML_MAX_SEGMENTS)
+  collectNamedNodes(parsed, 'Track', tracks)
+  // 有些软件会同时写入两套相同轨迹；优先使用 LineString，避免重复计算。
+  const routeNodes = lineStrings.length ? lineStrings : tracks
+  const routeKind = lineStrings.length ? 'line-string' : 'track'
+  if (!routeNodes.length) throw new HikingKmlError('NO_ROUTE', '文件中没有可用的路线')
+  if (routeNodes.length > HIKING_KML_MAX_SEGMENTS)
     throw new HikingKmlError('TOO_MANY_SEGMENTS', 'KML 路线段不能超过 100 段')
-  const segments: HikingRouteSegment[] = lineStrings.map((line) => {
-    const coordinates = textValue(childValue(line, 'coordinates'))
-    if (!coordinates) throw new HikingKmlError('NO_ROUTE', '路线段缺少有效坐标')
+  const segments: HikingRouteSegment[] = routeNodes.map((routeNode) => {
+    const points =
+      routeKind === 'line-string'
+        ? parseLineStringCoordinates(textValue(childValue(routeNode, 'coordinates')))
+        : parseTrackCoordinates(routeNode)
     const altitudeMode =
-      textValue(childValue(line, 'altitudeMode')).trim().toLowerCase() === 'absolute'
+      textValue(childValue(routeNode, 'altitudeMode')).trim().toLowerCase() === 'absolute'
         ? 'absolute'
         : 'untrusted'
-    return { points: parseCoordinates(coordinates), altitudeMode }
+    return { points, altitudeMode }
   })
   const pointCount = segments.reduce((sum, segment) => sum + segment.points.length, 0)
   if (pointCount > HIKING_KML_MAX_POINTS)

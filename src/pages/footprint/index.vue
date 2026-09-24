@@ -50,13 +50,7 @@
 
       <!-- 地图与列表是同一份足迹的两种视角，切换器紧贴内容区域。 -->
       <view class="footprint-page__switcher">
-        <wd-segmented
-          v-model:value="modeLabel"
-          :options="modeOptions"
-          size="large"
-          :vibrate-short="true"
-          @change="onModeChange"
-        />
+        <wd-segmented v-model:value="modeLabel" :options="modeOptions" size="large" @change="onModeChange" />
       </view>
 
       <!-- 未去过的地点也能导航，独立于新增足迹，避免为导航伪造游玩记录。 -->
@@ -70,15 +64,15 @@
       </view>
 
       <!-- 空记录卡片只用于列表；地图模式不能因零记录而隐藏地图。 -->
-      <view
+      <WarmEmptyState
         v-if="mode === 'list' && entries.length === 0 && !mapError && !listError"
         class="footprint-page__empty"
+        image-src="/static/warm-life/scenes/empty-footprint.png"
+        title="还没有共同足迹"
+        copy="去记录第一个一起玩过的地方吧。"
       >
-        <wd-icon name="location" size="76rpx" color="#43C89A" />
-        <text class="footprint-page__empty-title">还没有共同足迹</text>
-        <text class="footprint-page__empty-copy">去记录第一个一起玩过的地方吧。</text>
         <wd-button round @click="goAdd">记录第一个地方</wd-button>
-      </view>
+      </WarmEmptyState>
 
       <template v-else-if="mode === 'map'">
         <view v-if="mapError" class="footprint-page__panel-error">
@@ -87,6 +81,14 @@
         </view>
         <view v-if="!mapError || markerResult.markers.length > 0" class="footprint-page__map-shell">
           <view class="footprint-page__map-heading">
+            <!-- 有记录时把插画融进地图标题，不额外增加内容区块。 -->
+            <image
+              v-if="hasFootprintMemories"
+              class="footprint-page__section-illustration"
+              src="/static/warm-life/scenes/empty-footprint.png"
+              mode="aspectFit"
+              data-testid="footprint-map-scene"
+            />
             <view class="footprint-page__section-copy">
               <text class="footprint-page__section-title">足迹地图</text>
               <text class="footprint-page__section-note">点亮我们一起去过的每一站</text>
@@ -112,6 +114,11 @@
             v-if="summary?.placeCount === 0 && hikes.length === 0 && !mapError && !listError"
             class="footprint-page__map-guide"
           >
+            <image
+              class="footprint-page__guide-image"
+              src="/static/warm-life/scenes/empty-footprint.png"
+              mode="aspectFit"
+            />
             <view class="footprint-page__guide-copy">
               <text class="footprint-page__guide-title">从第一站开始</text>
               <text class="footprint-page__guide-note">记录一个一起玩过的地方吧</text>
@@ -139,6 +146,14 @@
 
       <template v-else>
         <view v-if="summary?.placeCount" class="footprint-page__list-heading">
+          <!-- 列表视角沿用同一处轻量点缀，切换后不再出现独立横幅。 -->
+          <image
+            v-if="hasFootprintMemories"
+            class="footprint-page__section-illustration"
+            src="/static/warm-life/scenes/empty-footprint.png"
+            mode="aspectFit"
+            data-testid="footprint-list-scene"
+          />
           <view class="footprint-page__section-copy">
             <text class="footprint-page__section-title">回忆清单</text>
             <text class="footprint-page__section-note">按时间翻看我们一起留下的故事</text>
@@ -195,6 +210,7 @@ import { onLoad, onReady, onShow } from '@dcloudio/uni-app'
 import AppTabBar from '../../components/AppTabBar.vue'
 import FootprintNavigationButton from '../../components/FootprintNavigationButton.vue'
 import GlobalQuickAdd from '../../components/GlobalQuickAdd.vue'
+import WarmEmptyState from '../../components/WarmEmptyState.vue'
 import FootprintTimeline from './components/FootprintTimeline.vue'
 import { useAuthStore } from '../../store/modules/auth'
 import { useHouseholdStore } from '../../store/modules/household'
@@ -229,6 +245,10 @@ const photoUrls = ref<Record<string, string>>({})
 const historyNoticeOpen = ref(false)
 const initialPlaceKey = ref('')
 const markerResult = computed(() => buildFootprintMarkers(places.value, hikes.value))
+// 普通足迹或徒步任一种有记录，都持续保留插画氛围，不再只在空状态出现。
+const hasFootprintMemories = computed(
+  () => Boolean(summary.value?.placeCount) || entries.value.length > 0 || hikes.value.length > 0,
+)
 const visibleMarkers = computed(() =>
   markerResult.value.markers.length > 50 ? [] : markerResult.value.markers,
 )
@@ -534,6 +554,9 @@ onReady(() => {
 
   // 模式切换器用单独底板收边，避免与顶部卡片和地图粘连。
   &__switcher {
+    // 禁用震动后仍保留滑块过渡，并把选中态统一为品牌绿。
+    --wot-segmented-item-color-active: #{$brand-color-action};
+    --wot-segmented-item-bg-active: #e7f7ef;
     padding: 6rpx;
     border: 1rpx solid rgba(38, 122, 90, 0.08);
     border-radius: 18rpx;
@@ -599,8 +622,14 @@ onReady(() => {
   &__section-copy {
     display: flex;
     min-width: 0;
+    flex: 1;
     flex-direction: column;
     gap: 6rpx;
+  }
+  &__section-illustration {
+    width: 76rpx;
+    height: 58rpx;
+    flex: 0 0 auto;
   }
   &__section-title {
     color: $brand-color-text;
@@ -634,6 +663,11 @@ onReady(() => {
     gap: 18rpx;
     padding: 22rpx 24rpx 24rpx;
     border-top: 1rpx solid rgba(38, 122, 90, 0.08);
+  }
+  &__guide-image {
+    width: 126rpx;
+    height: 94rpx;
+    flex: 0 0 auto;
   }
   &__guide-copy {
     display: flex;
@@ -669,7 +703,10 @@ onReady(() => {
     gap: 18rpx;
   }
   &__list-heading {
-    padding: 12rpx 4rpx 4rpx;
+    display: flex;
+    align-items: center;
+    gap: 14rpx;
+    padding: 4rpx;
   }
   &__filter {
     display: flex;
