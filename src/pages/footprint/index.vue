@@ -50,13 +50,7 @@
 
       <!-- 地图与列表是同一份足迹的两种视角，切换器紧贴内容区域。 -->
       <view class="footprint-page__switcher">
-        <wd-segmented
-          v-model:value="modeLabel"
-          :options="modeOptions"
-          size="large"
-          :vibrate-short="true"
-          @change="onModeChange"
-        />
+        <wd-segmented v-model:value="modeLabel" :options="modeOptions" size="large" @change="onModeChange" />
       </view>
 
       <!-- 未去过的地点也能导航，独立于新增足迹，避免为导航伪造游玩记录。 -->
@@ -560,6 +554,9 @@ onReady(() => {
 
   // 模式切换器用单独底板收边，避免与顶部卡片和地图粘连。
   &__switcher {
+    // 禁用震动后仍保留滑块过渡，并把选中态统一为品牌绿。
+    --wot-segmented-item-color-active: #{$brand-color-action};
+    --wot-segmented-item-bg-active: #e7f7ef;
     padding: 6rpx;
     border: 1rpx solid rgba(38, 122, 90, 0.08);
     border-radius: 18rpx;
