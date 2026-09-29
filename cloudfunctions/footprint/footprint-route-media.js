@@ -25,7 +25,18 @@ function normaliseRoute(value) {
     return { altitudeMode: segment.altitudeMode === 'absolute' ? 'absolute' : 'untrusted', points }
   })
   if (pointCount > 20000) throw new FootprintDomainError('FOOTPRINT_ROUTE_INVALID')
-  return { route: { version: 1, source: value.source, segments }, pointCount, segmentCount: segments.length }
+  // KML 扩展成果只保留有限范围的数字，不允许任意扩展字段进入私有路线资源。
+  let importedMetrics
+  if (value.importedMetrics !== undefined) {
+    if (value.source !== 'kml' || !value.importedMetrics || typeof value.importedMetrics !== 'object' || Array.isArray(value.importedMetrics)) throw new FootprintDomainError('FOOTPRINT_ROUTE_INVALID')
+    const { durationSeconds, elevationGainMeters } = value.importedMetrics
+    if ((durationSeconds !== undefined && (!Number.isInteger(durationSeconds) || durationSeconds < 0 || durationSeconds > 6_000_000)) || (elevationGainMeters !== undefined && (!Number.isFinite(elevationGainMeters) || elevationGainMeters < 0 || elevationGainMeters > 100_000))) throw new FootprintDomainError('FOOTPRINT_ROUTE_INVALID')
+    importedMetrics = {
+      ...(durationSeconds === undefined ? {} : { durationSeconds }),
+      ...(elevationGainMeters === undefined ? {} : { elevationGainMeters: Number(elevationGainMeters.toFixed(1)) }),
+    }
+  }
+  return { route: { version: 1, source: value.source, segments, ...(importedMetrics ? { importedMetrics } : {}) }, pointCount, segmentCount: segments.length }
 }
 
 async function prepareRoute(_input, dependencies) {

@@ -15,6 +15,11 @@ export interface HikingRoute {
   version: 1
   source: 'kml' | 'tracking'
   segments: HikingRouteSegment[]
+  /** KML 导出软件明确给出的运动成果；云端只保留经过范围校验的数值。 */
+  importedMetrics?: {
+    durationSeconds?: number
+    elevationGainMeters?: number
+  }
 }
 
 export interface HikingMetrics {

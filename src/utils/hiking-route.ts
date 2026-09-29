@@ -76,12 +76,18 @@ export function calculateHikingMetrics(
   const elevation = route
     ? calculateTrustedElevation(route.segments)
     : { elevationGainMeters: null, highestAltitudeMeters: null, lowestAltitudeMeters: null }
+  // 导出软件明确给出的累计爬升优先；未知海拔基准时仍不推测最高、最低海拔。
+  if (route?.source === 'kml' && route.importedMetrics?.elevationGainMeters != null) {
+    elevation.elevationGainMeters = route.importedMetrics.elevationGainMeters
+  }
+  const effectiveDuration =
+    safeDuration ?? (route?.source === 'kml' ? (route.importedMetrics?.durationSeconds ?? null) : null)
   return {
     distanceMeters,
-    durationSeconds: safeDuration,
+    durationSeconds: effectiveDuration,
     averageSpeedKmh:
-      distanceMeters != null && safeDuration != null && safeDuration > 0
-        ? Math.round((distanceMeters / 1000 / (safeDuration / 3600)) * 100) / 100
+      distanceMeters != null && effectiveDuration != null && effectiveDuration > 0
+        ? Math.round((distanceMeters / 1000 / (effectiveDuration / 3600)) * 100) / 100
         : null,
     ...elevation,
   }

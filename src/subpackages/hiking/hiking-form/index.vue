@@ -27,7 +27,7 @@
       <view class="hiking-form__section">
         <text class="hiking-form__section-title">路线</text>
         <view v-if="draft.route" class="hiking-form__route">
-          <HikingRouteMap :route="draft.route" @ready="routeReady = true" @error="routeReady = false" />
+          <HikingRouteMap :route="draft.route" />
           <view class="hiking-form__route-heading">
             <text>{{ draft.routeFileName }}</text>
             <text>{{ routePointCount }} 个点 · {{ draft.route.segments.length }} 段</text>
@@ -52,16 +52,29 @@
 
       <view class="hiking-form__section">
         <text class="hiking-form__section-title">基本资料</text>
-        <wd-input
-          v-model="draft.name"
-          label="名称"
-          placeholder="例如：周末白云山"
-          :maxlength="50"
-          clearable
-        />
+        <!-- 当前输入组件不显示 label，字段名称由表单行明确呈现。 -->
+        <view class="hiking-form__field">
+          <text class="hiking-form__field-label">名称</text>
+          <view class="hiking-form__field-control">
+            <wd-input
+              v-model="draft.name"
+              compact
+              align-right
+              placeholder="例如：周末白云山"
+              :maxlength="50"
+              clearable
+            />
+          </view>
+        </view>
         <view class="hiking-form__field">
           <text class="hiking-form__field-label">日期</text>
-          <picker mode="date" :value="draft.hikedAt" :end="today" @change="onDateChange">
+          <picker
+            class="hiking-form__field-control"
+            mode="date"
+            :value="draft.hikedAt"
+            :end="today"
+            @change="onDateChange"
+          >
             <view class="hiking-form__field-value">{{ draft.hikedAt || '暂无数据' }}</view>
           </picker>
           <wd-icon name="arrow-right" size="30rpx" color="#74847D" />
@@ -73,29 +86,31 @@
           </text>
           <wd-icon name="arrow-right" size="30rpx" color="#74847D" />
         </view>
-        <wd-input
-          v-if="!draft.route"
-          v-model="draft.manualDistanceKm"
-          label="距离"
-          placeholder="可选"
-          type="digit"
-          suffix="公里"
-        />
-        <wd-input
-          v-model="draft.durationMinutes"
-          label="有效时长"
-          placeholder="可选"
-          type="digit"
-          suffix="分钟"
-        />
-        <wd-textarea
-          v-model="draft.memory"
-          label="感受"
-          placeholder="这一路，最想记住什么？"
-          :maxlength="300"
-          show-word-limit
-          auto-height
-        />
+        <view v-if="!draft.route" class="hiking-form__field">
+          <text class="hiking-form__field-label">距离</text>
+          <view class="hiking-form__field-control">
+            <wd-input v-model="draft.manualDistanceKm" compact align-right placeholder="可选" type="digit" />
+          </view>
+          <text class="hiking-form__field-unit">公里</text>
+        </view>
+        <view class="hiking-form__field">
+          <text class="hiking-form__field-label">有效时长</text>
+          <view class="hiking-form__field-control">
+            <wd-input v-model="draft.durationMinutes" compact align-right placeholder="可选" type="digit" />
+          </view>
+          <text class="hiking-form__field-unit">分钟</text>
+        </view>
+        <view class="hiking-form__memory">
+          <text class="hiking-form__memory-label">感受</text>
+          <wd-textarea
+            v-model="draft.memory"
+            compact
+            placeholder="这一路，最想记住什么？"
+            :maxlength="300"
+            show-word-limit
+            auto-height
+          />
+        </view>
       </view>
 
       <view class="hiking-form__section">
@@ -134,16 +149,10 @@
         <HikingMetrics :metrics="metrics" />
       </view>
       <view v-if="formError" class="hiking-form__error">{{ formError }}</view>
-      <wd-button
-        block
-        round
-        :loading="saving"
-        :disabled="saving || selectingPhotos || (Boolean(draft.route) && !routeReady)"
-        @click="save"
-      >
+      <!-- 路线已在导入页完成预览；地图重绘事件不应再次阻止保存。 -->
+      <wd-button block round :loading="saving" :disabled="saving || selectingPhotos" @click="save">
         {{ isEdit ? '保存修改' : '保存共同徒步' }}
       </wd-button>
-      <text v-if="draft.route && !routeReady" class="hiking-form__save-note">路线成功显示后才能保存</text>
     </template>
   </view>
 </template>
@@ -197,7 +206,6 @@ const loadError = ref('')
 const saving = ref(false)
 const selectingPhotos = ref(false)
 const formError = ref('')
-const routeReady = ref(false)
 const shouldOpenImport = ref(false)
 const fromTracking = ref(false)
 const entryId = ref('')
@@ -220,8 +228,11 @@ function applyImportedRoute(payload: { fileName: string; result: HikingKmlParseR
   draft.route = payload.result.route
   draft.routeFileName = payload.fileName
   draft.manualDistanceKm = ''
+  // 保留用户已经手填的时长；空白时才带入 KML 明确记录的有效时长。
+  if (!draft.durationMinutes && payload.result.metrics.durationSeconds != null) {
+    draft.durationMinutes = String(Math.round((payload.result.metrics.durationSeconds / 60) * 10) / 10)
+  }
   routeChanged.value = true
-  routeReady.value = false
   formError.value = ''
 }
 
@@ -238,7 +249,6 @@ function removeRoute(): void {
   draft.route = null
   draft.routeFileName = ''
   routeChanged.value = true
-  routeReady.value = false
 }
 
 function onDateChange(event: { detail: { value: string } }): void {
@@ -382,7 +392,6 @@ async function initialize(): Promise<void> {
           : ''
         draft.hikedAt = today
         routeChanged.value = Boolean(draft.route)
-        routeReady.value = false
       }
       return
     }
@@ -403,7 +412,6 @@ async function initialize(): Promise<void> {
     if (detail.routeResourceId) {
       draft.route = await getHikingRouteInCloud(detail.routeResourceId)
       draft.routeFileName = '已保存路线'
-      routeReady.value = false
     }
   } catch (error) {
     loadError.value = humaniseHikingError(error)
@@ -615,13 +623,40 @@ onUnload(() => {
     font-size: 26rpx;
   }
 
-  &__field-value {
-    min-height: 88rpx;
+  // 日期选择器和输入框占据相同的剩余宽度，地点与日期的内容才能对齐。
+  &__field-control {
+    min-width: 0;
     flex: 1;
+  }
+
+  &__field-value {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
     color: $brand-color-text-secondary;
     font-size: 26rpx;
-    line-height: 88rpx;
+    line-height: 1.4;
     text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__field-unit {
+    flex-shrink: 0;
+    color: $brand-color-text-secondary;
+    font-size: 24rpx;
+  }
+
+  &__memory {
+    display: flex;
+    flex-direction: column;
+    gap: 12rpx;
+    padding: 22rpx 0 4rpx;
+  }
+
+  &__memory-label {
+    color: $brand-color-text;
+    font-size: 26rpx;
   }
 
   &__photos {
@@ -710,14 +745,6 @@ onUnload(() => {
     color: #ba564b;
     font-size: 23rpx;
     line-height: 1.5;
-  }
-
-  &__save-note {
-    display: block;
-    margin-top: 14rpx;
-    color: $brand-color-text-secondary;
-    font-size: 21rpx;
-    text-align: center;
   }
 }
 </style>
