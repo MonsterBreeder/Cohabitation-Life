@@ -3,6 +3,7 @@ import { XMLParser } from 'fast-xml-parser'
 import {
   HikingKmlError,
   type HikingKmlParseResult,
+  type HikingRoute,
   type HikingRoutePoint,
   type HikingRouteSegment,
 } from '../types/hiking'
@@ -39,6 +40,49 @@ function textValue(value: unknown): string {
   if (value && typeof value === 'object' && '#text' in value)
     return String((value as Record<string, unknown>)['#text'])
   return ''
+}
+
+/** 只读取 Document 的明确数值成果，不从任意描述文本或单点海拔猜测。 */
+function importedMetrics(parsed: unknown): HikingRoute['importedMetrics'] {
+  const documents: unknown[] = []
+  collectNamedNodes(parsed, 'Document', documents)
+  if (documents.length !== 1) return undefined
+  const dataValue = childValue(childValue(documents[0], 'ExtendedData'), 'Data')
+  const items = Array.isArray(dataValue) ? dataValue : [dataValue]
+  const fields = new Map<string, string>()
+  for (const item of items) {
+    const name = childValue(item, '@_name')
+    if (typeof name === 'string' && !fields.has(name))
+      fields.set(name, textValue(childValue(item, 'value')).trim())
+  }
+  const numberField = (name: string): number | null => {
+    const raw = fields.get(name)
+    if (!raw || !/^(?:\d+)(?:\.\d+)?$/.test(raw)) return null
+    const value = Number(raw)
+    return Number.isFinite(value) ? value : null
+  }
+  const gain = numberField('ElevationGain')
+  const begin = numberField('BeginTime')
+  const end = numberField('EndTime')
+  const pause = numberField('PauseTime') ?? (fields.has('PauseTime') ? null : 0)
+  const durationMs = begin != null && end != null && pause != null ? end - begin - pause : null
+  const durationSeconds =
+    begin != null &&
+    begin >= 946684800000 &&
+    end != null &&
+    end <= 4102444800000 &&
+    pause != null &&
+    durationMs != null &&
+    durationMs > 0 &&
+    durationMs <= 6_000_000_000 &&
+    pause <= end - begin
+      ? Math.round(durationMs / 1000)
+      : null
+  if ((gain == null || gain > 100_000) && durationSeconds == null) return undefined
+  return {
+    ...(durationSeconds == null ? {} : { durationSeconds }),
+    ...(gain == null || gain > 100_000 ? {} : { elevationGainMeters: gain }),
+  }
 }
 
 /** 校验单个坐标点，两种 KML 轨迹格式共用同一套边界。 */
@@ -125,6 +169,12 @@ export function parseHikingKml(xml: string, options: ParseOptions = {}): HikingK
   const pointCount = segments.reduce((sum, segment) => sum + segment.points.length, 0)
   if (pointCount > HIKING_KML_MAX_POINTS)
     throw new HikingKmlError('TOO_MANY_POINTS', 'KML 坐标点不能超过 20,000 个')
-  const route = { version: 1 as const, source: 'kml' as const, segments }
+  const metrics = importedMetrics(parsed)
+  const route = {
+    version: 1 as const,
+    source: 'kml' as const,
+    segments,
+    ...(metrics ? { importedMetrics: metrics } : {}),
+  }
   return { route, metrics: calculateHikingMetrics(route), pointCount, segmentCount: segments.length }
 }

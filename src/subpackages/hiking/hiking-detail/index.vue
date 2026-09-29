@@ -65,8 +65,11 @@
         </view>
       </view>
 
-      <wd-button block round @click="edit">编辑这次徒步</wd-button>
-      <wd-button block type="danger" plain :loading="deleting" @click="remove">删除这次徒步</wd-button>
+      <!-- 编辑与删除保持同样的按钮轮廓和明确间距，危险操作仍用红色区分。 -->
+      <view class="hiking-detail__actions">
+        <wd-button block round @click="edit">编辑这次徒步</wd-button>
+        <wd-button block round type="danger" :loading="deleting" @click="remove">删除这次徒步</wd-button>
+      </view>
     </template>
   </view>
 </template>
@@ -286,6 +289,13 @@ onShow(() => void loadDetail())
     height: 190rpx;
     border-radius: 18rpx;
     background: #effbf5;
+  }
+
+  // 底部两个同级操作分别占满一行，留出可辨认的点击间隔。
+  &__actions {
+    display: flex;
+    flex-direction: column;
+    gap: 18rpx;
   }
 }
 </style>
