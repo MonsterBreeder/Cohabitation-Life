@@ -145,6 +145,77 @@ describe('共同徒步云端规则', () => {
     ).toThrow()
   })
 
+  it('审核后保留 KML 明确给出的成果，并拒绝超界数值', () => {
+    // 保存时会使用审核后的路线副本，扩展数据不能在规范化时丢失。
+    const route = {
+      version: 1,
+      source: 'kml',
+      importedMetrics: { durationSeconds: 12468, elevationGainMeters: 400 },
+      segments: [
+        {
+          altitudeMode: 'untrusted',
+          points: [
+            { latitude: 23, longitude: 113 },
+            { latitude: 23.001, longitude: 113.001 },
+          ],
+        },
+      ],
+    }
+    expect(routes.normaliseRoute(route).route.importedMetrics).toEqual(route.importedMetrics)
+    expect(() => routes.normaliseRoute({ ...route, importedMetrics: { elevationGainMeters: -1 } })).toThrow()
+    expect(() =>
+      routes.normaliseRoute({ ...route, importedMetrics: { durationSeconds: Infinity } }),
+    ).toThrow()
+  })
+
+  it('保存共同徒步时使用已审核路线携带的爬升和时长', async () => {
+    // KML 的逐点海拔可能不可信，但导出软件给出的累计值应进入双方可见的详情。
+    const routeId = `footroute_${'b'.repeat(32)}`
+    const route = routes.normaliseRoute({
+      version: 1,
+      source: 'kml',
+      importedMetrics: { durationSeconds: 12468, elevationGainMeters: 400 },
+      segments: [
+        {
+          altitudeMode: 'untrusted',
+          points: [
+            { latitude: 23, longitude: 113 },
+            { latitude: 23.001, longitude: 113.001 },
+          ],
+        },
+      ],
+    }).route
+    const context = dependencies()
+    context.repository.getRouteMedia = async () => ({
+      _id: routeId,
+      state: 'approved',
+      ownerKey: 'user_a',
+      householdId: 'home_a',
+      digest: 'digest',
+    })
+    context.storage.download.mockResolvedValue({ fileContent: Buffer.from(JSON.stringify(route)) })
+    const result = await hiking.createHike(
+      { ...baseInput, durationSeconds: null, routeResourceId: routeId },
+      context,
+    )
+    expect(result.entry.metrics).toMatchObject({ durationSeconds: 12468, elevationGainMeters: 400 })
+    expect(result.entry.metrics.highestAltitudeMeters).toBeNull()
+    const older = await hiking.createHike({ ...baseInput, requestId: 'hike_request_654321' }, context)
+    const updated = await hiking.updateHike(
+      {
+        ...baseInput,
+        requestId: undefined,
+        entryId: older.entry.id,
+        editVersion: 1,
+        operationToken: 'hike_update_654321',
+        durationSeconds: null,
+        routeResourceId: routeId,
+      },
+      context,
+    )
+    expect(updated.entry.metrics).toMatchObject({ durationSeconds: 12468, elevationGainMeters: 400 })
+  })
+
   it('路线审核回执丢失后重试会返回同一结果', async () => {
     const routeId = `footroute_${'a'.repeat(32)}`
     const storage = { download: jest.fn() }

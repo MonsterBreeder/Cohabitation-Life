@@ -60,6 +60,35 @@ describe('徒步 KML 解析', () => {
     expect(result.metrics.elevationGainMeters).toBeNull()
   })
 
+  it('读取 KML 附带的累计爬升和扣除暂停后的有效时长', () => {
+    // 二步路将运动成果写在 Document 的扩展字段，坐标海拔没有 absolute 声明时仍可使用明确给出的累计爬升。
+    const xml = `<kml xmlns:gx="http://www.google.com/kml/ext/2.2"><Document><ExtendedData>
+      <Data name="BeginTime"><value>1789877229708</value></Data>
+      <Data name="EndTime"><value>1789890335190</value></Data>
+      <Data name="PauseTime"><value>637000</value></Data>
+      <Data name="ElevationGain"><value>400</value></Data>
+    </ExtendedData><Placemark><gx:Track><gx:coord>113 23 2</gx:coord><gx:coord>113.001 23.001 8</gx:coord></gx:Track></Placemark></Document></kml>`
+    const result = parseHikingKml(xml)
+    expect(result.route.importedMetrics).toEqual({ elevationGainMeters: 400, durationSeconds: 12468 })
+    expect(result.metrics.elevationGainMeters).toBe(400)
+    expect(result.metrics.durationSeconds).toBe(12468)
+    expect(result.metrics.highestAltitudeMeters).toBeNull()
+  })
+
+  it('忽略超界或不完整的 KML 扩展成果', () => {
+    // 外部文件的扩展字段不能绕过缺失值规则或带入负数。
+    const xml = `<kml><Document><ExtendedData>
+      <Data name="BeginTime"><value>1789877229708</value></Data>
+      <Data name="EndTime"><value>1789877229708</value></Data>
+      <Data name="PauseTime"><value>-1</value></Data>
+      <Data name="ElevationGain"><value>-400</value></Data>
+    </ExtendedData><Placemark><LineString><coordinates>113,23 113.001,23.001</coordinates></LineString></Placemark></Document></kml>`
+    const result = parseHikingKml(xml)
+    expect(result.route.importedMetrics).toBeUndefined()
+    expect(result.metrics.durationSeconds).toBeNull()
+    expect(result.metrics.elevationGainMeters).toBeNull()
+  })
+
   it.each([
     ['doctype-entity.kml', 'UNSAFE_XML'],
     ['invalid-coordinate.kml', 'INVALID_COORDINATE'],

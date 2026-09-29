@@ -28,7 +28,7 @@
       <HikingRouteMap :route="parsed.route" @ready="mapReady = true" @error="onMapError" />
       <HikingMetrics :metrics="parsed.metrics" />
       <view class="hiking-import__missing">
-        <text>日期、地点和时长不会从 LineString 猜测，缺少时会显示“暂无数据”。</text>
+        <text>文件没有明确记录的成果会显示“暂无数据”，不会从路线点猜测。</text>
       </view>
       <wd-button block round :disabled="!mapReady" @click="confirm">使用这条路线</wd-button>
       <text v-if="!mapReady" class="hiking-import__map-note">路线成功显示后才能继续</text>

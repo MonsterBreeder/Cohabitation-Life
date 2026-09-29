@@ -60,6 +60,15 @@ function routeElevation(route) {
   return { elevationGainMeters: Number(gain.toFixed(1)), highestAltitudeMeters: Math.max(...values), lowestAltitudeMeters: Math.min(...values) }
 }
 
+function routeMetrics(route) {
+  const elevation = routeElevation(route)
+  // 云端保存时以已审核路线携带的明确统计值为准，仍不把贴地坐标当成绝对海拔。
+  if (route.source === 'kml' && route.importedMetrics && Number.isFinite(route.importedMetrics.elevationGainMeters)) {
+    elevation.elevationGainMeters = route.importedMetrics.elevationGainMeters
+  }
+  return elevation
+}
+
 function safeHike(entry) {
   return { id: entry._id, entryKind: 'hike', name: entry.name, hikedAt: entry.hikedAt || null, place: entry.place || null, mapPoint: entry.mapPoint || null, memory: entry.memory || '', metrics: entry.metrics, hasRoute: Boolean(entry.routeResourceId), coverPhoto: entry.photoRefs?.[0] || null, createdAt: entry.createdAt, updatedAt: entry.updatedAt, editVersion: entry.editVersion }
 }
@@ -115,8 +124,9 @@ async function createHike(input, dependencies) {
     try { routeValue = JSON.parse(downloaded.fileContent.toString('utf8')) } catch { throw new FootprintDomainError('FOOTPRINT_ROUTE_INVALID') }
     distanceMeters = routeDistance(routeValue)
   }
-  const elevation = routeValue ? routeElevation(routeValue) : { elevationGainMeters: null, highestAltitudeMeters: null, lowestAltitudeMeters: null }
-  const metrics = { distanceMeters: distanceMeters == null ? null : Number(distanceMeters.toFixed(1)), durationSeconds, averageSpeedKmh: distanceMeters != null && durationSeconds > 0 ? Number(((distanceMeters / 1000) / (durationSeconds / 3600)).toFixed(2)) : null, ...elevation }
+  const elevation = routeValue ? routeMetrics(routeValue) : { elevationGainMeters: null, highestAltitudeMeters: null, lowestAltitudeMeters: null }
+  const effectiveDuration = durationSeconds == null && routeValue?.source === 'kml' ? routeValue.importedMetrics?.durationSeconds ?? null : durationSeconds
+  const metrics = { distanceMeters: distanceMeters == null ? null : Number(distanceMeters.toFixed(1)), durationSeconds: effectiveDuration, averageSpeedKmh: distanceMeters != null && effectiveDuration > 0 ? Number(((distanceMeters / 1000) / (effectiveDuration / 3600)).toFixed(2)) : null, ...elevation }
   if (dependencies.checkText && !(await dependencies.checkText(`${name}\n${place?.name || ''}\n${place?.address || ''}\n${memory}`))) throw new FootprintDomainError('FOOTPRINT_CONTENT_REJECTED')
   const now = dependencies.now().toISOString()
   const photoIds = normalisePhotoIds(input.photoResourceIds || [])
@@ -164,8 +174,9 @@ async function updateHike(input, dependencies) {
     try { routeValue = JSON.parse(downloaded.fileContent.toString('utf8')) } catch { throw new FootprintDomainError('FOOTPRINT_ROUTE_INVALID') }
     distanceMeters = routeDistance(routeValue)
   }
-  const elevation = routeValue ? routeElevation(routeValue) : { elevationGainMeters: null, highestAltitudeMeters: null, lowestAltitudeMeters: null }
-  const metrics = { distanceMeters: distanceMeters == null ? null : Number(distanceMeters.toFixed(1)), durationSeconds, averageSpeedKmh: distanceMeters != null && durationSeconds > 0 ? Number(((distanceMeters / 1000) / (durationSeconds / 3600)).toFixed(2)) : null, ...elevation }
+  const elevation = routeValue ? routeMetrics(routeValue) : { elevationGainMeters: null, highestAltitudeMeters: null, lowestAltitudeMeters: null }
+  const effectiveDuration = durationSeconds == null && routeValue?.source === 'kml' ? routeValue.importedMetrics?.durationSeconds ?? null : durationSeconds
+  const metrics = { distanceMeters: distanceMeters == null ? null : Number(distanceMeters.toFixed(1)), durationSeconds: effectiveDuration, averageSpeedKmh: distanceMeters != null && effectiveDuration > 0 ? Number(((distanceMeters / 1000) / (effectiveDuration / 3600)).toFixed(2)) : null, ...elevation }
   if (dependencies.checkText && !(await dependencies.checkText(`${name}\n${place?.name || ''}\n${place?.address || ''}\n${memory}`))) throw new FootprintDomainError('FOOTPRINT_CONTENT_REJECTED')
   const photoIds = normalisePhotoIds(input.photoResourceIds || [])
   const newPhotoIds = photoIds.filter((id) => !(existing.photoResourceIds || []).includes(id))
