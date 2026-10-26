@@ -1,3 +1,4 @@
+// 文件用途：核对微信身份并将固定账本动作交给对应领域，拒绝原始异常外传。
 // PRD 008：家庭共同流水账云函数入口。
 // 11 个 action：initCategories / addEntry / updateEntry / deleteEntry / restoreEntry / listEntries / getEntry / addCategory / updateCategory / removeCategory / getStats
 // 模式：与 task/index.js 一致，统一鉴权 + 依赖注入 + 错误收敛。
@@ -18,6 +19,14 @@ const {
   LedgerDomainError,
 } = require('./ledger-domain')
 const { withoutDocumentId } = require('./repository-data')
+// 一句话入口只转发固定动作，模型与页面都不能选择任意业务函数。
+const { batchRepository, batchTransaction } = require('./batch-repository')
+/** 当前页草稿规则，不打开普通聊天或长期记忆。 */
+const draftDomain = require('./draft-domain')
+/** 已确认批次的逐笔保存与原结果核对。 */
+const batchDomain = require('./batch-domain')
+/** 固定本机应用连接，不允许页面选择地址或凭据。 */
+const { createAiCenterClient } = require('./ai-center-client')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
@@ -47,6 +56,7 @@ function createRepository() {
   const users = db.collection('users')
 
   return {
+    ...batchRepository(db, getDocument),
     getHousehold: (id) => getDocument(households, id),
     isMemberOfHousehold: async (identityKey, householdId) => {
       const hId = householdId || identityKey // caller passes identityKey in arg[0]; we'll re-call with right args
@@ -116,6 +126,7 @@ function createRepository() {
     runTransaction(work) {
       return db.runTransaction(async (transaction) => {
         const tx = {
+          ...batchTransaction(transaction, getDocument),
           // 创建记录统一以领域层编号落库，保证返回编号、幂等锁和后续查询指向同一条数据。
           addEntry: (data) => transaction.collection('ledgerEntries').doc(data._id).set({ data: withoutDocumentId(data) }),
           updateEntry: (id, data) => transaction.collection('ledgerEntries').doc(id).update({ data }),
@@ -162,9 +173,18 @@ function humaniseError(code) {
   }
 }
 
-exports.main = async (event) => {
+exports.main =
+/** 以真实微信身份处理固定账本动作，返回受控业务结果而不外传原始异常。 */
+async (
+  /* 小程序提供的不可信动作与资料，不能自报可信身份。 */
+  event,
+  /* 平台实际运行控制，可用时提供原剩余时间。 */
+  runtimeContext,
+) => {
   const context = cloud.getWXContext()
   try {
+    // 无真实微信上下文时拒绝，不用undefined计算出共享身份。
+    if (!context.APPID || !context.OPENID) return { status: 'LEDGER_FORBIDDEN', retryable: false }
     const identityKey = `user_${require('crypto').createHash('sha256').update(`${context.APPID}:${context.OPENID}`).digest('hex')}`
     // 真实场景：householdId 从 event 传入；selfMemberKey = 当前家庭成员身份键（这里用 identityKey 占位；多成员家庭会传具体 memberKey）
     const householdId = (event && event.householdId) || ''
@@ -179,6 +199,42 @@ exports.main = async (event) => {
     }
     const dependencies = buildDependencies(identityKey, householdId, selfMemberKey)
     const action = event && event.action
+    // 独立的AI动作沿用当前云端身份，忽略页面的selfMemberKey。
+    if (['getDraftAvailability', 'understandDraft', 'editDraft', 'cancelDraft', 'prepareBatch', 'saveBatch', 'queryBatch', 'stopBatch', 'listBatches'].includes(action)) {
+      dependencies.selfMemberKey = identityKey
+      dependencies.draftSigningKey = process.env.AI_CENTER_DRAFT_SIGNING_KEY
+      // 单次执行保留本地安全上限；不假定部署后云函数有相同运行时限。
+      const remaining = runtimeContext && typeof runtimeContext.getRemainingTimeInMillis === 'function'
+        ? runtimeContext.getRemainingTimeInMillis()
+        : Number(process.env.AI_CENTER_CLOUD_TIMEOUT_MS)
+      if (['saveBatch', 'understandDraft'].includes(action) && (!Number.isFinite(remaining) || remaining < 2000)) throw new LedgerDomainError('LEDGER_AI_UNAVAILABLE')
+      dependencies.cloudDeadline = Date.now() + Math.min(30_000, remaining - 1000)
+      dependencies.aiDeadline = Date.now() + Math.min(60_000, remaining - 1000)
+      if (action === 'getDraftAvailability') {
+        try {
+          if (!Number.isFinite(remaining) || remaining < 2000) throw new LedgerDomainError('LEDGER_AI_UNAVAILABLE')
+          /** 当前可信本机连接，只用于读取可用状态，不调用模型。 */
+          const client = createAiCenterClient()
+          draftDomain.digest('configuration-check', dependencies)
+          await client.health()
+          return { status: 'DRAFT_AVAILABILITY', available: true, retryable: false }
+        } catch { return { status: 'DRAFT_AVAILABILITY', available: false, retryable: false } }
+      }
+      if (action === 'understandDraft' || action === 'cancelDraft') {
+        /** 本次固定理解或取消连接，不能在等待期间更换目标。 */
+        const client = createAiCenterClient()
+        dependencies.aiCenter = client.understand
+        dependencies.aiCenterCancel = client.cancel
+      }
+      if (action === 'understandDraft') return await draftDomain.understandDraft(event, dependencies)
+      if (action === 'editDraft') return await draftDomain.editDraft(event, dependencies)
+      if (action === 'cancelDraft') return await draftDomain.cancelDraft(event, dependencies)
+      if (action === 'prepareBatch') return await batchDomain.prepareBatch(event, dependencies)
+      if (action === 'saveBatch') return await batchDomain.saveBatch(event, dependencies)
+      if (action === 'queryBatch') return await batchDomain.queryBatch(event, dependencies)
+      if (action === 'stopBatch') return await batchDomain.stopBatch(event, dependencies)
+      return await batchDomain.listBatches(event, dependencies)
+    }
     if (action === 'initCategories') return await initCategories(event, dependencies)
     if (action === 'addEntry') return await addEntry(event, dependencies)
     if (action === 'updateEntry') return await updateEntry(event, dependencies)
@@ -211,7 +267,8 @@ exports.main = async (event) => {
     }
     console.error('ledger action failed', {
       action: event && event.action,
-      message: error instanceof Error ? error.message : String(error),
+      // 异常可能带消费正文或连接信息，只保留固定分类。
+      code: 'LEDGER_TEMPORARY_FAILURE',
     })
     return { status: 'LEDGER_TEMPORARY_FAILURE', retryable: true, errorMessage: '暂时无法完成账目操作，请稍后重试' }
   }
