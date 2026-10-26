@@ -1,3 +1,4 @@
+<!-- 文件用途：组织体验页的虚构事项账本和足迹，不操作家庭正式资料。 -->
 <template>
   <!-- 体验页：一页三段 + 吸顶提示 + 底部配套操作；所有数据来自本地 experience-view。 -->
   <view class="experience-page">
@@ -48,7 +49,9 @@
           data-testid="experience-reset"
           custom-class="experience-page__reset"
           @click="handleReset"
-        >恢复示例</wd-button>
+        >
+          恢复示例
+        </wd-button>
         <view class="experience-page__actions">
           <wd-button
             block
@@ -57,14 +60,18 @@
             data-testid="experience-back-welcome"
             custom-class="experience-page__secondary"
             @click="handleBackWelcome"
-          >返回欢迎页</wd-button>
+          >
+            返回欢迎页
+          </wd-button>
           <wd-button
             block
             round
             data-testid="experience-go-welcome"
             custom-class="experience-page__primary"
             @click="handleGoStart"
-          >{{ startButtonLabel }}</wd-button>
+          >
+            {{ startButtonLabel }}
+          </wd-button>
         </view>
       </view>
     </scroll-view>
@@ -83,9 +90,8 @@ import {
   submitExperienceEntry,
   toggleFootprint,
   toggleTaskClaim,
-  type ExperienceState,
 } from './experience-view'
-import type { ExperienceEntryType } from '../../types/experience'
+import type { ExperienceEntryType, ExperienceState } from '../../types/experience'
 
 const state = shallowRef<ExperienceState>(createExperienceState())
 const ledgerError = ref('')
@@ -102,7 +108,11 @@ function handleFootprintToggle(footprintId: string): void {
   state.value = toggleFootprint(state.value, footprintId)
 }
 
-function handleLedgerSubmit(input: { type: ExperienceEntryType; amountText: string; categoryId: string }): void {
+function handleLedgerSubmit(input: {
+  type: ExperienceEntryType
+  amountText: string
+  categoryId: string
+}): void {
   const result = submitExperienceEntry(state.value, input)
   if (result.ok) {
     state.value = result.state
@@ -119,7 +129,9 @@ function handleReset(): void {
 }
 
 /** 离开 / 进入页面时按规则重置体验状态：reLaunch 后 onShow 会重新触发，确保新会话从初始示例开始。 */
-onShow(() => { state.value = createExperienceState() })
+onShow(() => {
+  state.value = createExperienceState()
+})
 
 function handleBackWelcome(): void {
   // 邀请仍由 auth store 暂存，欢迎页会读 pendingInviteToken 决定视图
@@ -145,7 +157,7 @@ function handleGoStart(): void {
     top: 0;
     z-index: 10;
     padding: 14rpx 32rpx;
-    background: rgba($brand-color-primary, .12);
+    background: rgba($brand-color-primary, 0.12);
   }
   &__notice-label {
     color: $brand-color-action;
