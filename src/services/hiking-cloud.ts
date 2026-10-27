@@ -10,6 +10,12 @@ import type {
 } from '../types/hiking'
 
 interface FileSystemManager {
+  readFile(options: {
+    filePath: string
+    encoding: 'utf8'
+    success(result: { data: string | ArrayBuffer }): void
+    fail(error: { errMsg?: string }): void
+  }): void
   writeFile(options: {
     filePath: string
     data: string
@@ -189,18 +195,84 @@ export async function getHikeInCloud(entryId: string): Promise<HikingEntryDetail
 }
 
 export async function getHikingRouteInCloud(resourceId: string): Promise<HikingRoute> {
-  const raw = await call('getRouteUrl', { resourceId })
-  if (isFailure(raw)) throw raw
-  if (
-    !raw ||
-    typeof raw !== 'object' ||
-    (raw as Record<string, unknown>).status !== 'LOADED' ||
-    typeof (raw as Record<string, unknown>).url !== 'string'
-  )
-    throw new Error('路线访问结果不正确')
-  const response = await uni.request({ url: String((raw as Record<string, unknown>).url), method: 'GET' })
-  if (response.statusCode !== 200 || !isRoute(response.data)) throw new Error('路线暂时无法读取，请重试')
-  return response.data
+  // 手机端微信异常可能只是普通对象；记录读取阶段，防止真正失败原因再次被通用提示掩盖。
+  let stage: 'A' | 'D' | 'F' | 'P' = 'A'
+  try {
+    const raw = await call('getRouteUrl', { resourceId })
+    if (isFailure(raw)) throw raw
+    if (
+      !raw ||
+      typeof raw !== 'object' ||
+      (raw as Record<string, unknown>).status !== 'LOADED' ||
+      typeof (raw as Record<string, unknown>).url !== 'string'
+    )
+      throw new Error('路线访问结果不正确')
+    stage = 'D'
+    const manager = runtime().getFileSystemManager()
+    // 云存储地址走文件下载通道，避免额外依赖手机端的 request 合法域名配置。
+    // 每次重试都先重新向云端确认家庭权限并取得新地址，不缓存私有下载链接。
+    const response = await new Promise<UniNamespace.DownloadSuccessData>((resolve, reject) => {
+      uni.downloadFile({
+        url: String((raw as Record<string, unknown>).url),
+        timeout: 12_000,
+        success: resolve,
+        fail: (failure: { errMsg?: string }) => {
+          // 微信网络错误是普通对象；只映射错误类别，不把含签名的地址直接展示或写入日志。
+          const message = failure.errMsg || ''
+          reject(
+            new Error(
+              /domain list|合法域名/i.test(message)
+                ? '路线下载地址未获微信允许，请联系维护者'
+                : /timeout|超时/i.test(message)
+                  ? '路线下载超时，请重试'
+                  : '路线下载失败，请检查网络后重试',
+            ),
+          )
+        },
+      })
+    })
+    try {
+      if (response.statusCode !== 200 || !response.tempFilePath) throw new Error('路线暂时无法读取，请重试')
+      stage = 'F'
+      const content = await new Promise<string>((resolve, reject) => {
+        manager.readFile({
+          filePath: response.tempFilePath,
+          encoding: 'utf8',
+          success: ({ data }) => resolve(typeof data === 'string' ? data : ''),
+          fail: () => reject(new Error('路线文件暂时无法读取，请重试')),
+        })
+      })
+      // 下载成功也可能得到错误页；解析后仍按规范路线校验，原有分段直接保留。
+      stage = 'P'
+      let route: unknown
+      try {
+        route = JSON.parse(content)
+      } catch {
+        throw new Error('路线暂时无法读取，请重试')
+      }
+      if (!isRoute(route)) throw new Error('路线暂时无法读取，请重试')
+      return route
+    } finally {
+      // 路线只供当前页面使用，读取或校验失败时同样清理临时文件。
+      if (response.tempFilePath)
+        manager.unlink({ filePath: response.tempFilePath, complete: () => undefined })
+    }
+  } catch (failure) {
+    if (isFailure(failure) || failure instanceof Error) throw failure
+    // 只允许有限长度的微信错误编号；地址、签名和任意错误原文都不能进入页面或普通日志。
+    const value = failure && typeof failure === 'object' ? (failure as Record<string, unknown>) : {}
+    const nativeMessage = typeof value.errMsg === 'string' ? value.errMsg : ''
+    const code = String(
+      value.errCode ?? value.code ?? nativeMessage.match(/\berrCode\s*[:=]\s*(-?\d{1,10})(?!\d)/i)?.[1] ?? '',
+    )
+    const safeCode = /^-?\d{1,10}$|^[A-Z][A-Z0-9_]{0,39}$/.test(code) ? code : ''
+    const suffix = safeCode ? `${safeCode.startsWith('-') ? '' : '-'}${safeCode}` : ''
+    const label = { A: '路线访问失败', D: '路线下载失败', F: '路线文件读取失败', P: '路线内容检查失败' }[
+      stage
+    ]
+    // eslint-disable-next-line preserve-caught-error -- 微信异常原文可能含私有签名，故意只保留阶段和安全编号。
+    throw new Error(`${label}，请重试（检查编号 ${stage}${suffix}）`)
+  }
 }
 
 export async function uploadHikingRoute(route: HikingRoute): Promise<{ resourceId: string; digest: string }> {
