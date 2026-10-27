@@ -103,8 +103,8 @@ describe('全局快速新增', () => {
     expect(component).toContain('task: `${ACTION_BASE_STYLE}')
     expect(component).toContain('footprint: `${ACTION_BASE_STYLE}')
     expect(component).toContain('global-quick-add__trigger')
-    // 保护用户确认的紧凑尺寸和真实按钮间距，避免再次退回大按钮或按钮相贴。
-    expect(component).toContain('width: 88rpx')
+    // 主入口按用户要求略微放大，展开选项继续保持紧凑尺寸和真实间距。
+    expect(component).toContain('width: 100rpx')
     expect(component).toContain('width: 156rpx')
     expect(component).toContain('height: 60rpx')
     expect(component).toContain('margin: 7rpx 0')
