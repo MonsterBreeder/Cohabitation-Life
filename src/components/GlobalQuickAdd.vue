@@ -35,7 +35,7 @@
             :aria-label="active ? '关闭快速新增' : '打开快速新增'"
             @click.stop="toggleMenu"
           >
-            <wd-icon :name="active ? 'close' : 'plus'" size="40rpx" color="#ffffff" />
+            <wd-icon :name="active ? 'close' : 'plus'" size="44rpx" color="#ffffff" />
           </view>
         </template>
 
@@ -88,7 +88,8 @@ const canRender = computed(() => props.visible && !props.blocked)
 const fabGap = computed(() => ({ right: 32, bottom: props.withTabBar ? 104 : 24 }))
 
 // 尺寸、间距和主题色直接交给 Wot UI 按钮根元素，避免微信样式隔离导致按钮再次相贴或变回默认色。
-const ACTION_BASE_STYLE = 'box-sizing: border-box; width: 156rpx; height: 60rpx; min-width: 156rpx; margin: 7rpx 0; padding: 0 16rpx; border-radius: 999rpx; background: #fff9f2; color: #267a5a; font-size: 23rpx; box-shadow: 0 6rpx 16rpx rgba(41, 68, 58, 0.12);'
+const ACTION_BASE_STYLE =
+  'box-sizing: border-box; width: 156rpx; height: 60rpx; min-width: 156rpx; margin: 7rpx 0; padding: 0 16rpx; border-radius: 999rpx; background: #fff9f2; color: #267a5a; font-size: 23rpx; box-shadow: 0 6rpx 16rpx rgba(41, 68, 58, 0.12);'
 const ACTION_THEME_STYLES: Readonly<Record<QuickAddKey, string>> = {
   ledger: `${ACTION_BASE_STYLE} --wot-button-primary-bg: #fff9f2; --wot-button-primary-bg-active: #effbf5; --wot-button-main-color: #267a5a; border: 2rpx solid #267a5a; font-weight: 600;`,
   task: `${ACTION_BASE_STYLE} --wot-button-primary-bg: #fff9f2; --wot-button-primary-bg-active: #effbf5; --wot-button-main-color: #267a5a; border: 2rpx solid #e4ece7;`,
@@ -130,17 +131,19 @@ onBeforeUnmount(() => {
 
 <style lang="scss" scoped>
 .global-quick-add {
-  // 自定义触发器仍由 Wot UI 悬浮容器定位，只负责稳定呈现项目的行动绿。
+  // 主触区稍作放大以便单手点击，仍由 Wot UI 定位，展开后的选项保持紧凑尺寸。
   &__trigger {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 88rpx;
-    height: 88rpx;
+    width: 100rpx;
+    height: 100rpx;
     border-radius: 50%;
     background: $brand-color-action;
     box-shadow: 0 8rpx 20rpx rgba($brand-color-action, 0.2);
-    transition: transform 160ms ease, opacity 160ms ease;
+    transition:
+      transform 160ms ease,
+      opacity 160ms ease;
 
     &:active {
       transform: scale(0.96);
@@ -162,13 +165,14 @@ onBeforeUnmount(() => {
     box-shadow: 0 6rpx 16rpx rgba($brand-color-text, 0.12);
     font-size: 23rpx !important;
     white-space: nowrap;
-    transition: transform 160ms ease, box-shadow 160ms ease;
+    transition:
+      transform 160ms ease,
+      box-shadow 160ms ease;
 
     &:active {
       transform: scale(0.97);
       box-shadow: 0 4rpx 12rpx rgba($brand-color-text, 0.1);
     }
   }
-
 }
 </style>
