@@ -1,3 +1,4 @@
+<!-- 文件用途：展示体验足迹并上报展开收起操作，不读取正式旅行记录。 -->
 <template>
   <!-- 体验页足迹卡：图片 + 简介 + 展开按钮。展开后显示完整副本。 -->
   <view class="experience-footprint-card" data-testid="experience-footprint-card">
@@ -13,18 +14,28 @@
       data-testid="experience-footprint-image"
     />
     <text class="experience-footprint-card__description">{{ footprint.description }}</text>
-    <view v-if="footprint.expanded" class="experience-footprint-card__expanded" data-testid="experience-footprint-expanded">
+    <view
+      v-if="footprint.expanded"
+      class="experience-footprint-card__expanded"
+      data-testid="experience-footprint-expanded"
+    >
       <text>{{ footprint.expandedCopy }}</text>
     </view>
     <view class="experience-footprint-card__action">
       <wd-button
         size="small"
         round
-        :variant="footprint.expanded ? 'plain' : 'filled'"
+        :variant="footprint.expanded ? 'plain' : 'base'"
         data-testid="experience-footprint-toggle"
-        :custom-class="footprint.expanded ? 'experience-footprint-card__btn experience-footprint-card__btn--plain' : 'experience-footprint-card__btn'"
+        :custom-class="
+          footprint.expanded
+            ? 'experience-footprint-card__btn experience-footprint-card__btn--plain'
+            : 'experience-footprint-card__btn'
+        "
         @click="emit('toggle', footprint.id)"
-      >{{ footprint.expanded ? '收起' : '展开' }}</wd-button>
+      >
+        {{ footprint.expanded ? '收起' : '展开' }}
+      </wd-button>
     </view>
   </view>
 </template>
@@ -32,7 +43,9 @@
 <script setup lang="ts">
 import type { ExperienceFootprint } from '../../../types/experience'
 
-interface Props { footprint: ExperienceFootprint }
+interface Props {
+  footprint: ExperienceFootprint
+}
 defineProps<Props>()
 const emit = defineEmits<{ toggle: [footprintId: string] }>()
 </script>

@@ -1,3 +1,4 @@
+<!-- 文件用途：组合欢迎登录恢复和邀请摘要，按用户明确操作进入家庭。 -->
 <template>
   <!-- 启动页统一入口：恢复中 / 恢复失败 / 欢迎 / 邀请摘要 / 邀请终态。 -->
   <view class="welcome-page">
@@ -13,7 +14,11 @@
     </view>
 
     <!-- 已有标记的恢复失败：标题 + 错误 + 重试按钮。 -->
-    <view v-else-if="isRecoveryFailed" class="welcome-page__recovery-error" data-testid="login-recovery-error">
+    <view
+      v-else-if="isRecoveryFailed"
+      class="welcome-page__recovery-error"
+      data-testid="login-recovery-error"
+    >
       <text class="welcome-page__error-title">登录状态暂时无法确认</text>
       <text class="welcome-page__error-copy">{{ view.errorMessage }}</text>
       <wd-button
@@ -25,7 +30,9 @@
         data-testid="login-recovery-retry"
         custom-class="welcome-page__retry"
         @click="handleRetry"
-      >重新确认</wd-button>
+      >
+        重新确认
+      </wd-button>
     </view>
 
     <!-- 普通欢迎或邀请相关视图：品牌区 + 邀请摘要 + 协议 + 按钮组。 -->
@@ -38,24 +45,44 @@
         <wd-loading color="#267A5A" size="36rpx" />
         <text class="welcome-page__invite-pending-label">{{ view.loadingText }}</text>
       </view>
-      <view v-else-if="view.mode === 'invite-terminal'" class="welcome-page__terminal" data-testid="login-invite-terminal">
+      <view
+        v-else-if="view.mode === 'invite-terminal'"
+        class="welcome-page__terminal"
+        data-testid="login-invite-terminal"
+      >
         <text class="welcome-page__terminal-title">{{ view.terminalTitle }}</text>
         <text class="welcome-page__terminal-message">{{ view.terminalMessage }}</text>
       </view>
-      <view v-else-if="view.mode === 'invite-failed'" class="welcome-page__invite-failed" data-testid="login-invite-failed">
+      <view
+        v-else-if="view.mode === 'invite-failed'"
+        class="welcome-page__invite-failed"
+        data-testid="login-invite-failed"
+      >
         <text class="welcome-page__terminal-message">{{ view.errorMessage }}</text>
       </view>
 
       <!-- 协议勾选：仅 welcome / invite-summary 需要。父页面负责状态，点击事件向上传递。 -->
       <view v-if="view.showAgreement" class="welcome-page__agreement">
-        <AgreementCheckbox :checked="agreed" :disabled="isStarting" @change="handleAgreementChange" @open-agreement="handleOpenAgreement" />
+        <AgreementCheckbox
+          :checked="agreed"
+          :disabled="isStarting"
+          @change="handleAgreementChange"
+          @open-agreement="handleOpenAgreement"
+        />
         <text class="welcome-page__hint" data-testid="login-agreement-hint">{{ view.agreementHint }}</text>
       </view>
 
-      <view v-if="validationMessage" class="welcome-page__validation" data-testid="login-agreement-required">{{ validationMessage }}</view>
+      <view v-if="validationMessage" class="welcome-page__validation" data-testid="login-agreement-required">
+        {{ validationMessage }}
+      </view>
 
       <view class="welcome-page__actions">
-        <WelcomeActions :primary="view.primary" :secondary="view.secondary" :primary-test-id="view.primaryTestId" @select="handleAction" />
+        <WelcomeActions
+          :primary="view.primary"
+          :secondary="view.secondary"
+          :primary-test-id="view.primaryTestId"
+          @select="handleAction"
+        />
       </view>
     </view>
   </view>
@@ -71,13 +98,24 @@ import LoginBrandHero from './components/LoginBrandHero.vue'
 import InvitationSummary from './components/InvitationSummary.vue'
 import AgreementCheckbox from './components/AgreementCheckbox.vue'
 import WelcomeActions from './components/WelcomeActions.vue'
-import { describeWelcomeView, type WelcomeAction, type WelcomeInvitationCard } from './welcome-view'
-import type { EntryNotice } from '../../types/auth'
+import {
+  describeWelcomeView,
+  type WelcomeAction,
+  type WelcomeInvitationCard,
+  type WelcomeViewInput,
+} from './welcome-view'
 
 const authStore = useAuthStore()
 const invitationStore = useInvitationStore()
-const { hasCompletedLogin, isResolving, errorMessage, navigationIntent, pendingInviteToken, notice } = storeToRefs(authStore)
-const { phase, preview, previewToken, errorMessage: inviteError, invitePreviewStatus } = storeToRefs(invitationStore)
+const { hasCompletedLogin, isResolving, errorMessage, navigationIntent, pendingInviteToken, notice } =
+  storeToRefs(authStore)
+const {
+  phase,
+  preview,
+  previewToken,
+  errorMessage: inviteError,
+  invitePreviewStatus,
+} = storeToRefs(invitationStore)
 
 /** 协议勾选本地状态：仅影响"开始使用"主按钮可用性。 */
 const agreed = shallowRef(false)
@@ -99,26 +137,36 @@ const invitationCard = computed<WelcomeInvitationCard | null>(() => {
 })
 
 const isRecovery = computed(() => hasCompletedLogin.value && isResolving.value)
-const isRecoveryFailed = computed(() => hasCompletedLogin.value && Boolean(errorMessage.value) && !isResolving.value)
+const isRecoveryFailed = computed(
+  () => hasCompletedLogin.value && Boolean(errorMessage.value) && !isResolving.value,
+)
 
 /** 邀请状态对应的提示编号：与 entry-router 的 inviteNotices 对齐。 */
-const inviteTerminalNotice = computed<EntryNotice | null>(() => {
-  if (notice.value && ['invite_invalid', 'invite_expired', 'invite_used', 'home_full'].includes(notice.value)) {
+const inviteTerminalNotice = computed<WelcomeViewInput['inviteTerminalNotice']>(() => {
+  // 逐项收窄到欢迎页支持的四种邀请终态，不把其他登录提示混入邀请说明。
+  if (
+    notice.value === 'invite_invalid' ||
+    notice.value === 'invite_expired' ||
+    notice.value === 'invite_used' ||
+    notice.value === 'home_full'
+  ) {
     return notice.value
   }
   return null
 })
 
-const view = computed(() => describeWelcomeView({
-  hasStartedUse: hasCompletedLogin.value,
-  authResolving: isResolving.value,
-  authErrorMessage: errorMessage.value,
-  invitePhase: invitePreviewStatus.value,
-  invitePreview: invitationCard.value,
-  inviteErrorMessage: inviteError.value,
-  inviteTerminalNotice: inviteTerminalNotice.value,
-  agreementChecked: agreed.value,
-}))
+const view = computed(() =>
+  describeWelcomeView({
+    hasStartedUse: hasCompletedLogin.value,
+    authResolving: isResolving.value,
+    authErrorMessage: errorMessage.value ?? null,
+    invitePhase: invitePreviewStatus.value,
+    invitePreview: invitationCard.value,
+    inviteErrorMessage: inviteError.value ?? null,
+    inviteTerminalNotice: inviteTerminalNotice.value,
+    agreementChecked: agreed.value,
+  }),
+)
 
 /**
  * 消费 Pinia 给出的单次页面去向，避免路由栈与启动页混杂。
@@ -245,14 +293,14 @@ async function handleAction(action: Exclude<WelcomeAction, null>): Promise<void>
     right: -82rpx;
     width: 246rpx;
     height: 246rpx;
-    background: rgba($brand-color-primary, .14);
+    background: rgba($brand-color-primary, 0.14);
   }
   &__ornament--bottom {
     bottom: -74rpx;
     left: -58rpx;
     width: 168rpx;
     height: 168rpx;
-    background: rgba($brand-color-accent, .13);
+    background: rgba($brand-color-accent, 0.13);
   }
   &__invitation {
     margin-top: 12rpx;

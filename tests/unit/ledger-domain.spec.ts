@@ -1,3 +1,4 @@
+// 文件用途：检查原账本规则和新增事务查回，保护单笔兼容行为。
 declare function require(path: string): any
 
 const {
@@ -117,6 +118,11 @@ function createRepository(
       const opDraft = new Map(operations)
       const catDraft = new Map(categories)
       const transaction = {
+        // 创建去重和权限必须在相同事务视图中查回，保护并发重发场景。
+        getEntry: async (id: string) => entryDraft.get(id) || null,
+        getOperation: async (id: string) => opDraft.get(id) || null,
+        getHousehold: async (id: string) => households.get(id) || null,
+        findCategoryById: async (id: string) => catDraft.get(id) || null,
         addEntry: async (data: any) => {
           const id = data._id
           entryDraft.set(id, { ...data, _id: id })

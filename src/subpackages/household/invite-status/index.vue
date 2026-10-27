@@ -1,12 +1,20 @@
+<!-- 文件用途：显示邀请终态，核对家庭状态后提供已有的返回或创建入口。 -->
 <template>
   <!-- 邀请终态页：未开始用户只给"结束邀请"；已开始且无家庭给"创建家庭"；已有家庭给"回到自己的家"。 -->
   <view class="invite-status">
     <view class="invite-status__dot" />
     <view class="invite-status__content">
-      <image class="invite-status__logo" src="/static/brand/logo.png" mode="aspectFit" aria-label="睦录 Logo" />
+      <image
+        class="invite-status__logo"
+        src="/static/brand/logo.png"
+        mode="aspectFit"
+        aria-label="睦录 Logo"
+      />
       <view class="invite-status__card" data-testid="invite-status-card">
         <text class="invite-status__title" data-testid="invite-status-title">{{ view.title }}</text>
-        <text class="invite-status__description" data-testid="invite-status-description">{{ view.description }}</text>
+        <text class="invite-status__description" data-testid="invite-status-description">
+          {{ view.description }}
+        </text>
         <view class="invite-status__tip">
           <view class="invite-status__tip-mark">i</view>
           <text class="invite-status__tip-text">请联系对方重新发一份邀请。</text>
@@ -23,7 +31,9 @@
         :data-testid="view.primaryAction ? `invite-status-${view.primaryAction}` : 'invite-status-busy'"
         custom-class="invite-status__primary"
         @click="handleAction"
-      >{{ view.primaryLabel }}</wd-button>
+      >
+        {{ view.primaryLabel }}
+      </wd-button>
     </view>
     <GlobalQuickAdd v-if="canShowQuickAdd" :visible="true" />
   </view>
@@ -43,19 +53,23 @@ const auth = useAuthStore()
 const householdStore = useHouseholdStore()
 const invitationStore = useInvitationStore()
 const { hasCompletedLogin, errorMessage, notice, isResolving } = storeToRefs(auth)
-const { household, checking } = storeToRefs(householdStore)
+const { household } = storeToRefs(householdStore)
 const checkingHousehold = shallowRef(true)
 
-const view = computed(() => describeInviteStatusView({
-  notice: notice.value,
-  hasStartedUse: hasCompletedLogin.value,
-  hasHousehold: Boolean(household.value),
-  isResolving: isResolving.value,
-  errorMessage: errorMessage.value,
-}))
+const view = computed(() =>
+  describeInviteStatusView({
+    notice: notice.value ?? null,
+    hasStartedUse: hasCompletedLogin.value,
+    hasHousehold: Boolean(household.value),
+    isResolving: isResolving.value,
+    errorMessage: errorMessage.value ?? null,
+  }),
+)
 
 /** 已有家庭用户才显示快速新增；按"避免误操作"原则不再展示在邀请异常页。 */
-const canShowQuickAdd = computed(() => hasCompletedLogin.value && Boolean(household.value) && !checkingHousehold.value)
+const canShowQuickAdd = computed(
+  () => hasCompletedLogin.value && Boolean(household.value) && !checkingHousehold.value,
+)
 
 /** 未登录用户不额外请求；已登录时只确认是否仍有家庭，不改变邀请错误内容。 */
 async function loadHousehold(): Promise<void> {
@@ -68,7 +82,9 @@ async function loadHousehold(): Promise<void> {
   }
 }
 
-onShow(() => { void loadHousehold() })
+onShow(() => {
+  void loadHousehold()
+})
 
 /** 终态页主按钮：按 action 决定路由或本地清理。 */
 function handleAction(): void {
@@ -171,7 +187,7 @@ function handleAction(): void {
     width: 172rpx;
     height: 172rpx;
     border-radius: 50%;
-    background: rgba($brand-color-primary, .13);
+    background: rgba($brand-color-primary, 0.13);
   }
   &__action {
     position: relative;
@@ -188,8 +204,8 @@ function handleAction(): void {
     font-weight: 700;
   }
   :deep(.invite-status__primary.is-disabled) {
-    background: rgba($brand-color-action, .48);
-    color: rgba(255, 255, 255, .9);
+    background: rgba($brand-color-action, 0.48);
+    color: rgba(255, 255, 255, 0.9);
   }
 }
 </style>

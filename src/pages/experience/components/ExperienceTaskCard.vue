@@ -1,3 +1,4 @@
+<!-- 文件用途：展示体验事项并切换示例认领状态，不写入正式事项。 -->
 <template>
   <!-- 体验页事项卡：纯展示 + 上报认领切换；不读 store。 -->
   <view class="experience-task-card" data-testid="experience-task-card">
@@ -7,15 +8,23 @@
     </view>
     <text class="experience-task-card__description">{{ task.description }}</text>
     <view class="experience-task-card__action">
-      <text class="experience-task-card__state">{{ task.state === 'claimed' ? '由我处理' : '尚未认领' }}</text>
+      <text class="experience-task-card__state">
+        {{ task.state === 'claimed' ? '由我处理' : '尚未认领' }}
+      </text>
       <wd-button
         size="small"
         round
-        :variant="task.state === 'claimed' ? 'plain' : 'filled'"
+        :variant="task.state === 'claimed' ? 'plain' : 'base'"
         data-testid="experience-task-toggle"
-        :custom-class="task.state === 'claimed' ? 'experience-task-card__btn experience-task-card__btn--plain' : 'experience-task-card__btn'"
+        :custom-class="
+          task.state === 'claimed'
+            ? 'experience-task-card__btn experience-task-card__btn--plain'
+            : 'experience-task-card__btn'
+        "
         @click="emit('toggle', task.id)"
-      >{{ task.state === 'claimed' ? '恢复示例' : '认领' }}</wd-button>
+      >
+        {{ task.state === 'claimed' ? '恢复示例' : '认领' }}
+      </wd-button>
     </view>
   </view>
 </template>
@@ -23,7 +32,9 @@
 <script setup lang="ts">
 import type { ExperienceTask } from '../../../types/experience'
 
-interface Props { task: ExperienceTask }
+interface Props {
+  task: ExperienceTask
+}
 defineProps<Props>()
 const emit = defineEmits<{ toggle: [taskId: string] }>()
 </script>

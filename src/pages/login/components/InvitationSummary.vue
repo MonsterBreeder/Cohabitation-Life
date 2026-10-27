@@ -1,3 +1,4 @@
+<!-- 文件用途：显示受控邀请摘要，临时头像失败后回退到安全默认头像。 -->
 <template>
   <!-- 邀请摘要卡片：受控的展示，不持有任何邀请原文或内部编号。 -->
   <view v-if="invitation" class="invitation-summary" data-testid="invitation-summary">
@@ -11,14 +12,26 @@
         :aria-label="`${invitation.inviterNickname} 头像`"
         @error="handleAvatarError"
       />
-      <view v-else class="invitation-summary__avatar-fallback" :data-avatar-id="invitation.inviterAvatar?.id || 'person-neutral'">
+      <view
+        v-else
+        class="invitation-summary__avatar-fallback"
+        :data-avatar-id="
+          invitation.inviterAvatar?.kind === 'builtin' ? invitation.inviterAvatar.id : 'person-neutral'
+        "
+      >
         <text class="invitation-summary__avatar-initial">{{ initial }}</text>
       </view>
     </view>
-    <text class="invitation-summary__inviter" data-testid="invitation-summary-inviter">{{ invitation.inviterNickname }}</text>
+    <text class="invitation-summary__inviter" data-testid="invitation-summary-inviter">
+      {{ invitation.inviterNickname }}
+    </text>
     <text class="invitation-summary__divider">邀请你加入</text>
-    <text class="invitation-summary__household" data-testid="invitation-summary-household">{{ invitation.householdName }}</text>
-    <text class="invitation-summary__meta" data-testid="invitation-summary-meta">目前有 {{ invitation.memberCount }} 位成员</text>
+    <text class="invitation-summary__household" data-testid="invitation-summary-household">
+      {{ invitation.householdName }}
+    </text>
+    <text class="invitation-summary__meta" data-testid="invitation-summary-meta">
+      目前有 {{ invitation.memberCount }} 位成员
+    </text>
   </view>
 </template>
 
@@ -77,7 +90,7 @@ function handleAvatarError(): void {
     justify-content: center;
     width: 100%;
     height: 100%;
-    background: rgba($brand-color-primary, .15);
+    background: rgba($brand-color-primary, 0.15);
   }
   &__avatar-initial {
     color: $brand-color-action;

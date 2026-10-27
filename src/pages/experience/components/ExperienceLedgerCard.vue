@@ -1,3 +1,4 @@
+<!-- 文件用途：接收体验账本的收支类型、金额和类目，只上报本地示例操作。 -->
 <template>
   <!-- 体验页账本卡：支出/收入 tab + 金额输入 + 类目 + 提交。错误紧邻输入展示。 -->
   <view class="experience-ledger-card" data-testid="experience-ledger-card">
@@ -24,10 +25,11 @@
         placeholder-class="experience-ledger-card__placeholder"
         :disabled="disabled"
         data-testid="experience-ledger-amount"
-        @input="handleAmountInput"
       />
     </view>
-    <text v-if="errorMessage" class="experience-ledger-card__error" data-testid="experience-ledger-error">{{ errorMessage }}</text>
+    <text v-if="errorMessage" class="experience-ledger-card__error" data-testid="experience-ledger-error">
+      {{ errorMessage }}
+    </text>
 
     <view class="experience-ledger-card__categories">
       <view
@@ -46,11 +48,15 @@
     <view class="experience-ledger-card__stats">
       <view class="experience-ledger-card__stat">
         <text class="experience-ledger-card__stat-label">支出</text>
-        <text class="experience-ledger-card__stat-value experience-ledger-card__stat-value--expense">¥{{ formatYuan(stats.expenseCents) }}</text>
+        <text class="experience-ledger-card__stat-value experience-ledger-card__stat-value--expense">
+          ¥{{ formatYuan(stats.expenseCents) }}
+        </text>
       </view>
       <view class="experience-ledger-card__stat">
         <text class="experience-ledger-card__stat-label">收入</text>
-        <text class="experience-ledger-card__stat-value experience-ledger-card__stat-value--income">¥{{ formatYuan(stats.incomeCents) }}</text>
+        <text class="experience-ledger-card__stat-value experience-ledger-card__stat-value--income">
+          ¥{{ formatYuan(stats.incomeCents) }}
+        </text>
       </view>
     </view>
 
@@ -67,14 +73,20 @@
         data-testid="experience-ledger-submit"
         custom-class="experience-ledger-card__btn"
         @click="handleSubmit"
-      >记一笔</wd-button>
+      >
+        记一笔
+      </wd-button>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import type { ExperienceEntryType, ExperienceLedgerCategory, ExperienceLedgerStats } from '../../../types/experience'
+import type {
+  ExperienceEntryType,
+  ExperienceLedgerCategory,
+  ExperienceLedgerStats,
+} from '../../../types/experience'
 
 interface Props {
   categories: ExperienceLedgerCategory[]
@@ -99,12 +111,15 @@ const amountText = ref('')
 const categoryId = ref<string>(props.categories[0]?.id ?? '')
 
 // 父组件统计清零时同步清空本地草稿；确保"恢复示例"按钮是幂等入口。
-watch(() => props.stats, (next) => {
-  if (next.expenseCents === 0 && next.incomeCents === 0) {
-    amountText.value = ''
-    categoryId.value = props.categories[0]?.id ?? ''
-  }
-})
+watch(
+  () => props.stats,
+  (next) => {
+    if (next.expenseCents === 0 && next.incomeCents === 0) {
+      amountText.value = ''
+      categoryId.value = props.categories[0]?.id ?? ''
+    }
+  },
+)
 
 function handleTypeChange(type: ExperienceEntryType): void {
   entryType.value = type
@@ -112,10 +127,6 @@ function handleTypeChange(type: ExperienceEntryType): void {
 
 function handleCategoryChange(id: string): void {
   categoryId.value = id
-}
-
-function handleAmountInput(event: { detail: { value: string } }): void {
-  amountText.value = event.detail.value
 }
 
 function handleSubmit(): void {
@@ -149,7 +160,7 @@ function formatYuan(cents: number): string {
     font-size: 24rpx;
   }
   &__tab--active {
-    background: rgba($brand-color-primary, .12);
+    background: rgba($brand-color-primary, 0.12);
   }
   &__amount {
     display: flex;
@@ -225,8 +236,12 @@ function formatYuan(cents: number): string {
     font-size: 30rpx;
     font-weight: 700;
   }
-  &__stat-value--expense { color: $brand-color-accent; }
-  &__stat-value--income { color: $brand-color-primary; }
+  &__stat-value--expense {
+    color: $brand-color-accent;
+  }
+  &__stat-value--income {
+    color: $brand-color-primary;
+  }
   &__categories-stats {
     display: flex;
     flex-direction: column;

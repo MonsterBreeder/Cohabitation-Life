@@ -1,0 +1,9 @@
+{
+  "_说明": "文件用途：声明默认关闭的无正文批次回执清理入口及现有云端依赖范围。",
+  "name": "cleanup-ledger-batches",
+  "version": "1.0.0",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

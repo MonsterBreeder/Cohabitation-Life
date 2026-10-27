@@ -1,3 +1,4 @@
+// 文件用途：统一源码、组件及检查文件的质量规则，按实际运行环境识别全局能力。
 import eslint from '@eslint/js'
 import prettier from 'eslint-config-prettier'
 import vue from 'eslint-plugin-vue'
@@ -67,5 +68,13 @@ export default typescriptEslint.config(
     },
   },
   // 格式由 Prettier 统一负责，避免 ESLint 与格式化工具互相打架。
+  {
+    files: ['tests/fixtures/**/*.cjs'],
+    languageOptions: { sourceType: 'commonjs', globals: globals.node },
+    rules: {
+      // 事务替身直接复用云函数CommonJS模块，仅此类文件使用对应导入语法。
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
   prettier,
 )

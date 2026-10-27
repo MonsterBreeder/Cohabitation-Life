@@ -1,3 +1,4 @@
+<!-- 文件用途：显示欢迎页的受控按钮，只有非空动作才上报父页面。 -->
 <template>
   <!-- 欢迎页主/次按钮区域：不读 store，只接收受控的 label / action / loading。 -->
   <view class="welcome-actions" data-testid="welcome-actions">
@@ -10,7 +11,7 @@
       :disabled="primary.disabled"
       :data-testid="primaryTestId || `welcome-primary-${primary.action}`"
       custom-class="welcome-actions__primary"
-      @click="emit('select', primary.action as WelcomeAction)"
+      @click="selectAction(primary.action)"
     >
       {{ primary.label }}
     </wd-button>
@@ -26,7 +27,7 @@
       :disabled="secondary.disabled"
       :data-testid="`welcome-secondary-${secondary.action}`"
       custom-class="welcome-actions__secondary"
-      @click="emit('select', secondary.action as WelcomeAction)"
+      @click="selectAction(secondary.action)"
     >
       {{ secondary.label }}
     </wd-button>
@@ -46,6 +47,14 @@ interface Props {
 
 defineProps<Props>()
 const emit = defineEmits<{ select: [action: Exclude<WelcomeAction, null>] }>()
+
+/** 按钮状态变化后再点击时也核对非空动作，不把等待状态当作操作上报。 */
+function selectAction(
+  /** 当前按钮提供的动作，等待期间可以为空。 */
+  action: WelcomeAction,
+): void {
+  if (action !== null) emit('select', action)
+}
 </script>
 
 <style lang="scss" scoped>
@@ -77,8 +86,8 @@ const emit = defineEmits<{ select: [action: Exclude<WelcomeAction, null>] }>()
     font-weight: 700;
   }
   :deep(.welcome-actions__primary.is-disabled) {
-    background: rgba($brand-color-action, .48);
-    color: rgba(255, 255, 255, .9);
+    background: rgba($brand-color-action, 0.48);
+    color: rgba(255, 255, 255, 0.9);
   }
   :deep(.welcome-actions__secondary) {
     height: 80rpx;
