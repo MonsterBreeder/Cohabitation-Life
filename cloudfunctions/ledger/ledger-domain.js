@@ -1,12 +1,14 @@
-﻿// 家庭共同流水账领域规则（PRD 008）。
+// 文件用途：实现账本业务检查及事务写入，保护单笔去重和实际创建者维护权。
+// 家庭共同流水账领域规则（PRD 008）。
 // 模式与 task-domain 一致：纯函数 + 依赖注入 + 自定义错误类型。
 // 关键规则：
 //   - 单一共同模式（没有"共同/各自"开关）
-//   - 双方都能记 / 改 / 删自己记的账；编辑/删除绑定 payerMemberKey
-//   - 任何成员都能软删 / 恢复（与 PRD 007 一致）
+//   - 双方都能记 / 改 / 删自己记的账；新账编辑/删除绑定实际创建者，旧账兼容 payerMemberKey
+//   - 实际创建者可软删，当前家庭成员可恢复软删账目
 //   - 类目家庭级共享，8 个固定 + 用户可自定义
 //   - 金额整数分（amountCents），前端按"元"输入
 
+// 文件用途：核对家庭账本业务并在事务中保存账目及去重事实，兼容原单笔入口。
 const crypto = require('crypto')
 const { PRESET_CATEGORIES, PRESET_KEYS, ALLOWED_ICON_KEYS, ALLOWED_COLOR_KEYS } = require('./preset-categories')
 const { filterActive, normaliseEntry, normaliseEntryDetail, normaliseCategory, withoutDocumentId } = require('./repository-data')
@@ -242,13 +244,6 @@ async function addEntry(input, dependencies) {
     throw new LedgerDomainError('LEDGER_PAYER_NOT_MEMBER', false)
   }
   const lockId = creationLockId(dependencies.householdId, input.requestId)
-  const existingOp = await repo.getOperation(lockId)
-  if (existingOp && existingOp.entryId) {
-    const existingEntry = await repo.getEntry(existingOp.entryId)
-    if (existingEntry) {
-      return { status: 'ADDED', retryable: false, entry: normaliseEntry(existingEntry) }
-    }
-  }
   const now = dependencies.now().toISOString()
   const payerProfile = await repo.getProfileForMember(payerMemberKey)
   const hasLeft = !Array.isArray(household.memberKeys) || !household.memberKeys.includes(payerMemberKey)
@@ -263,22 +258,50 @@ async function addEntry(input, dependencies) {
     occurredAt,
     receiptMediaId,
     payerMemberKey,
+    // 记账人与付款人分别记录，代记不改变创建者的维护权。
+    recorderMemberKey: dependencies.identityKey,
     payer: buildPayerDisplay(payerMemberKey, payerProfile, hasLeft),
     createdAt: now,
     updatedAt: now,
     deletedAt: null,
     deletedBy: null,
   }
-  await repo.runTransaction(async (tx) => {
-    await tx.addEntry(record)
-    await tx.addOperation({
-      _id: lockId,
-      kind: 'add',
-      entryId: record._id,
-      at: now,
-    })
-  })
-  return { status: 'ADDED', retryable: false, entry: normaliseEntry(record) }
+  // 事务内重新核对成员、类目和去重，避免并发各自创建一条。
+  const committed = await repo.runTransaction(
+    /** 将权限、类目、去重及账目写入放在同一事务，返回实际提交的原记录。 */
+    async (
+      /* 与外层批次复用的唯一事务视图。 */
+      tx,
+    ) => {
+      /** 事务当下的真实成员资格，不能沿用准备时的快照。 */
+      const currentHome = await tx.getHousehold(dependencies.householdId)
+      if (!currentHome || !currentHome.memberKeys.includes(dependencies.identityKey)) throw new LedgerDomainError('LEDGER_FORBIDDEN', false)
+      if (!currentHome.memberKeys.includes(payerMemberKey)) throw new LedgerDomainError('LEDGER_PAYER_NOT_MEMBER', false)
+      /** 事务当下的类目所属和可见状态，类目维护后重新核对。 */
+      const currentCategory = await tx.findCategoryById(input.categoryId)
+      if (!currentCategory || currentCategory.householdId !== dependencies.householdId || (Array.isArray(currentCategory.isHiddenBy) && currentCategory.isHiddenBy.includes(dependencies.identityKey))) throw new LedgerDomainError('LEDGER_CATEGORY_NOT_FOUND', false)
+      resolveMealPeriod(input.mealPeriod, currentCategory)
+      /** 原请求已经提交的去重事实，失败或超时不能换编号绕过。 */
+      const operation = await tx.getOperation(lockId)
+      if (operation) {
+        if (operation.kind !== 'add' || !operation.entryId || (operation.actor && operation.actor !== dependencies.identityKey)) throw new LedgerDomainError('LEDGER_INVALID_REQUEST', false)
+        /** 已成功保存的确切账目，不再创建新的记录。 */
+        const existing = await tx.getEntry(operation.entryId)
+        if (!existing) throw new LedgerDomainError('LEDGER_NOT_FOUND', false)
+        return existing
+      }
+      await tx.addEntry(record)
+      await tx.addOperation({
+        _id: lockId,
+        kind: 'add',
+        entryId: record._id,
+        actor: dependencies.identityKey,
+        at: now,
+      })
+      return record
+    },
+  )
+  return { status: 'ADDED', retryable: false, entry: normaliseEntry(committed) }
 }
 
 /** 编辑账目。仅创建者可改；type 不可改。
@@ -317,7 +340,7 @@ async function updateEntry(input, dependencies) {
   const existing = await repo.getEntry(input.entryId)
   if (!existing || existing.deletedAt != null) throw new LedgerDomainError('LEDGER_NOT_FOUND', false)
   if (existing.householdId !== dependencies.householdId) throw new LedgerDomainError('LEDGER_NOT_FOUND', false)
-  if (existing.payerMemberKey !== dependencies.identityKey) {
+  if ((existing.recorderMemberKey || existing.payerMemberKey) !== dependencies.identityKey) {
     throw new LedgerDomainError('LEDGER_FORBIDDEN', false)
   }
   const category = await repo.findCategoryById(input.categoryId)
@@ -424,7 +447,7 @@ async function deleteEntry(input, dependencies) {
   const existing = await repo.getEntry(input.entryId)
   if (!existing || existing.deletedAt != null) throw new LedgerDomainError('LEDGER_NOT_FOUND', false)
   if (existing.householdId !== dependencies.householdId) throw new LedgerDomainError('LEDGER_NOT_FOUND', false)
-  if (existing.payerMemberKey !== dependencies.identityKey) {
+  if ((existing.recorderMemberKey || existing.payerMemberKey) !== dependencies.identityKey) {
     throw new LedgerDomainError('LEDGER_FORBIDDEN', false)
   }
 
@@ -521,13 +544,15 @@ async function getEntry(input, dependencies) {
   // 反推为 'self' / 'other' 字面量（前端不持有 identityKey）。
   const [detail] = await attachReceiptUrls([normaliseEntryDetail(record)], dependencies)
   const isCurrentUserPayer = record.payerMemberKey === dependencies.identityKey
+  // 创建者与付款人分离；旧账没有创建者字段时沿用原兼容判断。
+  const isRecorder = (record.recorderMemberKey || record.payerMemberKey) === dependencies.identityKey
   return {
     status: 'LOADED',
     retryable: false,
     detail: {
       ...detail,
-      canEdit: isCurrentUserPayer,
-      canDelete: isCurrentUserPayer,
+      canEdit: isRecorder,
+      canDelete: isRecorder,
       isCurrentUserPayer,
     },
   }

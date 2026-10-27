@@ -1,4 +1,5 @@
 {
+  "_说明": "文件用途：登记主包、业务分包与页面外观，一句话记账留在账本分包。",
   "easycom": {
     "autoscan": true,
     "custom": {
@@ -93,6 +94,7 @@
       "root": "subpackages/ledger",
       "pages": [
         { "path": "ledger-add/index", "style": { "navigationBarTitleText": "记一笔" } },
+        { "path": "ledger-smart-add/index", "style": { "navigationBarTitleText": "一句话记账" } },
         { "path": "ledger-detail/index", "style": { "navigationBarTitleText": "账目详情" } },
         { "path": "ledger-category-manager/index", "style": { "navigationBarTitleText": "类目管理" } },
         { "path": "ledger-stats/index", "style": { "navigationBarTitleText": "账本统计" } },

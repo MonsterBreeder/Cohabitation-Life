@@ -1,3 +1,4 @@
+<!-- 文件用途：提供原单笔记账表单，并在新建时进入独立的一句话记账页。 -->
 <!--
   记一笔 / 编辑账目页（PRD 008 / Plan U5）。
   - 顶部 tab：支出 / 收入
@@ -11,6 +12,16 @@
 -->
 <template>
   <view class="ledger-add-page">
+    <!-- 新入口仅用于新建账目；导航保留原手动页面实例和草稿。 -->
+    <view v-if="!isEditMode" class="ledger-add-page__smart-entry">
+      <wd-cell
+        title="一句话记多笔"
+        label="告诉我花了什么，整理后由你确认"
+        is-link
+        :clickable="!isBusy"
+        @click="openSmartAdd"
+      />
+    </view>
     <wd-toast />
 
     <view v-if="!householdId" class="ledger-add-page__state" data-testid="ledger-add-no-household">
@@ -338,6 +349,11 @@ const errors = computed(() => {
 const saveState = computed(() => describeSaveButton(errors.value, isSaving.value, isEditMode.value))
 
 const isEditMode = ref(false)
+/** 进入账本分包内的独立整理页，原手动输入不清空。 */
+function openSmartAdd(): void {
+  if (isBusy.value || isEditMode.value) return
+  uni.navigateTo({ url: '/subpackages/ledger/ledger-smart-add/index' })
+}
 const editingEntryId = ref<string | null>(null)
 const editingOperationToken = ref<string>('')
 
@@ -543,6 +559,13 @@ watch(
 
 <style lang="scss" scoped>
 .ledger-add-page {
+  /* 入口沿用品牌卡片，返回时下方原手动表单保持。 */
+  &__smart-entry {
+    margin-bottom: 24rpx;
+    overflow: hidden;
+    border: 1rpx solid $brand-color-border;
+    border-radius: $brand-radius-card;
+  }
   min-height: 100vh;
   padding: 32rpx 32rpx 200rpx;
   box-sizing: border-box;
