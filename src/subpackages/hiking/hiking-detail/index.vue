@@ -182,6 +182,8 @@ async function remove(): Promise<void> {
 
 onLoad((options) => {
   entryId.value = typeof options?.entryId === 'string' ? options.entryId : ''
+  // 仅诊断预览入口带此标记，方便手机端确认正在运行本轮代码，普通详情标题保持原样。
+  if (options?.routeCheck === '20261027B') uni.setNavigationBarTitle({ title: '徒步详情 · 检查B' })
 })
 onShow(() => void loadDetail())
 </script>

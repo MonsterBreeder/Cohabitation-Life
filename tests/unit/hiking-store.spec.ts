@@ -36,6 +36,8 @@ function connect(handler: (data: Record<string, unknown>) => Promise<unknown>) {
   setHikingCloudRuntimeForTesting({
     env: { USER_DATA_PATH: '/tmp' },
     getFileSystemManager: () => ({
+      // 状态测试不读取路线文件，下载行为由客户端专项测试覆盖。
+      readFile: jest.fn(),
       writeFile: ({ success }) => success(),
       unlink: ({ complete }) => complete(),
     }),

@@ -37,6 +37,8 @@ function connect(handler: (data: Record<string, unknown>) => unknown) {
   setHikingCloudRuntimeForTesting({
     env: { USER_DATA_PATH: '/tmp' },
     getFileSystemManager: () => ({
+      // 上传测试不读取文件；保留下载所需的文件接口以匹配实际微信环境。
+      readFile: jest.fn(),
       writeFile: ({ filePath, data, success }) => {
         written.set(filePath, data)
         success()
