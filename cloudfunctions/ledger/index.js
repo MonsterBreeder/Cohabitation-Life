@@ -27,6 +27,7 @@ const draftDomain = require('./draft-domain')
 const batchDomain = require('./batch-domain')
 /** 固定本机应用连接，不允许页面选择地址或凭据。 */
 const { createAiCenterClient } = require('./ai-center-client')
+const { createCloudAiCenterClient } = require('./ai-center-cloud-client')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
@@ -173,6 +174,31 @@ function humaniseError(code) {
   }
 }
 
+/** 读取平台实际剩余毫秒。平台时钟不可读时，从配置时限扣除已执行的时间。 */
+function remainingExecutionMs(
+  /** 平台提供的上下文，不接收来自页面的时间。 */
+  context,
+  /** 本次函数已经开始处理请求的时间。 */
+  startedAt,
+) {
+  /** 后台明确配置的毫秒时限，未配置时保持关闭。 */
+  const configured = Number(process.env.AI_CENTER_CLOUD_TIMEOUT_MS)
+  /** 当前函数内已经消耗的时间不再分配给下游。 */
+  const fallback = Number.isSafeInteger(configured) && configured > 0
+    ? Math.max(0, configured - (Date.now() - startedAt))
+    : undefined
+  try {
+    /** 部分运行环境没有时钟方法，或者只在特定调用类型中提供。 */
+    const platformValue = context?.getRemainingTimeInMillis?.()
+    /** 接受平台返回的整型毫秒，也兼容平台返回的安全整数 BigInt。 */
+    const remaining = typeof platformValue === 'bigint' ? Number(platformValue) : platformValue
+    if (Number.isSafeInteger(remaining) && remaining >= 0) return Math.min(remaining, fallback ?? remaining)
+  } catch {
+    // 平台时钟不可读时只采用已配置时限，仍保留交付前的时间余量。
+  }
+  return fallback
+}
+
 exports.main =
 /** 以真实微信身份处理固定账本动作，返回受控业务结果而不外传原始异常。 */
 async (
@@ -181,7 +207,11 @@ async (
   /* 平台实际运行控制，可用时提供原剩余时间。 */
   runtimeContext,
 ) => {
+  /** 从开始处理请求就计时，家庭读取和权限检查占用同一时限。 */
+  const startedAt = Date.now()
   const context = cloud.getWXContext()
+  /** 记录失败发生在哪一段，不记录家庭编号或原始资料。 */
+  let phase = 'identity'
   try {
     // 无真实微信上下文时拒绝，不用undefined计算出共享身份。
     if (!context.APPID || !context.OPENID) return { status: 'LEDGER_FORBIDDEN', retryable: false }
@@ -193,28 +223,35 @@ async (
       return { status: 'LEDGER_INVALID_REQUEST', retryable: false, errorMessage: '缺少家庭编号' }
     }
     // 二次校验：identityKey 是否在 household 的 memberKeys 中
+    phase = 'household'
     const householdDoc = await getDocument(db.collection('households'), householdId)
     if (!householdDoc || !Array.isArray(householdDoc.memberKeys) || !householdDoc.memberKeys.includes(identityKey)) {
       return { status: 'LEDGER_FORBIDDEN', retryable: false, errorMessage: '你已经不是该家庭的成员' }
     }
+    phase = 'repository'
     const dependencies = buildDependencies(identityKey, householdId, selfMemberKey)
+    phase = 'action'
     const action = event && event.action
     // 独立的AI动作沿用当前云端身份，忽略页面的selfMemberKey。
     if (['getDraftAvailability', 'understandDraft', 'editDraft', 'cancelDraft', 'prepareBatch', 'saveBatch', 'queryBatch', 'stopBatch', 'listBatches'].includes(action)) {
       dependencies.selfMemberKey = identityKey
       dependencies.draftSigningKey = process.env.AI_CENTER_DRAFT_SIGNING_KEY
       // 单次执行保留本地安全上限；不假定部署后云函数有相同运行时限。
-      const remaining = runtimeContext && typeof runtimeContext.getRemainingTimeInMillis === 'function'
-        ? runtimeContext.getRemainingTimeInMillis()
-        : Number(process.env.AI_CENTER_CLOUD_TIMEOUT_MS)
-      if (['saveBatch', 'understandDraft'].includes(action) && (!Number.isFinite(remaining) || remaining < 2000)) throw new LedgerDomainError('LEDGER_AI_UNAVAILABLE')
-      dependencies.cloudDeadline = Date.now() + Math.min(30_000, remaining - 1000)
-      dependencies.aiDeadline = Date.now() + Math.min(60_000, remaining - 1000)
+      const remaining = remainingExecutionMs(runtimeContext, startedAt)
+      if (['saveBatch', 'understandDraft'].includes(action) && (remaining === undefined || remaining < 2000)) throw new LedgerDomainError('LEDGER_AI_UNAVAILABLE')
+      /** 不需要下游时限的动作仍可查询已保存结果。 */
+      const availableMs = Math.max(0, (remaining ?? 0) - 1000)
+      dependencies.cloudDeadline = Date.now() + Math.min(30_000, availableMs)
+      dependencies.aiDeadline = Date.now() + Math.min(60_000, availableMs)
+      /** 本地调试保持原连接，线上只有显式开启才尝试加载云端模块。 */
+      const connectAi = () => process.env.AI_CENTER_CLOUD_BOOKKEEPING === '1'
+        ? createCloudAiCenterClient(dependencies)
+        : createAiCenterClient()
       if (action === 'getDraftAvailability') {
         try {
-          if (!Number.isFinite(remaining) || remaining < 2000) throw new LedgerDomainError('LEDGER_AI_UNAVAILABLE')
+          if (remaining === undefined || remaining < 2000) throw new LedgerDomainError('LEDGER_AI_UNAVAILABLE')
           /** 当前可信本机连接，只用于读取可用状态，不调用模型。 */
-          const client = createAiCenterClient()
+          const client = connectAi()
           draftDomain.digest('configuration-check', dependencies)
           await client.health()
           return { status: 'DRAFT_AVAILABILITY', available: true, retryable: false }
@@ -222,7 +259,7 @@ async (
       }
       if (action === 'understandDraft' || action === 'cancelDraft') {
         /** 本次固定理解或取消连接，不能在等待期间更换目标。 */
-        const client = createAiCenterClient()
+        const client = connectAi()
         dependencies.aiCenter = client.understand
         dependencies.aiCenterCancel = client.cancel
       }
@@ -269,6 +306,8 @@ async (
       action: event && event.action,
       // 异常可能带消费正文或连接信息，只保留固定分类。
       code: 'LEDGER_TEMPORARY_FAILURE',
+      phase,
+      providerCode: Number.isSafeInteger(error?.errCode) ? error.errCode : undefined,
     })
     return { status: 'LEDGER_TEMPORARY_FAILURE', retryable: true, errorMessage: '暂时无法完成账目操作，请稍后重试' }
   }

@@ -233,9 +233,9 @@ export function createDraftCloud(
     try {
       // 异步前固定实际传输的普通资料，不将Vue代理或后续页面修改交给后台。
       const data = JSON.parse(JSON.stringify({ ...input, action, householdId })) as Record<string, unknown>
-      /** 只允许固定账本云函数，数据中不携带可信身份。 */
+      /** 一句话记账使用独立云函数，数据中不携带可信身份。 */
       const response = await Promise.race([
-        runtime!.callFunction({ name: 'ledger', data }),
+        runtime!.callFunction({ name: 'ledgerBookkeeping', data }),
         new Promise<never>(
           /**
            * 建立本次有界异步等待，由明确完成或失败结束，不自动重复执行。
