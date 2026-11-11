@@ -1,456 +1,362 @@
-/** 文件用途：管理当前页的补问、编辑、确认和结果核对，退出使迟到响应失效并清空原话。 */
+/** 文件用途：在本页内存管理聊天、草稿与正式回执，并拦截旧卡和迟到响应。 */
 import { computed, reactive, readonly } from 'vue'
 import type { DraftCloud } from '../../../services/ledger-draft-cloud'
 import { DraftCloudError } from '../../../services/ledger-draft-cloud'
-import type { BatchResult, DraftEntry, DraftView } from '../../../types/ledger-draft'
+import type { BatchResult, DraftChoice, DraftEntry, DraftView } from '../../../types/ledger-draft'
 
-/** 仅产生不授予权限的请求引用，正式身份、签名和保存许可均由云端决定。 */
+/** 请求编号只作关联，正式身份和写入资格由云端核对。 */
 export function draftRequestId(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(
-    /[xy]/g,
-    /**
-     * 把请求引用占位符转成随机十六进制字符，不生成身份或保存许可。
-     */
-    (
-      /**
-       * 请求引用模板中的一个占位符，只生成不授予权限的随机编号。
-       */
-      char,
-    ) => {
-      /**
-       * 当前待检查或转换的值，通过对应规则后才能使用。
-       */
-      const value = Math.floor(Math.random() * 16)
-      return (char === 'x' ? value : (value & 3) | 8).toString(16)
-    },
-  )
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+    const value = Math.floor(Math.random() * 16)
+    return (char === 'x' ? value : (value & 3) | 8).toString(16)
+  })
 }
-/** 页面使用的有限状态，不写入全局存储或自动发送队列。 */
+
+/** 页面操作互斥，消息和回执独立于当前操作显示。 */
 type Phase = 'loading' | 'input' | 'understanding' | 'review' | 'editing' | 'saving' | 'querying' | 'result'
-/** 每个页面实例持有自己的资料与交付资格。 */
-export function useLedgerDraft(
-  /**
-   * 本页专属云端客户端，不提供全局可恢复草稿。
-   */
-  client: DraftCloud,
-) {
-  /** 所有消费正文只存在本页，派生值通过计算取得。 */
+
+/** 仅保存可读快照，消息里的旧卡不持有可保存的草稿证明。 */
+export interface DraftDisplay {
+  entries: readonly DraftEntry[]
+  categories: readonly DraftChoice[]
+  members: readonly DraftChoice[]
+}
+
+/** 聊天里的历史卡和回执只用于显示，动作始终交回当前流程。 */
+export type BookkeepingMessage =
+  | { id: string; kind: 'user' | 'assistant'; text: string }
+  | { id: string; kind: 'draft'; display: DraftDisplay }
+  | { id: string; kind: 'receipt'; result: BatchResult; display: DraftDisplay | null }
+
+/** 金额按收入和支出分别核对。 */
+export function draftTotals(entries: readonly DraftEntry[]) {
+  const totals = { income: 0, expense: 0 }
+  for (const entry of entries) {
+    if (entry.type) totals[entry.type] += entry.amountCents ?? 0
+  }
+  return totals
+}
+
+/** 将草稿与可执行证明分开，保留当时展示的明细。 */
+function displayOf(view: DraftView): DraftDisplay {
+  return { entries: view.draft.entries, categories: view.categories, members: view.members }
+}
+
+/** 只展示已固定的安全错误。 */
+function errorText(error: unknown): string {
+  return error instanceof DraftCloudError ? error.message : '本次处理未完成，请稍后手动再试。'
+}
+
+/** 只拦截完整的确认短句，带金额等补充的句子仍交给整理。 */
+const confirmationReply = /^(确认(?:记账|保存)?|保存(?:吧|这\d+笔)?|记吧|记账吧|好的|好|可以)[。！!\s]*$/u
+
+/** 一个页面只处理一份活动草稿；旧回执的查回只读。 */
+export function useLedgerDraft(client: DraftCloud) {
   const state = reactive({
-    // 明确停止后不会显示可继续保存的操作，另一次新输入才重置。
     stopped: false,
     text: '',
     consent: false,
+    consentText: '',
     available: false,
     phase: 'loading' as Phase,
     view: null as DraftView | null,
     batch: null as BatchResult | null,
     history: [] as BatchResult[],
+    historyError: '',
+    messages: [] as BookkeepingMessage[],
+    activeCard: '',
+    failedMessage: '',
+    preparePending: false,
     error: '',
-    lastInput: '',
   })
-  /** 每次新操作撤回旧响应的显示资格。 */
+  /** 版本隔离当前操作，卸载后的查询和整理均不得写回。 */
   let generation = 0
-  /** 页面卸载后禁止重新恢复内容。 */
   let closed = false
-  /** 当前理解请求的非正文引用，供真实取消使用。 */
   let active: { draftId: string; requestId: string } | null = null
-  /** 同次形成确认时重用编号，返回丢失不能另建批次。 */
+  /** 同一确认的准备回包丢失时，沿用原编号，不生成第二批。 */
   let confirmationId = draftRequestId()
-  /** 用户明确停止与普通退出分别处理。 */
   let stopRequested = false
-  /** 页面正在发生会改变当前内容的操作。 */
-  const busy = computed(
-    /**
-     * 从本页只读状态计算显示或操作条件，不在计算中调用云端。
-     */
-    () => ['loading', 'understanding', 'editing', 'saving', 'querying'].includes(state.phase),
+
+  const busy = computed(() =>
+    ['loading', 'understanding', 'editing', 'saving', 'querying'].includes(state.phase),
   )
-  /** 已成功项在本页保持不可编辑。 */
   const successful = computed(
-    /**
-     * 从本页只读状态计算显示或操作条件，不在计算中调用云端。
-     */
-    () =>
-      new Set(
-        state.batch?.items
-          .filter(
-            /**
-             * 按当前类型、范围或状态保留符合条件的项，返回独立列表。
-             */
-            (
-              /**
-               * 当前集合中的单项，使用所在集合的既有范围和检查规则。
-               */
-              item,
-            ) => item.status === 'success',
-          )
-          .map(
-            /**
-             * 将当前项转成调用方所需的固定形状，返回转换值；不触发正式保存。
-             */
-            (
-              /**
-               * 当前集合中的单项，使用所在集合的既有范围和检查规则。
-               */
-              item,
-            ) => item.itemId,
-          ) || [],
-      ),
+    () => new Set(state.batch?.items.filter((item) => item.status === 'success').map((item) => item.itemId)),
   )
-  /** 未知结果必须先核对，不能直接改内容再保存。 */
-  const hasUnknown = computed(
-    /**
-     * 从本页只读状态计算显示或操作条件，不在计算中调用云端。
-     */
-    () =>
-      Boolean(
-        state.batch?.items.some(
-          /**
-           * 核对集合中是否存在符合当前条件的项，返回布尔结果。
-           */
-          (
-            /**
-             * 当前集合中的单项，使用所在集合的既有范围和检查规则。
-             */
-            item,
-          ) => item.status === 'unknown',
-        ),
-      ),
+  const hasUnknown = computed(() => state.batch?.items.some((item) => item.status === 'unknown') ?? false)
+  const totals = computed(() => draftTotals(state.view?.draft.entries ?? []))
+  const complete = computed(() =>
+    Boolean(state.batch?.items.length && state.batch.items.every((item) => item.status === 'success')),
   )
-  /** 收入支出分别合计，不能用净额掩盖混合收支。 */
-  const totals = computed(
-    /**
-     * 从本页只读状态计算显示或操作条件，不在计算中调用云端。
-     */
-    () => ({
-      expense:
-        state.view?.draft.entries
-          .filter(
-            /**
-             * 按当前类型、范围或状态保留符合条件的项，返回独立列表。
-             */
-            (
-              /**
-               * 当前集合中的单项，使用所在集合的既有范围和检查规则。
-               */
-              item,
-            ) => item.type === 'expense',
-          )
-          .reduce(
-            /**
-             * 累计已检查的整数分，返回对应收入或支出的合计。
-             */
-            (
-              /**
-               * 当前已经累加的整数分，用于分别显示收入和支出合计。
-               */
-              sum,
-              /**
-               * 当前集合中的单项，使用所在集合的既有范围和检查规则。
-               */
-              item,
-            ) => sum + (item.amountCents || 0),
-            0,
-          ) || 0,
-      income:
-        state.view?.draft.entries
-          .filter(
-            /**
-             * 按当前类型、范围或状态保留符合条件的项，返回独立列表。
-             */
-            (
-              /**
-               * 当前集合中的单项，使用所在集合的既有范围和检查规则。
-               */
-              item,
-            ) => item.type === 'income',
-          )
-          .reduce(
-            /**
-             * 累计已检查的整数分，返回对应收入或支出的合计。
-             */
-            (
-              /**
-               * 当前已经累加的整数分，用于分别显示收入和支出合计。
-               */
-              sum,
-              /**
-               * 当前集合中的单项，使用所在集合的既有范围和检查规则。
-               */
-              item,
-            ) => sum + (item.amountCents || 0),
-            0,
-          ) || 0,
-    }),
+  const canCompose = computed(
+    () => state.available && !busy.value && !state.preparePending && (!state.batch || complete.value),
   )
-  /** 只显示客户端固定错误，不显示后端原异常。 */
-  function message(
-    /**
-     * 本次捕获的异常，只允许固定分类进入显示或控制记录。
-     */
-    error: unknown,
-  ): string {
-    return error instanceof DraftCloudError ? error.message : '本次处理未完成，请稍后手动再试。'
+  const canRetry = computed(() =>
+    Boolean(
+      state.batch &&
+      state.view?.status === 'DRAFT_READY' &&
+      !state.stopped &&
+      !hasUnknown.value &&
+      state.view.draft.entries.some((item) => !successful.value.has(item.id)),
+    ),
+  )
+  const canConfirm = computed(() =>
+    Boolean(
+      state.activeCard &&
+      state.view?.status === 'DRAFT_READY' &&
+      state.view.draft.entries.length &&
+      !state.failedMessage &&
+      !state.preparePending &&
+      !state.stopped &&
+      !state.batch &&
+      !busy.value,
+    ),
+  )
+
+  /** 过期的草稿不能继续补问或确认，用户下一次发送从新草稿开始。 */
+  function clearExpired(error: unknown): void {
+    if (error instanceof DraftCloudError && error.code === 'LEDGER_DRAFT_EXPIRED') {
+      state.activeCard = ''
+      state.view = null
+    }
   }
-  /** 核对本页版本与所属仍然有效。 */
-  function current(
-    /**
-     * 本次接受时的版本，用于拒绝迟到响应和旧确认。
-     */
-    version: number,
-  ): boolean {
+
+  function current(version: number): boolean {
     return !closed && version === generation
   }
-  /** 当前页第一次显示时只核对可用性和无正文历史，不发送模型。 */
-  async function initialize(): Promise<void> {
-    /**
-     * 本次接受时的版本，用于拒绝迟到响应和旧确认。
-     */
-    const version = ++generation
 
-    /**
-     * 本次并行或逐项检查的实际结果，每项分别核对。
-     */
-    const results = await Promise.allSettled([client.available(), client.list()])
-    if (!current(version)) return
-    state.available = results[0].status === 'fulfilled' && results[0].value
-    if (results[1].status === 'fulfilled') state.history = results[1].value
-    state.phase = 'input'
-    if (!state.available) state.error = '一句话记账尚未连接，可返回手动记账。'
-  }
-  /** 输入只能在空闲时改变，避免显示值和发送内容不同。 */
-  function setText(
-    /**
-     * 本次固定输入的完整原话，不因截断或补默认值而改变含义。
-     */
-    text: string,
-  ): void {
-    if (!busy.value && !closed) state.text = text
-  }
-  /** 同意只作用于本页本次发送，退出后不保存消费草稿。 */
-  function setConsent(
-    /**
-     * 当前待检查或转换的值，通过对应规则后才能使用。
-     */
-    value: boolean,
-  ): void {
-    if (!busy.value && !closed) state.consent = value
-  }
-  /** 发送一次输入或补充，保留已有明确字段，不自动重试。 */
-  async function send(): Promise<void> {
-    if (closed || busy.value || state.batch) return
-    if (!state.available || !state.consent || !state.text.trim()) {
-      state.error = !state.consent ? '请先确认下方信息用途说明。' : '请先填写要记录的收支。'
-      return
+  /** 仅在实际整理或编辑成功后添加新卡。 */
+  function showView(view: DraftView): void {
+    state.view = view
+    confirmationId = draftRequestId()
+    state.activeCard = ''
+    state.phase = view.status === 'DRAFT_READY' ? 'review' : 'input'
+    if (state.batch) {
+      state.phase = 'result'
+      showReceipt(state.batch, displayOf(view))
+    } else if (view.status === 'DRAFT_READY' && view.draft.entries.length) {
+      state.activeCard = confirmationId
+      state.messages.push({ id: confirmationId, kind: 'draft', display: displayOf(view) })
+    } else {
+      say(view.question || '清单已空，可以继续告诉我要记的账。')
     }
-    if ([...state.text].length > 4000) {
+  }
+
+  function say(text: string): void {
+    state.messages.push({ id: draftRequestId(), kind: 'assistant', text })
+  }
+
+  /** 同一批次始终更新原回执。查历史时不替换当前草稿的批次。 */
+  function showReceipt(result: BatchResult, display: DraftDisplay | null): void {
+    const id = `receipt-${result.batchId}`
+    const index = state.messages.findIndex((item) => item.id === id)
+    const receipt: BookkeepingMessage = { id, kind: 'receipt', result, display }
+    if (index < 0) state.messages.push(receipt)
+    else state.messages[index] = receipt
+    const historyIndex = state.history.findIndex((item) => item.batchId === result.batchId)
+    if (historyIndex >= 0) state.history[historyIndex] = result
+  }
+
+  /** 回执列表在后台读，慢或失败都不影响已经确认可用的输入。 */
+  async function initialize(): Promise<void> {
+    const version = ++generation
+    const history = client.list().then(
+      (batches) => {
+        if (closed) return
+        state.history = batches
+      },
+      () => {
+        if (closed) return
+        state.historyError = '暂时无法读取原保存结果。'
+      },
+    )
+    try {
+      const available = await client.available()
+      if (!current(version)) return
+      state.available = available
+      if (!available) state.error = '一句话记账尚未连接，可返回手动记账。'
+    } catch (error) {
+      if (current(version)) state.error = errorText(error)
+    } finally {
+      if (current(version)) state.phase = 'input'
+    }
+    await history
+  }
+
+  /** 修改输入会撤回此前对应另一段原话的同意卡。 */
+  function setText(text: string): void {
+    if (closed || !canCompose.value) return
+    if (state.consentText && state.consentText !== text) state.consentText = ''
+    state.text = text
+  }
+
+  function declineConsent(): void {
+    state.consentText = ''
+  }
+
+  /** 只有说明卡上的同意动作能第一次发送原话。 */
+  async function acceptConsent(): Promise<void> {
+    if (!canCompose.value || !state.consentText || state.consentText !== state.text) return
+    state.consent = true
+    state.consentText = ''
+    await send()
+  }
+
+  /** 发出或重试一条气泡。用已验证的当前草稿续接，聊天记录本身不发送。 */
+  async function send(retryId?: string): Promise<void> {
+    if (closed || !canCompose.value) return
+    const failed =
+      retryId && retryId === state.failedMessage
+        ? state.messages.find((item) => item.id === retryId && item.kind === 'user')
+        : undefined
+    if (retryId && (!failed || failed.kind !== 'user' || state.text.trim())) return
+    const text = failed?.kind === 'user' ? failed.text : state.text
+    if (!text.trim()) return
+    if ([...text].length > 4000) {
       state.error = '单次描述不能超过4000字，请分开描述。'
       return
     }
-
-    /**
-     * 本次接受时的版本，用于拒绝迟到响应和旧确认。
-     */
+    if (!state.consent) {
+      state.consentText = text
+      return
+    }
+    if (confirmationReply.test(text.trim())) {
+      state.messages.push({ id: draftRequestId(), kind: 'user', text })
+      state.text = ''
+      say(canConfirm.value ? '核对后，请点账单里的「确认记账」。' : '请告诉我要记的收支，或先处理当前账单。')
+      return
+    }
+    if (complete.value || state.stopped) resetBatch()
     const version = ++generation
-
-    /**
-     * 本次固定请求内容或引用，网络处理期间不再读取可变页面值。
-     */
     const request = { draftId: state.view?.draft.id || draftRequestId(), requestId: draftRequestId() }
+    const messageId = retryId || draftRequestId()
     active = request
-
-    /**
-     * 本次固定输入的完整原话，不因截断或补默认值而改变含义。
-     */
-    const text = state.text
+    if (!retryId) state.messages.push({ id: messageId, kind: 'user', text })
+    state.text = ''
+    state.failedMessage = ''
+    state.activeCard = ''
     state.error = ''
     state.phase = 'understanding'
     try {
-      /**
-       * 服务检查后的完整页面资料，不显示接收中的半份候选。
-       */
       const view = await client.understand({
         ...request,
         text,
-        consent: state.consent,
+        consent: true,
         sealed: state.view?.sealed || null,
       })
+      if (current(version)) showView(view)
+    } catch (error) {
       if (!current(version)) return
-      state.view = view
-      state.lastInput = text
-      state.text = ''
-      state.phase = view.status === 'DRAFT_READY' ? 'review' : 'input'
-      confirmationId = draftRequestId()
-    } catch (
-      /**
-       * 本次捕获的异常，只允许固定分类进入显示或控制记录。
-       */
-      error
-    ) {
-      if (!current(version)) return
-      state.error = message(error)
+      state.error = errorText(error)
+      clearExpired(error)
+      state.failedMessage = messageId
       state.phase = state.view?.status === 'DRAFT_READY' ? 'review' : 'input'
-      // 外层超时并不等于实际模型取消，另行发送仅针对本人的取消动作。
-      try {
-        await client.cancel(request.draftId, request.requestId)
-      } catch {
-        /* 原请求仍受服务端原60秒期限约束，页面不接受迟到结果。 */
-      }
+      // 外层超时不等于请求终止，撤回该请求，迟到结果仍不可见。
+      void client.cancel(request.draftId, request.requestId).catch(() => {})
     } finally {
       if (active?.requestId === request.requestId) active = null
     }
   }
-  /** 编辑或移除只能针对当前未成功项，后台重新检查后再显示。 */
-  async function changeEntries(
-    /**
-     * 当前完整待核对清单，必须保留每笔稳定编号并遵守十笔上限。
-     */
-    entries: DraftEntry[],
-  ): Promise<void> {
-    if (closed || busy.value || !state.view || hasUnknown.value) return
 
-    /**
-     * 本次接受时的版本，用于拒绝迟到响应和旧确认。
-     */
+  /** 失败的纠正须明确放弃，再给保留的草稿发一张可确认的新卡。 */
+  function discardFailed(): void {
+    if (closed || busy.value || !state.failedMessage) return
+    state.failedMessage = ''
+    state.error = ''
+    say('已放弃这次整理。')
+    if (state.view?.status === 'DRAFT_READY') showView(state.view)
+  }
+
+  /** 人工编辑复用云端核对，旧卡只有在操作成功后才被替换。 */
+  async function changeEntries(entries: DraftEntry[]): Promise<void> {
+    if (
+      closed ||
+      busy.value ||
+      !state.view ||
+      hasUnknown.value ||
+      state.preparePending ||
+      state.failedMessage ||
+      state.stopped
+    )
+      return
     const version = ++generation
-
-    /**
-     * 本次操作前已经核对的状态或阶段，用于保持旧值和失败恢复。
-     */
     const previous = state.phase
     state.phase = 'editing'
     state.error = ''
     try {
-      /**
-       * 服务检查后的完整页面资料，不显示接收中的半份候选。
-       */
       const view = await client.edit(
         state.view.sealed,
         entries,
         state.batch ? { batchId: state.batch.batchId, version: state.batch.version } : undefined,
       )
-      if (!current(version)) return
-      state.view = view
-      state.phase = view.status === 'DRAFT_READY' ? 'review' : 'input'
-      confirmationId = draftRequestId()
-    } catch (
-      /**
-       * 本次捕获的异常，只允许固定分类进入显示或控制记录。
-       */
-      error
-    ) {
+      if (current(version)) showView(view)
+    } catch (error) {
       if (current(version)) {
-        state.error = message(error)
-        state.phase = previous
+        state.error = errorText(error)
+        clearExpired(error)
+        state.phase = state.view || state.batch ? previous : 'input'
       }
     }
   }
-  /** 删除只影响当前未保存清单，已成功项不解锁。 */
-  async function remove(
-    /**
-     * 当前记录的稳定编号，只在已经核对的范围内查回。
-     */
-    id: string,
-  ): Promise<void> {
-    if (successful.value.has(id) || !state.view) return
-    await changeEntries(
-      state.view.draft.entries.filter(
-        /**
-         * 按当前类型、范围或状态保留符合条件的项，返回独立列表。
-         */
-        (
-          /**
-           * 当前集合中的单项，使用所在集合的既有范围和检查规则。
-           */
-          item,
-        ) => item.id !== id,
-      ),
-    )
-  }
-  /** 单项编辑仍保存完整最终清单，不让子组件直接写账本。 */
-  async function edit(
-    /**
-     * 当前需要核对的单笔账目，不能由它决定用户身份或保存许可。
-     */
-    entry: DraftEntry,
-  ): Promise<void> {
-    if (successful.value.has(entry.id) || !state.view) return
-    await changeEntries(
-      state.view.draft.entries.map(
-        /**
-         * 将当前项转成调用方所需的固定形状，返回转换值；不触发正式保存。
-         */
-        (
-          /**
-           * 当前集合中的单项，使用所在集合的既有范围和检查规则。
-           */
-          item,
-        ) => (item.id === entry.id ? entry : { ...item }),
-      ),
-    )
-  }
-  /** 先核对原事实，再允许处理明确未成功项。 */
-  async function query(
-    /**
-     * 原保存批次的非正文引用，缺失时不能重建原批次。
-     */
-    batchId = state.batch?.batchId,
-  ): Promise<void> {
-    if (closed || busy.value || !batchId) return
 
-    /**
-     * 本次接受时的版本，用于拒绝迟到响应和旧确认。
-     */
+  /** 移除或修改只可作用于仍在本页的未保存项。 */
+  async function remove(id: string): Promise<void> {
+    if (!state.view?.draft.entries.some((item) => item.id === id) || successful.value.has(id)) return
+    await changeEntries(state.view.draft.entries.filter((item) => item.id !== id))
+  }
+
+  async function edit(entry: DraftEntry): Promise<void> {
+    if (!state.view?.draft.entries.some((item) => item.id === entry.id) || successful.value.has(entry.id))
+      return
+    await changeEntries(state.view.draft.entries.map((item) => (item.id === entry.id ? entry : item)))
+  }
+
+  /** 先查原批，再由真实回执决定是否允许补存。 */
+  async function query(batchId = state.batch?.batchId): Promise<void> {
+    if (closed || busy.value || !batchId || state.preparePending) return
     const version = ++generation
+    const previous = state.phase
+    const isCurrent = batchId === state.batch?.batchId
     state.phase = 'querying'
     state.error = ''
     try {
-      /**
-       * 当前请求、选择或事务返回的结果，不能仅凭文字宣称已保存。
-       */
       const result = await client.query(batchId)
-      if (current(version)) {
-        state.batch = result
-        state.phase = 'result'
-      }
-    } catch (
-      /**
-       * 本次捕获的异常，只允许固定分类进入显示或控制记录。
-       */
-      error
-    ) {
-      if (current(version)) {
-        state.error = message(error)
-        state.phase = 'result'
-      }
+      if (!current(version)) return
+      if (isCurrent) state.batch = result
+      const previousReceipt = state.messages.find((item) => item.id === `receipt-${batchId}`)
+      showReceipt(
+        result,
+        isCurrent && state.view
+          ? displayOf(state.view)
+          : previousReceipt?.kind === 'receipt'
+            ? previousReceipt.display
+            : null,
+      )
+    } catch (error) {
+      if (current(version)) state.error = errorText(error)
+    } finally {
+      if (current(version)) state.phase = previous
     }
   }
-  /** 一次点击确认最终清单，退出后已确认任务仍按原资格执行。 */
-  async function save(): Promise<void> {
-    if (
-      closed ||
-      busy.value ||
-      !state.view ||
-      state.view.status !== 'DRAFT_READY' ||
-      !state.view.draft.entries.length ||
-      hasUnknown.value ||
-      stopRequested
-    )
+
+  /** 只有当前卡的编号能确认，准备中断和同批补存使用各自明确入口。 */
+  async function save(cardId: string): Promise<void> {
+    if (!canConfirm.value || cardId !== confirmationId) return
+    await saveConfirmed()
+  }
+
+  /** 对已确认却没拿到准备结果的同一批查回，或明确补存当前未成功项。 */
+  async function retrySave(batchId?: string): Promise<void> {
+    if (state.preparePending ? batchId !== undefined : !canRetry.value || batchId !== state.batch?.batchId)
       return
+    await saveConfirmed()
+  }
 
-    /**
-     * 本次接受时的版本，用于拒绝迟到响应和旧确认。
-     */
+  async function saveConfirmed(): Promise<void> {
+    if (closed || busy.value || !state.view || state.stopped || hasUnknown.value) return
     const version = ++generation
-
-    /**
-     * 仅在当前页往返的不透明状态，页面不能修改其中身份或期限。
-     */
     const sealed = state.view.sealed
-
-    /**
-     * 本次确认的固定清单证明与原批次引用，等待期间不改变。
-     */
+    const display = displayOf(state.view)
     const prepareInput = {
       sealed,
       confirmationId,
@@ -458,172 +364,171 @@ export function useLedgerDraft(
     }
     state.error = ''
     state.phase = 'saving'
-
-    /**
-     * 当前批次的控制资料和逐项结果，不包含未保存消费正文。
-     */
-    let batch = state.batch
+    let prepared: BatchResult | null = null
     try {
-      batch = await client.prepare(prepareInput)
-      if (current(version)) state.batch = batch
+      prepared = await client.prepare(prepareInput)
+      if (current(version)) {
+        state.preparePending = false
+        state.batch = prepared
+        state.activeCard = ''
+      }
       if (stopRequested) {
-        /** 在确认返回后仍须提交已经提出的停止要求，再显示正式停止结果。 */
-        const result = await client.stop(batch.batchId)
-        if (current(version)) state.batch = result
+        // 等到准备回包才有批次引用。主动停止后绝不开始新的写入。
+        const result = await client.stop(prepared.batchId)
+        if (current(version)) {
+          state.batch = result
+          showReceipt(result, null)
+        }
         return
       }
-
-      /**
-       * 当前请求、选择或事务返回的结果，不能仅凭文字宣称已保存。
-       */
       const result = await client.save({
         sealed,
-        batchId: batch.batchId,
-        version: batch.version,
-        attemptRevision: batch.attemptRevision,
+        batchId: prepared.batchId,
+        version: prepared.version,
+        attemptRevision: prepared.attemptRevision,
         attemptId: draftRequestId(),
       })
       if (current(version)) {
         state.batch = result
-        state.phase = 'result'
+        showReceipt(result, state.stopped ? null : display)
       }
-    } catch (
-      /**
-       * 本次捕获的异常，只允许固定分类进入显示或控制记录。
-       */
-      error
-    ) {
+    } catch (error) {
       if (!current(version)) return
-      state.error = message(error)
-      // 已形成批次但未拿到结果时，只允许核对；不能把它们全报为失败。
-      if (batch)
-        state.batch = {
-          ...batch,
-          items: batch.items.map(
-            /**
-             * 将当前项转成调用方所需的固定形状，返回转换值；不触发正式保存。
-             */
-            (
-              /**
-               * 当前集合中的单项，使用所在集合的既有范围和检查规则。
-               */
-              item,
-            ) =>
-              item.status === 'success'
-                ? { ...item }
-                : { ...item, status: 'unknown', code: 'LEDGER_BATCH_CHECK_FIRST' },
+      state.error = errorText(error)
+      clearExpired(error)
+      const original =
+        prepared ||
+        (error instanceof DraftCloudError && error.code === 'LEDGER_BATCH_CHECK_FIRST' ? state.batch : null)
+      if (original) {
+        const uncertain: BatchResult = {
+          ...original,
+          items: original.items.map((item) =>
+            item.status === 'success'
+              ? item
+              : { ...item, status: 'unknown', code: 'LEDGER_BATCH_CHECK_FIRST' },
           ),
         }
-      state.phase = batch ? 'result' : 'review'
+        state.batch = uncertain
+        showReceipt(uncertain, state.stopped ? null : display)
+      } else {
+        // 明确的业务拒绝可退回原清单，通信失败仍绑定原确认编号。
+        state.preparePending =
+          !state.stopped &&
+          (!(error instanceof DraftCloudError) ||
+            ['TIMEOUT', 'FAILED', 'INVALID_RESPONSE'].includes(error.code))
+        if (!state.preparePending && !state.stopped && !state.batch && state.view) showView(state.view)
+      }
     } finally {
-      if (current(version) && state.phase === 'saving') state.phase = 'result'
+      if (current(version)) state.phase = state.batch ? 'result' : state.view ? 'review' : 'input'
     }
   }
-  /** 明确取消保存与普通返回分开，已经成功的账目不回滚。 */
+
+  /** 主动停止和普通退出不同。停止时清除全部临时正文，只显示原回执。 */
   async function stop(): Promise<void> {
+    if (closed || stopRequested || state.phase !== 'saving') return
     stopRequested = true
     state.stopped = true
-    // 明确取消后撤掉未完成正文，只保留核对原保存所需的非正文控制。
-    state.text = ''
-    state.lastInput = ''
-    state.view = null
-
-    /**
-     * 当前记录的稳定编号，只在已经核对的范围内查回。
-     */
+    clearConversation()
     const id = state.batch?.batchId
     if (!id) return
+    const version = generation
     try {
-      /**
-       * 当前请求、选择或事务返回的结果，不能仅凭文字宣称已保存。
-       */
       const result = await client.stop(id)
-      if (!closed) state.batch = result
-    } catch (
-      /**
-       * 本次捕获的异常，只允许固定分类进入显示或控制记录。
-       */
-      error
-    ) {
-      if (!closed) state.error = message(error)
+      if (current(version)) {
+        state.batch = result
+        showReceipt(result, null)
+      }
+    } catch (error) {
+      if (current(version)) state.error = errorText(error)
     }
   }
-  /** 取消整理时真正发送取消动作，并立即清空本页原话与草稿。 */
-  async function cancelUnderstanding(): Promise<void> {
-    /**
-     * 本次固定请求内容或引用，网络处理期间不再读取可变页面值。
-     */
-    const request = active
-    generation++
-    active = null
+
+  /** 清除用户文字和派生清单，仅留下不含正文的正式回执。 */
+  function clearConversation(): void {
     state.text = ''
-    state.lastInput = ''
+    state.consentText = ''
+    state.failedMessage = ''
+    state.activeCard = ''
     state.view = null
+    state.messages = state.messages.flatMap((item) =>
+      item.kind === 'receipt' ? [{ ...item, display: null }] : [],
+    )
+  }
+
+  async function cancelUnderstanding(): Promise<void> {
+    if (!active || closed || state.phase !== 'understanding') return
+    const request = active
+    const version = ++generation
+    active = null
+    clearConversation()
     state.error = ''
     state.phase = 'input'
-    if (request) {
-      try {
-        await client.cancel(request.draftId, request.requestId)
-      } catch {
-        if (!closed) state.error = '取消消息未送达，原处理会在原时限内结束；结果不会恢复到本页。'
-      }
+    try {
+      await client.cancel(request.draftId, request.requestId)
+    } catch {
+      if (current(version)) state.error = '取消消息未送达，原处理会在原时限内结束。'
     }
   }
-  /** 原结果保留在云端，另一次新输入不复用原未成功清单。 */
-  function restart(): void {
-    if (busy.value || closed) return
-    generation++
-    state.text = ''
-    state.lastInput = ''
+
+  /** 新一批使用新草稿和新确认号，前一批结果仍能查回。 */
+  function resetBatch(): void {
     state.view = null
     state.batch = null
+    state.activeCard = ''
+    state.preparePending = false
     state.error = ''
     state.phase = 'input'
     confirmationId = draftRequestId()
     stopRequested = false
     state.stopped = false
   }
-  /** 卸载清空所有本页内容，普通退出不撤销已经确认的保存。 */
+
+  function restart(): void {
+    if (busy.value || closed || state.preparePending) return
+    generation++
+    clearConversation()
+    resetBatch()
+  }
+
+  /** 卸载撤回显示资格。普通退出保留已经明确确认的在途保存。 */
   function dispose(): void {
     if (closed) return
     closed = true
     generation++
-
-    /**
-     * 本次固定请求内容或引用，网络处理期间不再读取可变页面值。
-     */
     const request = active
     active = null
-    state.text = ''
-    state.lastInput = ''
-    state.view = null
+    clearConversation()
+    state.messages = []
     state.batch = null
     state.history = []
+    state.historyError = ''
+    state.available = false
     state.consent = false
-    if (request)
-      client.cancel(request.draftId, request.requestId).catch(
-        /**
-         * 收拢已经退出的请求错误，不恢复页面、不重发原话。
-         */
-        () => {
-          /* 后台仍有原期限，迟到响应没有显示资格。 */
-        },
-      )
+    state.error = ''
+    if (request) void client.cancel(request.draftId, request.requestId).catch(() => {})
   }
+
   return {
     state: readonly(state),
     busy,
     totals,
     successful,
     hasUnknown,
+    canCompose,
+    canConfirm,
+    canRetry,
+    complete,
     initialize,
     setText,
-    setConsent,
+    acceptConsent,
+    declineConsent,
     send,
+    discardFailed,
     edit,
     remove,
     query,
     save,
+    retrySave,
     stop,
     cancelUnderstanding,
     restart,
