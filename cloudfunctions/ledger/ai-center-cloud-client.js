@@ -2,19 +2,45 @@
 const { createHash } = require('node:crypto')
 const { LedgerDomainError } = require('./ledger-domain')
 
-/** 此记录没有批次所属或版本，不出现在账目、历史批次及其清理查询中。 */
-const gateId = 'lai_online_gate_v1'
+/** 旧试用登记只用于保留防重事实、核对切换当日用量及收尾旧请求。 */
+const legacyGateId = 'lai_online_gate_v1'
+/** 按北京时间划分日界线，与云函数所在机器时区无关。 */
+const dayMs = 86_400_000
+const beijingOffsetMs = 28_800_000
 /** 同一实例直接中断在途模型请求，其他实例通过持久登记撤回交付。 */
 const active = new Map()
 
 /** 已有登记必须符合本版格式，损坏时关闭入口并保留原记录。 */
 function verifyGateRecord(
-  /* 从账本后台读到的唯一线上次数登记。 */
+  /* 从账本后台读到的次数登记。 */
   record,
+  /* 区分旧试用登记和当前每日登记。 */
+  kind,
 ) {
-  if (record && (record.kind !== 'online-ai-gate-v1' || !Number.isSafeInteger(record.calls) ||
+  if (record && (record.kind !== kind || !Number.isSafeInteger(record.calls) ||
     record.calls < 0 || record.calls > 100 || !Array.isArray(record.requests) || record.requests.length > 200))
     throw new LedgerDomainError('LEDGER_AI_UNAVAILABLE')
+}
+
+/** 计算北京时间的当前日及用量。旧请求的到期时间是其开始时间的上界。 */
+function dailyUsage(
+  /* 当前家庭的每日登记，可以尚未创建。 */
+  record,
+  /* 原试用登记，可以不存在。 */
+  legacy,
+  /* 由云端读取的当前毫秒时间。 */
+  now,
+) {
+  verifyGateRecord(record, 'online-ai-daily-v1')
+  verifyGateRecord(legacy, 'online-ai-gate-v1')
+  /** 固定北京时间日编号，时钟异常回拨时拒绝覆盖已有用量。 */
+  const day = Math.floor((now + beijingOffsetMs) / dayMs)
+  if (record && (!Number.isSafeInteger(record.day) || record.day > day))
+    throw new LedgerDomainError('LEDGER_AI_UNAVAILABLE')
+  /** 已跨日的旧用量保留在原记录，仅当日旧请求占当天额度。 */
+  const start = day * dayMs - beijingOffsetMs
+  const legacyCalls = legacy?.requests.filter((item) => item.used && item.expiresAt > start).length ?? 0
+  return { day, calls: record?.day === day ? record.calls : 0, legacyCalls }
 }
 
 /** 只有后端配置命中的当前家庭可以使用线上模块。 */
@@ -24,12 +50,14 @@ function createCloudAiCenterClient(
   /* 云函数环境设置，不从页面读取。 */
   environment = process.env,
 ) {
-  /** 发布前明确给出本批次总量，进程重启和日历换日不会补充。 */
-  const limit = Number(environment.AI_CENTER_CLOUD_MAX_REQUESTS)
+  /** 使用独立每日设置，避免把旧试用总额度误当成每日额度。 */
+  const limit = Number(environment.AI_CENTER_CLOUD_DAILY_MAX_REQUESTS)
   if (environment.AI_CENTER_CLOUD_BOOKKEEPING !== '1' ||
     environment.AI_CENTER_CLOUD_HOUSEHOLD !== dependencies.householdId ||
     !dependencies.householdId || !Number.isSafeInteger(limit) || limit < 1 || limit > 100)
     throw new LedgerDomainError('LEDGER_AI_UNAVAILABLE')
+  /** 只按已核实的家庭分配每日额度，控制记录不进入账目或历史回执。 */
+  const gateId = `lai_daily_${createHash('sha256').update(dependencies.householdId).digest('hex')}`
 
   /** 只在打开线上记账后加载同次发布的 ai-center 生成模块。 */
   let runtime
@@ -67,21 +95,22 @@ function createCloudAiCenterClient(
         /* 只用于当前事务的既有账本存储。 */
         tx,
       ) => {
-        /** 事务实际取得的原记录。 */
+        /** 在同一事务取得计数、旧试用记录和确切请求的防重凭据。 */
         const record = await tx.getBatch(gateId)
-        verifyGateRecord(record)
-        /** 只清理失效的提前取消占位，已计次数的编号仍可防重。 */
+        const legacy = action === 'finish' ? undefined : await tx.getBatch(legacyGateId)
+        const receiptId = `lai_request_${ref.key}`
+        const receipt = action === 'finish' ? undefined : await tx.getBatch(receiptId)
+        /** 以实际接受请求时的云端时间确定计入哪一天。 */
         const now = Date.now()
-        /** 保留原先已接受的请求及尚未到期的取消。 */
+        const { day, calls, legacyCalls } = dailyUsage(record, legacy, now)
+        /** 只保留仍在有效期内的请求和提前取消，已接受请求另有防重凭据。 */
         const requests = (record?.requests || []).filter(
           /** 判断当前登记是否还有防重作用。 */
           (
             /* 当前持久登记。 */
             item,
-          ) => item.used || item.expiresAt > now,
+          ) => item.expiresAt > now,
         )
-        /** 读取当次已占用的累计次数。 */
-        let calls = record?.calls || 0
         /** 当前确切请求的旧记录。 */
         const entry = requests.find(
           /** 仅比较本次范围的摘要。 */
@@ -90,16 +119,19 @@ function createCloudAiCenterClient(
             item,
           ) => item.key === ref.key,
         )
+        /** 切换期间仍拒绝重放旧请求，也允许取消还在处理的旧请求。 */
+        const legacyEntry = legacy?.requests.find((item) => item.key === ref.key && (item.used || item.expiresAt > now))
         if (action === 'begin') {
-          if (entry || calls >= limit || requests.length >= 200 || expiresAt <= now ||
-            requests.some(
+          if (entry || receipt || legacyEntry || calls + legacyCalls >= limit || requests.length >= 200 || expiresAt <= now ||
+            requests.concat(legacy?.requests ?? []).some(
               /** 仍在执行时拒绝同一草稿的另一个请求。 */
               (
                 /* 当前可查登记。 */
                 item,
               ) => item.scope === ref.scope && item.state === 'running' && item.expiresAt > now,
             )) return false
-          calls += 1
+          // 同时保存防重事实与当天用量，跨日或进程重启仍拒绝同一个请求。
+          await tx.setBatch({ _id: receiptId, kind: 'online-ai-request-v1' })
           requests.push({ ...ref, used: true, expiresAt, state: 'running' })
         } else if (action === 'finish') {
           if (!entry || entry.state !== 'running' || entry.expiresAt <= now) return false
@@ -107,23 +139,32 @@ function createCloudAiCenterClient(
         } else if (entry) {
           if (entry.state !== 'running') return true
           entry.state = 'cancelled'
+        } else if (legacyEntry) {
+          if (legacyEntry.state === 'running' && legacyEntry.expiresAt > now) {
+            legacyEntry.state = 'cancelled'
+            await tx.setBatch(legacy)
+          }
+          return true
+        } else if (receipt) {
+          return true
         } else {
           if (requests.length >= 200) return false
           requests.push({ ...ref, used: false, expiresAt: now + 65_000, state: 'cancelled' })
         }
-        await tx.setBatch({ _id: gateId, kind: 'online-ai-gate-v1', calls, requests })
+        await tx.setBatch({ _id: gateId, kind: 'online-ai-daily-v1', day, calls: calls + (action === 'begin' ? 1 : 0), requests })
         return true
       },
     )
   }
 
   return {
-    /** 只读核对本次累计次数，额度用完时页面显示不可用。 */
+    /** 只读核对当前北京时间日的次数，零点之后立即按新一天判断。 */
     async health() {
       /** 此处不登记新的模型请求，也不改已有次数。 */
       const record = await dependencies.repository.getBatch(gateId)
-      verifyGateRecord(record)
-      if (record?.calls >= limit) throw new LedgerDomainError('LEDGER_AI_UNAVAILABLE')
+      const legacy = await dependencies.repository.getBatch(legacyGateId)
+      const { calls, legacyCalls } = dailyUsage(record, legacy, Date.now())
+      if (calls + legacyCalls >= limit) throw new LedgerDomainError('LEDGER_AI_UNAVAILABLE')
       return true
     },
     /** 次数登记提交后只执行一次整理。 */
