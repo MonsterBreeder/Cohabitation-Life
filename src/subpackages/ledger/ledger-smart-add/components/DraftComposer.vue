@@ -1,111 +1,80 @@
-<!-- 文件用途：展示本轮描述、补问与信息用途说明，只上报输入和发送意图。 -->
+<!-- 文件用途：提供聊天底部的固定输入和发送动作，键盘位置交给页面统一处理。 -->
 <template>
   <view class="draft-composer">
-    <text class="draft-composer__title">把几笔开销，一起告诉我</text>
-    <text class="draft-composer__hint">支持人民币收入和支出，一次最多10笔。</text>
-    <view v-if="lastInput" class="draft-composer__original">
-      <text class="draft-composer__caption">你的描述</text>
-      <text class="draft-composer__text">{{ lastInput }}</text>
-    </view>
-    <view v-if="question" class="draft-composer__question">
-      <text class="draft-composer__caption">还需要确认</text>
-      <text class="draft-composer__text">{{ question }}</text>
-    </view>
-    <wd-textarea
-      :model-value="text"
-      :disabled="busy || !available"
-      :maxlength="4000"
-      show-word-limit
-      auto-height
-      placeholder="例如：昨天我吃饭花50元，乙娱乐花100元"
-      data-testid="smart-draft-input"
-      @update:model-value="emit('text', $event)"
-    />
-    <view class="draft-composer__consent">
-      <wd-checkbox
-        :model-value="consent"
-        :disabled="busy"
-        @update:model-value="emit('consent', $event === true)"
-      >
-        同意用于本次整理
-      </wd-checkbox>
-      <text class="draft-composer__hint">
-        输入和必要的类目、成员显示信息会交给模型处理。未完成内容退出后清空，不进入个人长期记忆；不同意仍可手动记账。
-      </text>
+    <view class="draft-composer__field">
+      <!-- 微信端组件内部的高度无法随外部样式收紧，使用原生文本域固定底栏高度。 -->
+      <textarea
+        class="draft-composer__textarea"
+        :value="text"
+        :placeholder="placeholder"
+        :disabled="disabled"
+        :maxlength="4000"
+        :adjust-position="false"
+        :show-confirm-bar="false"
+        confirm-type="send"
+        data-testid="smart-draft-input"
+        @input="update"
+        @keyboardheightchange="keyboardChanged"
+        @confirm="send"
+      />
     </view>
     <wd-button
-      block
-      :loading="busy"
-      :disabled="busy || !available || !consent || !text.trim()"
+      size="medium"
+      round
+      :disabled="disabled || !text.trim()"
       data-testid="smart-draft-send"
-      @click="emit('send')"
+      @click="send"
     >
-      {{ question ? '补充并整理' : '整理账目' }}
-    </wd-button>
-    <wd-button v-if="busy" block plain custom-style="margin-top:16rpx" @click="emit('cancel')">
-      取消整理
+      发送
     </wd-button>
   </view>
 </template>
 
 <script setup lang="ts">
-/** 只接受父页面的显示资料，不持有可恢复草稿或云端连接。 */
-defineProps<{
-  text: string
-  lastInput: string
-  question: string
-  consent: boolean
-  busy: boolean
-  available: boolean
-}>()
-/** 文字、用途同意及按钮意图均交回唯一页面状态处理。 */
-const emit = defineEmits<{ text: [value: string]; consent: [value: boolean]; send: []; cancel: [] }>()
+/** 页面持有正在编辑的原话，输入组件不持有草稿或网络能力。 */
+const props = defineProps<{ text: string; placeholder: string; disabled: boolean }>()
+const emit = defineEmits<{ text: [value: string]; send: []; keyboard: [height: number] }>()
+
+/** 使用原生输入事件的完整文字，多行编辑留在输入框内。 */
+function update(event: Event | { detail: { value: string } }) {
+  const value = 'detail' in event ? event.detail.value : (event.target as HTMLTextAreaElement | null)?.value
+  if (typeof value === 'string') emit('text', value)
+}
+
+/** 键盘发送与点击走相同的空输入、重复发送检查。 */
+function send() {
+  if (!props.disabled && props.text.trim()) emit('send')
+}
+
+/** 微信键盘高度由输入组件转发，页面只避让一次。 */
+function keyboardChanged(event: { detail: { height: number } }) {
+  emit('keyboard', Math.max(0, Number(event.detail.height) || 0))
+}
 </script>
 
 <style lang="scss" scoped>
-/* 输入、用户原话与必要补问按阅读顺序排列。 */
+/* 输入在窄屏可收缩，发送按钮不随长句被挤出。 */
 .draft-composer {
   display: flex;
-  flex-direction: column;
-  gap: 24rpx;
-  &__title {
-    font-size: 44rpx;
-    font-weight: 700;
-    line-height: 1.5;
+  gap: 16rpx;
+  align-items: flex-end;
+  &__field {
+    min-width: 0;
+    flex: 1;
+    background: #f5f7f2;
+    border: 1rpx solid $brand-color-border;
+    border-radius: $brand-radius-input;
+    overflow: hidden;
   }
-  &__hint {
-    display: block;
-    font-size: 24rpx;
-    line-height: 1.7;
-    color: $brand-color-text-secondary;
-  }
-  &__original {
-    padding: 28rpx;
-    border-radius: $brand-radius-card;
-    background: #e6f4eb;
-  }
-  &__question {
-    padding: 28rpx;
-    border-radius: $brand-radius-card;
-    background: $brand-color-surface;
-  }
-  &__caption {
-    display: block;
-    margin-bottom: 12rpx;
-    font-size: 22rpx;
-    color: $brand-color-text-secondary;
-  }
-  &__text {
-    display: block;
+  /* 两行输入随字号留足高度，长句在文本域内继续滚动。 */
+  &__textarea {
+    width: 100%;
+    height: 88rpx;
+    padding: 12rpx 20rpx;
+    box-sizing: border-box;
+    color: $brand-color-text;
     font-size: 28rpx;
-    line-height: 1.8;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-  &__consent {
-    display: flex;
-    flex-direction: column;
-    gap: 16rpx;
+    line-height: 32rpx;
   }
 }
 </style>

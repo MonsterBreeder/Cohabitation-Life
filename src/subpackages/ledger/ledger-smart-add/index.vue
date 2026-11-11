@@ -1,119 +1,210 @@
-<!-- 文件用途：组合一句话记账输入、清单、编辑和正式结果，不恢复退出前的未完成内容。 -->
+<!-- 文件用途：把原记账入口组合成当前页聊天，负责滚动、键盘和退出。 -->
 <template>
-  <view class="ledger-smart-add">
-    <view v-if="state.phase === 'loading'" class="ledger-smart-add__loading">
-      <wd-loading />
+  <view
+    class="ledger-smart-add"
+    :style="keyboardHeight ? { '--bookkeeping-keyboard-height': `${keyboardHeight}px` } : undefined"
+  >
+    <view
+      v-if="state.phase === 'loading' && !pageError"
+      class="ledger-smart-add__initial"
+      data-testid="smart-draft-initial"
+    >
+      <wd-loading color="#267A5A" size="40rpx" />
       <text>正在加载账本记账页。</text>
     </view>
+    <view v-else-if="pageError || !state.available" class="ledger-smart-add__initial">
+      <text>{{ pageError || state.error }}</text>
+      <wd-button plain @click="back">返回手动记账</wd-button>
+    </view>
     <template v-else>
-      <view v-if="state.error || pageError" class="ledger-smart-add__error" role="alert">
-        {{ state.error || pageError }}
-      </view>
-      <DraftComposer
-        v-if="!state.batch && ['input', 'understanding'].includes(state.phase)"
-        :text="state.text"
-        :last-input="state.lastInput"
-        :question="state.view?.question || ''"
-        :consent="state.consent"
-        :busy="busy"
-        :available="state.available"
-        @text="flow.setText"
-        @consent="flow.setConsent"
-        @send="flow.send"
-        @cancel="flow.cancelUnderstanding"
-      />
-      <view v-if="['saving', 'editing', 'querying'].includes(state.phase)" class="ledger-smart-add__loading">
-        <wd-loading />
-        <text>正在核对本次结果。</text>
-      </view>
-      <DraftEntryList
-        v-if="state.view?.status === 'DRAFT_READY' && !state.batch"
-        :entries="state.view.draft.entries"
-        :categories="state.view.categories"
-        :members="state.view.members"
-        :successful="successful"
-        :disabled="busy || hasUnknown"
-        @edit="editId = $event"
-        @remove="flow.remove"
-      />
-      <view
-        v-if="state.view?.status === 'DRAFT_READY' && !state.batch"
-        class="ledger-smart-add__confirmation"
+      <scroll-view
+        class="ledger-smart-add__scroll"
+        scroll-y
+        :scroll-into-view="scrollTarget"
+        @scroll="trackScroll"
       >
-        <view class="ledger-smart-add__totals">
-          <text>支出 ¥{{ yuan(totals.expense) }}</text>
-          <text>收入 ¥{{ yuan(totals.income) }}</text>
+        <view class="ledger-smart-add__timeline">
+          <view class="ledger-smart-add__message">
+            <view class="ledger-smart-add__sender">
+              <image class="ledger-smart-add__avatar" src="/static/brand/logo.png" mode="aspectFit" />
+              <text>睦录</text>
+            </view>
+            <view class="ledger-smart-add__bubble ledger-smart-add__bubble--assistant">
+              <text>把要记的收支告诉我。</text>
+              <text class="ledger-smart-add__example">比如：昨天午饭 50 元，打车 28 元。</text>
+            </view>
+          </view>
+          <view v-if="state.history.length || state.historyError" class="ledger-smart-add__history">
+            <text v-if="state.historyError">{{ state.historyError }}</text>
+            <wd-button
+              v-else
+              size="small"
+              variant="text"
+              :disabled="busy"
+              @click="historyOpen = !historyOpen"
+            >
+              {{ historyOpen ? '收起原保存结果' : '原保存结果' }}
+            </wd-button>
+            <template v-if="historyOpen">
+              <wd-cell
+                v-for="(batch, index) in state.history"
+                :key="batch.batchId"
+                :title="`第 ${index + 1} 批 · ${batch.items.length} 笔`"
+                value="核对"
+                :is-link="!busy"
+                @click="queryReceipt(batch.batchId)"
+              />
+            </template>
+          </view>
+          <view v-for="item in timeline" :key="item.id" class="ledger-smart-add__message">
+            <view
+              v-if="item.kind === 'progress'"
+              class="ledger-smart-add__progress"
+              data-testid="smart-draft-progress"
+            >
+              <wd-loading color="#267A5A" size="32rpx" />
+              <text>{{ item.text }}</text>
+            </view>
+            <view
+              v-else-if="item.kind === 'user'"
+              class="ledger-smart-add__bubble ledger-smart-add__bubble--user"
+            >
+              <text>{{ item.text }}</text>
+            </view>
+            <template v-else>
+              <view class="ledger-smart-add__sender">
+                <image class="ledger-smart-add__avatar" src="/static/brand/logo.png" mode="aspectFit" />
+                <text>睦录</text>
+              </view>
+              <view
+                v-if="item.kind === 'assistant'"
+                class="ledger-smart-add__bubble ledger-smart-add__bubble--assistant"
+              >
+                <text>{{ item.text }}</text>
+              </view>
+              <DraftEntryList
+                v-else-if="item.kind === 'draft'"
+                :display="item.display"
+                :active="item.id === state.activeCard"
+                :disabled="!canConfirm || !!editing"
+                @confirm="flow.save(item.id)"
+                @edit="editId = $event"
+                @remove="flow.remove"
+              />
+              <BatchResults
+                v-else-if="item.kind === 'receipt'"
+                :result="item.result"
+                :display="item.display"
+                :busy="busy || !!editing || state.preparePending"
+                :can-retry="item.result.batchId === state.batch?.batchId && canRetry && !state.preparePending"
+                :can-edit="item.result.batchId === state.batch?.batchId && canRetry && !state.preparePending"
+                @edit="editId = $event"
+                @remove="flow.remove"
+                @query="queryReceipt(item.result.batchId)"
+                @retry="flow.retrySave(item.result.batchId)"
+                @open="openEntry"
+              />
+            </template>
+          </view>
+          <view v-if="state.consentText" class="ledger-smart-add__notice" data-testid="smart-draft-consent">
+            <text class="ledger-smart-add__notice-title">发送前了解数据用途</text>
+            <text>这句话和必要的类目、成员显示信息会交给模型处理。未完成内容退出后清空。</text>
+            <wd-button
+              block
+              size="medium"
+              :disabled="busy"
+              data-testid="smart-draft-consent-accept"
+              @click="flow.acceptConsent()"
+            >
+              同意并发送
+            </wd-button>
+            <wd-button size="small" variant="text" @click="flow.declineConsent()">暂不发送</wd-button>
+          </view>
+          <view
+            v-if="state.error || state.failedMessage"
+            class="ledger-smart-add__notice ledger-smart-add__notice--error"
+            role="alert"
+          >
+            <text>{{ state.error || '这条消息还未整理成功。' }}</text>
+            <template v-if="state.failedMessage">
+              <wd-button
+                size="small"
+                variant="text"
+                :disabled="busy || !!state.text.trim()"
+                @click="flow.send(state.failedMessage)"
+              >
+                重试这条消息
+              </wd-button>
+              <wd-button size="small" variant="text" :disabled="busy" @click="flow.discardFailed()">
+                放弃这次整理
+              </wd-button>
+            </template>
+            <wd-button v-if="state.preparePending" block :disabled="busy" @click="flow.retrySave()">
+              继续原确认
+            </wd-button>
+          </view>
+          <wd-button
+            v-if="state.phase === 'understanding'"
+            size="small"
+            variant="text"
+            @click="flow.cancelUnderstanding()"
+          >
+            取消整理
+          </wd-button>
+          <wd-button
+            v-if="state.phase === 'saving' && !state.stopped"
+            size="small"
+            variant="text"
+            @click="flow.stop()"
+          >
+            停止后续保存
+          </wd-button>
+          <wd-button
+            v-if="state.batch && !complete && !busy && !state.preparePending"
+            size="small"
+            variant="text"
+            @click="endBatch"
+          >
+            结束本批
+          </wd-button>
+          <view id="smart-chat-bottom-a" class="ledger-smart-add__anchor" />
+          <view id="smart-chat-bottom-b" class="ledger-smart-add__anchor" />
         </view>
-        <wd-button
-          block
-          :loading="busy"
-          :disabled="busy || !state.view.draft.entries.length"
-          data-testid="smart-draft-confirm"
-          @click="flow.save"
-        >
-          确认保存这{{ state.view.draft.entries.length }}笔
-        </wd-button>
-        <wd-button block plain :disabled="busy" @click="flow.restart">重新描述</wd-button>
-      </view>
-      <BatchResults
-        v-if="state.batch"
-        :result="state.batch"
-        :busy="busy"
-        :can-retry="canRetry"
-        :entries="state.view?.draft.entries || []"
-        :categories="state.view?.categories || []"
-        :members="state.view?.members || []"
-        :has-draft="!!state.view"
-        :can-edit="!!state.view && !hasUnknown && !state.stopped"
-        @edit="editId = $event"
-        @remove="flow.remove"
-        @query="flow.query()"
-        @retry="flow.save"
-        @open="openEntry"
-      />
-      <wd-button v-if="state.phase === 'saving'" block plain @click="flow.stop">停止后续保存</wd-button>
-      <view v-if="state.batch && !busy" class="ledger-smart-add__another">
-        <wd-button block plain @click="flow.restart">重新输入另一批</wd-button>
-      </view>
-      <view v-if="!state.view && !state.batch && state.history.length" class="ledger-smart-add__history">
-        <text class="ledger-smart-add__caption">原保存结果</text>
-        <wd-cell
-          v-for="(batch, index) in state.history"
-          :key="batch.batchId"
-          :title="`第${index + 1}批 · ${savedCount(batch.items)}笔已保存`"
-          value="核对"
-          is-link
-          @click="flow.query(batch.batchId)"
+      </scroll-view>
+      <view
+        class="ledger-smart-add__footer"
+        :class="{ 'ledger-smart-add__footer--keyboard': keyboardHeight > 0 }"
+      >
+        <view v-if="hasNew" class="ledger-smart-add__jump">
+          <wd-button size="small" plain @click="jumpLatest">查看新消息</wd-button>
+        </view>
+        <DraftComposer
+          :text="state.text"
+          :placeholder="placeholder"
+          :disabled="!canCompose || !!editing"
+          @text="flow.setText"
+          @send="flow.send()"
+          @keyboard="updateKeyboard"
         />
       </view>
-      <wd-button
-        block
-        type="info"
-        plain
-        :disabled="state.phase === 'editing'"
-        custom-style="margin-top:32rpx"
-        @click="back"
-      >
-        返回手动记账
-      </wd-button>
-      <text class="ledger-smart-add__footer">退出后清空未完成内容，已经保存的账目保留。</text>
+      <DraftEntryEditor
+        v-if="editing && state.view"
+        :key="editing.id"
+        :entry="editing"
+        :categories="state.view.categories"
+        :members="state.view.members"
+        :busy="busy"
+        :error="state.error"
+        @save="saveEdit"
+        @close="editId = null"
+      />
     </template>
-    <DraftEntryEditor
-      v-if="editing && state.view"
-      :key="editing.id"
-      :entry="editing"
-      :categories="state.view.categories"
-      :members="state.view.members"
-      :busy="busy"
-      @save="saveEdit"
-      @close="editId = null"
-    />
   </view>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { onLoad, onUnload } from '@dcloudio/uni-app'
+import { computed, getCurrentInstance, nextTick, shallowRef, watch } from 'vue'
+import { onLoad, onReady, onUnload } from '@dcloudio/uni-app'
 import { useHouseholdStore } from '../../../store/modules/household'
 import { createDraftCloud } from '../../../services/ledger-draft-cloud'
 import type { DraftEntry } from '../../../types/ledger-draft'
@@ -123,195 +214,169 @@ import DraftEntryList from './components/DraftEntryList.vue'
 import DraftEntryEditor from './components/DraftEntryEditor.vue'
 import BatchResults from './components/BatchResults.vue'
 
-/** 沿用当前家庭，只作业务目标，不将它当成可信身份。 */
+/** 页面只传所属目标，真实身份仍由云端读取。 */
 const household = useHouseholdStore()
-/** 无平台能力时给出固定提示，页面仍可返回手动入口。 */
-const pageError = ref('')
-/** 当前唯一的编辑项目，弹层关闭不等于离开本页。 */
-const editId = ref<string | null>(null)
-/** 页面初始化前也保留同形状状态，避免模板读取空对象。 */
-const fallback = {
-  /**
-   * 初始化本页明确使用的云连接；检查替身不连接真实云端。
-   */
-  init() {},
+const pageError = shallowRef('')
+const householdId = household.household?.id ?? ''
+const editId = shallowRef<string | null>(null)
+const historyOpen = shallowRef(false)
+const keyboardHeight = shallowRef(0)
+const scrollTarget = shallowRef('')
+const hasNew = shallowRef(false)
+const queryTarget = shallowRef('')
+const instance = getCurrentInstance()?.proxy
+let nearBottom = true
+let viewportHeight = 0
+let disposed = false
 
-  /**
-   * 接收固定动作及已复制资料，返回完整响应供客户端严格核对。
-   */
+/** 浏览器等无微信云能力的平台仍可显示可返回的提示。 */
+const fallback = {
+  init() {},
   async callFunction() {
     throw new Error('当前平台未提供云端连接')
   },
 }
-/** 云端客户端只归本页所有，不写全局存储。 */
 let cloud
 try {
-  cloud = createDraftCloud(household.household?.id || '')
+  cloud = createDraftCloud(householdId)
 } catch {
-  cloud = createDraftCloud(household.household?.id || '', fallback)
+  cloud = createDraftCloud(householdId, fallback)
   pageError.value = '请在微信中使用一句话记账，或返回手动记账。'
 }
-/** 页面负责组合，业务状态与副作用由专属状态处理。 */
+if (!householdId) pageError.value = '需要先有家，才能使用一句话记账。'
 const flow = useLedgerDraft(cloud)
-/** 只读显示资料与固定操作来自同一个状态实例。 */
-const { state, busy, totals, successful, hasUnknown } = flow
-/** 成功项和未知项不能编辑，原输入不会因查询结果恢复。 */
+const { state, busy, canCompose, canConfirm, canRetry, complete, successful, hasUnknown } = flow
 const editing = computed(
-  /**
-   * 从本页只读状态计算显示或操作条件，不在计算中调用云端。
-   */
   () =>
     state.view?.draft.entries.find(
-      /**
-       * 按当前稳定字段匹配单项，供后续核对；没有匹配时保持空值。
-       */
-      (
-        /**
-         * 当前需要核对的单笔账目，不能由它决定用户身份或保存许可。
-         */
-        entry,
-      ) => entry.id === editId.value && !successful.value.has(entry.id) && !hasUnknown.value,
-    ) || null,
+      (entry) => entry.id === editId.value && !successful.value.has(entry.id) && !hasUnknown.value,
+    ) ?? null,
 )
-/** 只有当前页仍有确认清单且不存在未知结果时才能重试未成功项。 */
-const canRetry = computed(
-  /**
-   * 从本页只读状态计算显示或操作条件，不在计算中调用云端。
-   */
-  () =>
-    Boolean(
-      state.view?.status === 'DRAFT_READY' &&
-      state.batch &&
-      !hasUnknown.value &&
-      !state.stopped &&
-      state.view.draft.entries.some(
-        /**
-         * 核对集合中是否存在符合当前条件的项，返回布尔结果。
-         */
-        (
-          /**
-           * 当前集合中的单项，使用所在集合的既有范围和检查规则。
-           */
-          item,
-        ) => !successful.value.has(item.id),
-      ),
-    ),
+const placeholder = computed(() =>
+  state.batch && !complete.value
+    ? '处理本次结果后继续记账'
+    : state.view?.question
+      ? '在这里回答睦录'
+      : canConfirm.value
+        ? '还想改哪一笔？'
+        : '输入你要记的账',
 )
-/** 显示金额不参与保存计算。 */
-function yuan(
-  /**
-   * 已经检查的整数分，显示换算不参与正式保存计算。
-   */
-  cents: number,
-): string {
-  return (cents / 100).toFixed(2)
+
+/** 一次操作只插入一条进度。查回时尽量插在原回执下面。 */
+const progressText = {
+  loading: '',
+  input: '',
+  review: '',
+  result: '',
+  understanding: '正在整理账目…',
+  editing: '正在更新待确认账目…',
+  saving: '正在保存账目…',
+  querying: '正在核对保存结果…',
 }
-/** 历史只统计正式成功项，模板不包含无说明的匿名处理。 */
-function savedCount(
-  /**
-   * 按稳定编号组织的本批项目和状态，不丢掉后半段结果。
-   */
-  items: readonly {
-    /**
-     * 已经核对的正式状态，未知结果不能当作失败或成功。
-     */
-    status: string
-  }[],
-): number {
-  return items.filter(
-    /**
-     * 按当前类型、范围或状态保留符合条件的项，返回独立列表。
-     */
-    (
-      /**
-       * 当前集合中的单项，使用所在集合的既有范围和检查规则。
-       */
-      item,
-    ) => item.status === 'success',
-  ).length
+const timeline = computed(() => {
+  const items = [...state.messages]
+  const text = progressText[state.phase]
+  if (!text || (state.phase === 'editing' && editing.value)) return items
+  const target =
+    state.phase === 'querying' ? items.findIndex((item) => item.id === `receipt-${queryTarget.value}`) : -1
+  const progress = { id: 'smart-chat-progress', kind: 'progress', text } as const
+  return target < 0
+    ? [...items, progress]
+    : [...items.slice(0, target + 1), progress, ...items.slice(target + 1)]
+})
+
+/** 只量页面实际剩余区域，键盘避让由根容器承担。 */
+function measureScroll() {
+  if (!instance || disposed) return
+  uni
+    .createSelectorQuery()
+    .in(instance)
+    .select('.ledger-smart-add__scroll')
+    .boundingClientRect((result) => {
+      if (result && !Array.isArray(result)) viewportHeight = result.height ?? 0
+    })
+    .exec()
 }
-/** 修改经过后台检查，失败时保留编辑弹层供用户处理。 */
-async function saveEdit(
-  /**
-   * 当前需要核对的单笔账目，不能由它决定用户身份或保存许可。
-   */
-  entry: DraftEntry,
-): Promise<void> {
+
+function trackScroll(event: { detail: { scrollHeight: number; scrollTop: number } }) {
+  if (!viewportHeight) return
+  nearBottom = event.detail.scrollHeight - event.detail.scrollTop - viewportHeight <= 48
+  if (nearBottom) hasNew.value = false
+}
+
+/** 交替定位两个底部锚点，微信会响应连续的定位。 */
+function jumpLatest() {
+  if (disposed) return
+  nearBottom = true
+  hasNew.value = false
+  scrollTarget.value =
+    scrollTarget.value === 'smart-chat-bottom-a' ? 'smart-chat-bottom-b' : 'smart-chat-bottom-a'
+}
+
+async function updateKeyboard(height: number) {
+  keyboardHeight.value = height
+  await nextTick()
+  measureScroll()
+  if (nearBottom) jumpLatest()
+}
+
+watch(
+  () => [state.messages[state.messages.length - 1], state.phase, state.consentText, state.error] as const,
+  async ([last, phase], [before]) => {
+    await nextTick()
+    if (disposed) return
+    if (nearBottom || (last !== before && last?.kind === 'user') || !!state.consentText) jumpLatest()
+    else if (last !== before && last) hasNew.value = true
+    if (phase === 'input') measureScroll()
+  },
+)
+
+/** 历史查回是只读动作，不能切换正在整理的草稿。 */
+async function queryReceipt(id: string) {
+  if (busy.value || state.preparePending || editing.value) return
+  queryTarget.value = id
+  historyOpen.value = false
+  await flow.query(id)
+  queryTarget.value = ''
+}
+
+async function saveEdit(entry: DraftEntry) {
   await flow.edit(entry)
   if (!state.error) editId.value = null
 }
-/** 只能打开正式成功账目的原详情页，身份权限仍由原云端核对。 */
-function openEntry(
-  /**
-   * 正式成功账目的稳定引用，打开详情后仍重新核对权限。
-   */
-  entryId: string,
-): void {
-  // 查看正式账目会离开本流程，替换当前页以触发清理；返回仍回到原手动页。
+
+/** 正式详情跳转触发卸载清理，详情仍核对原访问权限。 */
+function openEntry(entryId: string) {
   uni.redirectTo({ url: `/subpackages/ledger/ledger-detail/index?entryId=${encodeURIComponent(entryId)}` })
 }
-/** 用户点击返回时说明清除范围，保存已确认时仍按原结果处理。 */
-function back(): void {
-  if (state.text || state.view)
-    uni.showModal({
-      title: '退出一句话记账？',
-      content:
-        state.phase === 'saving'
-          ? '已经确认的保存会按实际结果处理，未完成输入会清空。'
-          : '未完成的输入和清单会清空，已保存的账目保留。',
 
-      /**
-       * 只读取用户明确确认结果，再执行本次导航意图。
-       */
-      success(
-        /**
-         * 当前请求、选择或事务返回的结果，不能仅凭文字宣称已保存。
-         */
-        result,
-      ) {
-        if (result.confirm) uni.navigateBack()
-      },
-    })
-  else uni.navigateBack()
+function endBatch() {
+  uni.showModal({
+    title: '结束本批记账？',
+    content: '未完成的内容会清空，仍可核对原保存结果。',
+    success: (result) => {
+      if (result.confirm) flow.restart()
+    },
+  })
 }
-onLoad(
-  /**
-   * 页面进入时只读取连接及原回执状态，不自动调用模型或保存。
-   */
-  () => {
-    void flow.initialize()
-  },
-)
-onUnload(
-  /**
-   * 卸载时清空本页原话、清单及编辑引用，撤回旧响应显示资格。
-   */
-  () => {
-    editId.value = null
-    flow.dispose()
-  },
-)
-/** 家庭切换或退出登录时立即撤回原页面资格，迟到结果不能再恢复旧家庭资料。 */
-watch(
-  /**
-   * 核对当前家庭变化并撤回旧页资格，不能由迟到响应恢复旧内容。
-   */
-  () => household.household?.id,
 
-  /**
-   * 核对当前家庭变化并撤回旧页资格，不能由迟到响应恢复旧内容。
-   */
-  (
-    /**
-     * 当前记录的稳定编号，只在已经核对的范围内查回。
-     */
-    id,
-    /**
-     * 本次操作前已经核对的状态或阶段，用于保持旧值和失败恢复。
-     */
-    previous,
-  ) => {
-    if (previous && id !== previous) {
+function back() {
+  uni.navigateBack()
+}
+
+onLoad(() => {
+  if (!pageError.value) void flow.initialize()
+})
+onReady(measureScroll)
+onUnload(() => {
+  disposed = true
+  flow.dispose()
+})
+/** 登录或家庭变动撤回聊天和回执，旧响应不能恢复页面。 */
+watch(
+  () => household.household?.id ?? '',
+  (id) => {
+    if (id !== householdId) {
       flow.dispose()
       editId.value = null
       pageError.value = '家庭状态已变化，请返回后重新进入。'
@@ -321,61 +386,132 @@ watch(
 </script>
 
 <style lang="scss" scoped>
-/* 沿用睦录奶油底与绿色操作，清单可随手机页面自然滚动。 */
+/* 原导航下的聊天以滚动区和固定输入区划分。 */
 .ledger-smart-add {
-  min-height: 100vh;
-  box-sizing: border-box;
-  padding: 40rpx 32rpx calc(40rpx + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: calc(
+    100vh - var(--window-top, 0px) - var(--window-bottom, 0px) - var(--bookkeeping-keyboard-height, 0px)
+  );
+  overflow: hidden;
   background: $brand-color-background;
   color: $brand-color-text;
-  &__loading {
+  box-sizing: border-box;
+  &__initial {
+    flex: 1;
     display: flex;
-    gap: 20rpx;
+    align-items: center;
     justify-content: center;
-    padding-top: 100rpx;
-    font-size: 26rpx;
-  }
-  &__error {
-    margin-bottom: 24rpx;
-    padding: 24rpx;
-    color: #8c3727;
-    background: #fff0e8;
-    border-radius: $brand-radius-input;
-    font-size: 26rpx;
-    line-height: 1.7;
-  }
-  &__confirmation {
-    display: flex;
     flex-direction: column;
     gap: 20rpx;
-    margin: 32rpx 0;
-  }
-  &__totals {
-    display: flex;
-    justify-content: space-between;
-    font-size: 26rpx;
-  }
-  &__another {
-    margin-top: 24rpx;
-  }
-  &__history {
-    margin-top: 48rpx;
-    border-top: 1rpx solid $brand-color-border;
-    padding-top: 24rpx;
-  }
-  &__caption {
-    display: block;
-    margin-bottom: 20rpx;
+    padding: 36rpx;
+    text-align: center;
     font-size: 28rpx;
+  }
+  &__scroll {
+    flex: 1;
+    height: 0;
+    min-height: 0;
+  }
+  &__timeline {
+    padding: 32rpx 28rpx 20rpx;
+  }
+  &__message {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 22rpx;
+  }
+  &__sender {
+    display: flex;
+    align-items: center;
+    gap: 10rpx;
+    margin-bottom: 10rpx;
+    color: #536b60;
+    font-size: 23rpx;
     font-weight: 600;
   }
-  &__footer {
+  &__avatar {
+    width: 42rpx;
+    height: 42rpx;
+  }
+  &__bubble,
+  &__progress,
+  &__notice {
+    border: 1rpx solid $brand-color-border;
+    border-radius: $brand-radius-card;
+    background: $brand-color-surface;
+  }
+  &__bubble {
+    max-width: 84%;
+    padding: 18rpx 22rpx;
+    font-size: 28rpx;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  &__bubble--assistant,
+  &__progress {
+    align-self: flex-start;
+  }
+  &__bubble--user {
+    align-self: flex-end;
+    background: #e2f1e8;
+    border-color: transparent;
+  }
+  &__example {
     display: block;
-    text-align: center;
-    margin-top: 24rpx;
-    font-size: 22rpx;
-    line-height: 1.7;
-    color: $brand-color-text-secondary;
+    margin-top: 8rpx;
+    font-size: 24rpx;
+    color: #536b60;
+  }
+  &__progress {
+    display: flex;
+    align-items: center;
+    gap: 14rpx;
+    padding: 17rpx 22rpx;
+    font-size: 26rpx;
+    color: $brand-color-action;
+  }
+  &__notice {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16rpx;
+    margin-bottom: 20rpx;
+    padding: 22rpx;
+    font-size: 26rpx;
+    line-height: 1.6;
+  }
+  &__notice-title {
+    font-weight: 700;
+    font-size: 29rpx;
+  }
+  &__notice--error {
+    background: #fcf0e8;
+    color: #814532;
+  }
+  &__history {
+    margin-bottom: 16rpx;
+    font-size: 24rpx;
+    color: #536b60;
+  }
+  &__footer {
+    position: relative;
+    padding: 16rpx 24rpx calc(14rpx + env(safe-area-inset-bottom));
+    border-top: 1rpx solid $brand-color-border;
+    background: $brand-color-surface;
+  }
+  &__footer--keyboard {
+    padding-bottom: 14rpx;
+  }
+  &__jump {
+    position: absolute;
+    right: 24rpx;
+    bottom: calc(100% + 12rpx);
+  }
+  &__anchor {
+    height: 1px;
   }
 }
 </style>
