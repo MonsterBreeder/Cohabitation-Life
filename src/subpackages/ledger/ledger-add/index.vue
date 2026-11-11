@@ -16,7 +16,8 @@
     <view v-if="!isEditMode" class="ledger-add-page__smart-entry">
       <wd-cell
         title="一句话记多笔"
-        label="告诉我花了什么，整理后由你确认"
+        label="发消息记收支，核对后确认"
+        data-testid="ledger-add-smart"
         is-link
         :clickable="!isBusy"
         @click="openSmartAdd"

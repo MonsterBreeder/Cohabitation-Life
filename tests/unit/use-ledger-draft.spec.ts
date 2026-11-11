@@ -138,20 +138,20 @@ function registerDraftFlowChecks() {
      */
     const flow = useLedgerDraft(wrapped)
     await flow.initialize()
-    flow.setConsent(true)
     flow.setText('昨天我吃饭花50，乙娱乐100')
 
     /**
      * 已经开始但尚未完成的理解操作，等待结束后核对迟到处理。
      */
-    const sending = flow.send()
+    await flow.send()
+    const sending = flow.acceptConsent()
     expect(flow.state.phase).toBe('understanding')
     flow.dispose()
     release()
     await sending
     expect(cancel).toHaveBeenCalledTimes(1)
     expect(flow.state.view).toBeNull()
-    expect(flow.state.lastInput).toBe('')
+    expect(flow.state.messages).toHaveLength(0)
     expect(flow.state.text).toBe('')
     expect(data.entries.size).toBe(0)
   }
@@ -175,12 +175,11 @@ function registerDraftFlowChecks() {
     flow.setText('昨天我吃饭花50，乙娱乐100')
     await flow.send()
     expect(actions).not.toContain('understandDraft')
-    flow.setConsent(true)
-    await flow.send()
+    await flow.acceptConsent()
     expect(flow.state.view?.status).toBe('DRAFT_READY')
     expect(data.entries.size).toBe(0)
     expect(flow.totals.value).toEqual({ expense: 15000, income: 0 })
-    await Promise.all([flow.save(), flow.save()])
+    await Promise.all([flow.save(flow.state.activeCard), flow.save(flow.state.activeCard)])
     expect(data.entries.size).toBe(2)
     expect(
       flow.state.batch?.items.every(
@@ -197,7 +196,7 @@ function registerDraftFlowChecks() {
     ).toBe(true)
     flow.dispose()
     expect(flow.state.view).toBeNull()
-    expect(flow.state.lastInput).toBe('')
+    expect(flow.state.messages).toHaveLength(0)
     expect(data.entries.size).toBe(2)
   }
 
@@ -237,13 +236,13 @@ function registerDraftFlowChecks() {
      */
     const flow = useLedgerDraft(wrapped)
     await flow.initialize()
-    flow.setConsent(true)
     flow.setText('昨天我吃饭花50，乙娱乐100')
     await flow.send()
-    await flow.save()
+    await flow.acceptConsent()
+    await flow.save(flow.state.activeCard)
     expect(data.entries.size).toBe(2)
     expect(flow.hasUnknown.value).toBe(true)
-    await flow.save()
+    await flow.save(flow.state.activeCard)
     expect(data.entries.size).toBe(2)
     await flow.query()
     expect(flow.hasUnknown.value).toBe(false)
@@ -312,14 +311,14 @@ function registerDraftFlowChecks() {
      */
     const flow = useLedgerDraft(wrapped)
     await flow.initialize()
-    flow.setConsent(true)
     flow.setText('昨天我吃饭花50，乙娱乐100')
     await flow.send()
+    await flow.acceptConsent()
 
     /**
      * 当前已明确确认的保存过程，普通退出不撤销已经开始的执行。
      */
-    const saving = flow.save()
+    const saving = flow.save(flow.state.activeCard)
     flow.dispose()
     release()
     await saving
@@ -335,7 +334,7 @@ function registerDraftFlowChecks() {
     expect(reopened.state.history).toHaveLength(1)
     await reopened.query(reopened.state.history[0].batchId)
     expect(
-      reopened.state.batch?.items.every(
+      reopened.state.history[0]?.items.every(
         /**
          * 逐项检查固定结构或最终状态，任一不符即返回否。
          */
@@ -348,6 +347,8 @@ function registerDraftFlowChecks() {
       ),
     ).toBe(true)
     expect(reopened.state.view).toBeNull()
+    expect(reopened.state.batch).toBeNull()
+    expect(reopened.state.messages[0]).toMatchObject({ kind: 'receipt', display: null })
   }
 
   it('退出后迟到理解不能恢复输入，已经明确确认的保存仍可完成并回查', verifySaveAfterExit)
@@ -385,14 +386,14 @@ function registerDraftFlowChecks() {
     /** 本场景唯一页面状态，不使用全局恢复资料。 */
     const flow = useLedgerDraft(wrapped)
     await flow.initialize()
-    flow.setConsent(true)
     flow.setText('昨天我吃饭花50，乙娱乐100')
     await flow.send()
+    await flow.acceptConsent()
     /** 已经点击确认但尚未取得批次的保存等待。 */
-    const saving = flow.save()
+    const saving = flow.save(flow.state.activeCard)
     await flow.stop()
     expect(flow.state.view).toBeNull()
-    expect(flow.state.lastInput).toBe('')
+    expect(flow.state.messages).toHaveLength(0)
     expect(flow.state.text).toBe('')
     expect(flow.state.stopped).toBe(true)
     release()
@@ -408,7 +409,7 @@ function registerDraftFlowChecks() {
       ),
     ).toEqual(['unexecuted', 'unexecuted'])
     expect(data.entries.size).toBe(0)
-    await flow.save()
+    await flow.save(flow.state.activeCard)
     expect(data.entries.size).toBe(0)
   }
 
@@ -428,16 +429,16 @@ function registerDraftFlowChecks() {
      */
     const flow = useLedgerDraft(client)
     await flow.initialize()
-    flow.setConsent(true)
     flow.setText('昨天我吃饭花50，乙娱乐100')
     await flow.send()
+    await flow.acceptConsent()
 
     /**
      * 当前需要核对的单笔账目，不能由它决定用户身份或保存许可。
      */
     for (const entry of [...flow.state.view!.draft.entries]) await flow.remove(entry.id)
     expect(flow.state.view?.draft.entries).toHaveLength(0)
-    await flow.save()
+    await flow.save(flow.state.activeCard)
     expect(data.entries.size).toBe(0)
 
     /**
@@ -460,6 +461,138 @@ function registerDraftFlowChecks() {
   }
 
   it('移除全部不能保存，恶意响应带额外字段被客户端拒绝', verifyEmptyAndInvalidResponse)
+
+  /** 聊天中的补问和修改走真实草稿、版本、保存链路，只替换模型输出。 */
+  async function verifyConversation() {
+    const { data, client, actions } = await setup()
+    const provider = data.deps.aiCenter
+    let failCorrection = true
+    data.deps.aiCenter = async (request: {
+      text: string
+      previous: {
+        revision: number
+        entries: { id: string; memberKey: string | null; amountCents: number }[]
+      } | null
+    }) => {
+      const sample = await provider(request)
+      if (!request.previous) {
+        if (request.text === '另记一笔') return sample
+        return {
+          status: 'clarify',
+          question: '这两笔是谁付的？',
+          draft: {
+            ...sample.draft,
+            entries: sample.draft.entries.map((entry: { memberKey: string | null }) => ({
+              ...entry,
+              memberKey: null,
+            })),
+          },
+        }
+      }
+      if (request.text.startsWith('第二笔') && failCorrection) {
+        failCorrection = false
+        throw new Error('虚构的整理中断')
+      }
+      return {
+        ...sample,
+        draft: {
+          ...request.previous,
+          revision: request.previous.revision + 1,
+          entries: request.previous.entries.map((entry) => ({
+            ...entry,
+            memberKey: 'm1',
+            amountCents:
+              entry.id === 'item_fun' && request.text.startsWith('第二笔') ? 3200 : entry.amountCents,
+          })),
+        },
+      }
+    }
+    const flow = useLedgerDraft(client)
+    await flow.initialize()
+    flow.setText('昨天吃饭花50，娱乐100')
+    await flow.send()
+    flow.declineConsent()
+    expect(flow.state.text).toBe('昨天吃饭花50，娱乐100')
+    expect(actions).not.toContain('understandDraft')
+    await flow.send()
+    await flow.acceptConsent()
+    expect(flow.state.messages.map((item) => item.kind)).toEqual(['user', 'assistant'])
+    expect(flow.state.view?.question).toBe('这两笔是谁付的？')
+    flow.setText('都是我付的')
+    await flow.send()
+    const oldCard = flow.state.activeCard
+    const oldDraft = flow.state.view?.draft.id
+    expect(oldCard).toBeTruthy()
+    flow.setText('记吧')
+    await flow.send()
+    expect(actions.filter((action) => action === 'understandDraft')).toHaveLength(2)
+    expect(data.entries.size).toBe(0)
+    flow.setText('第二笔改成32，然后记吧')
+    await flow.send()
+    const failed = flow.state.failedMessage
+    const messagesAfterFailure = flow.state.messages.filter((item) => item.kind === 'user').length
+    expect(failed).toBeTruthy()
+    expect(flow.canConfirm.value).toBe(false)
+    await flow.save(oldCard)
+    await flow.send(failed)
+    expect(flow.state.messages.filter((item) => item.kind === 'user')).toHaveLength(messagesAfterFailure)
+    expect(flow.state.view?.draft.id).toBe(oldDraft)
+    expect(flow.state.view?.draft.entries.map((item) => [item.id, item.amountCents])).toEqual([
+      ['item_dining', 5000],
+      ['item_fun', 3200],
+    ])
+    const newCard = flow.state.activeCard
+    expect(newCard).not.toBe(oldCard)
+    await flow.save(oldCard)
+    expect(data.entries.size).toBe(0)
+    await Promise.all([flow.save(newCard), flow.save(newCard)])
+    expect(data.entries.size).toBe(2)
+    expect(flow.state.batch?.items.map((item) => item.status)).toEqual(['success', 'success'])
+    const amounts = Array.from(data.entries.values() as Iterable<{ amountCents: number }>)
+    expect(amounts.map((item) => item.amountCents)).toEqual([5000, 3200])
+    const previousBatch = flow.state.batch?.batchId
+    flow.setText('另记一笔')
+    await flow.send()
+    expect(flow.state.batch).toBeNull()
+    expect(flow.state.view?.draft.id).not.toBe(oldDraft)
+    const nextDraft = flow.state.view?.draft.id
+    await flow.query(previousBatch)
+    expect(flow.state.batch).toBeNull()
+    expect(flow.state.view?.draft.id).toBe(nextDraft)
+    expect(flow.state.messages.filter((item) => item.kind === 'receipt')).toHaveLength(1)
+  }
+
+  it('连续补问和文字纠正只保留当前确认资格，成功后直接开始下一笔', verifyConversation)
+
+  /** 准备回包丢失时不换确认号，恢复后仍只写一次。 */
+  async function verifyPrepareRecovery() {
+    const { data, client } = await setup()
+    const confirmationIds: string[] = []
+    const flow = useLedgerDraft({
+      ...client,
+      async prepare(input) {
+        confirmationIds.push(input.confirmationId)
+        const result = await client.prepare(input)
+        if (confirmationIds.length === 1) throw new DraftCloudError('FAILED', '连接中断')
+        return result
+      },
+    })
+    await flow.initialize()
+    flow.setText('昨天我吃饭花50，乙娱乐100')
+    await flow.send()
+    await flow.acceptConsent()
+    const card = flow.state.activeCard
+    await flow.save(card)
+    expect(flow.state.preparePending).toBe(true)
+    expect(flow.canCompose.value).toBe(false)
+    expect(data.entries.size).toBe(0)
+    await flow.save(card)
+    await flow.retrySave()
+    expect(confirmationIds).toEqual([card, card])
+    expect(data.entries.size).toBe(2)
+  }
+
+  it('准备保存后断线沿用原确认编号，重试不重复写入', verifyPrepareRecovery)
 }
 
 describe('当前页记账流程', registerDraftFlowChecks)

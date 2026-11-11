@@ -80,10 +80,14 @@
         :disabled="busy"
         placeholder="备注（可选）"
       />
+      <view v-if="busy" class="draft-entry-editor__progress" data-testid="smart-draft-edit-progress">
+        <wd-loading color="#267A5A" size="32rpx" />
+        <text>正在更新待确认账目…</text>
+      </view>
+      <text v-if="error" class="draft-entry-editor__error">{{ error }}</text>
       <text v-if="amountError" class="draft-entry-editor__error">{{ amountError }}</text>
       <wd-button
         block
-        :loading="busy"
         :disabled="
           busy ||
           !!amountError ||
@@ -115,6 +119,7 @@ const props = defineProps<{
   categories: readonly DraftChoice[]
   members: readonly DraftChoice[]
   busy: boolean
+  error?: string
 }>()
 /** 修改交回父级核对，关闭只丢弃本次局部修改。 */
 const emit = defineEmits<{ save: [entry: DraftEntry]; close: [] }>()
@@ -319,6 +324,13 @@ function chooseDate(
   }
   &__label {
     font-size: 28rpx;
+  }
+  &__progress {
+    display: flex;
+    gap: 12rpx;
+    align-items: center;
+    color: $brand-color-action;
+    font-size: 26rpx;
   }
   &__error {
     color: #a13f29;

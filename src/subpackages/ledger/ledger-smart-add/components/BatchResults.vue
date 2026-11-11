@@ -1,216 +1,206 @@
-<!-- 文件用途：显示正式逐项状态和成功账目入口，未知结果只能先核对。 -->
+<!-- 文件用途：把实际逐笔保存状态排成聊天回执，结果未知时只提供核对入口。 -->
 <template>
-  <view class="batch-results">
-    <text class="batch-results__title">已保存{{ successCount }}笔</text>
-    <text class="batch-results__hint">已保存的不会重复记入。退出后可核对原结果，未保存内容不会恢复。</text>
+  <ReceiptPaper>
+    <template #heading>
+      <text class="batch-results__title">本次保存结果</text>
+      <text class="batch-results__hint">{{ summary }}</text>
+    </template>
     <view
-      v-for="(item, index) in rows"
-      :key="item.itemId"
-      class="batch-results__card"
+      v-for="(row, index) in rows"
+      :key="row.itemId"
+      class="batch-results__row"
       :data-testid="`smart-batch-item-${index}`"
     >
-      <view class="batch-results__heading">
-        <text>{{ item.position }} · {{ item.title }}</text>
-        <wd-tag :type="item.status === 'success' ? 'success' : 'warning'">{{ labels[item.status] }}</wd-tag>
-      </view>
-      <text v-if="item.amount" class="batch-results__amount">{{ item.amount }}</text>
-      <text v-if="item.entry" class="batch-results__hint">
-        {{ item.entry.date || '待补充日期' }} · {{ item.member }}
-      </text>
-      <text v-if="item.status !== 'success'" class="batch-results__hint">
-        {{ describe(item.code, item.status) }}
-      </text>
-      <wd-button
-        v-if="item.status === 'success' && item.entryId"
-        size="small"
-        plain
-        :disabled="busy"
-        @click="emit('open', item.entryId)"
-      >
-        查看账目
-      </wd-button>
-      <view v-if="item.entry && item.status !== 'success' && canEdit" class="batch-results__actions">
-        <wd-button size="small" plain :disabled="busy" @click="emit('edit', item.itemId)">修改这笔</wd-button>
-        <wd-button size="small" plain type="info" :disabled="busy" @click="emit('remove', item.itemId)">
-          移除
-        </wd-button>
+      <BookkeepingIcon :name="row.icon" :tone="row.tone" />
+      <view class="batch-results__body">
+        <view class="batch-results__line">
+          <text class="batch-results__name">{{ row.title }}</text>
+          <text v-if="row.amount" class="batch-results__amount">{{ row.amount }}</text>
+        </view>
+        <view class="batch-results__line batch-results__line--status">
+          <view class="batch-results__status" :class="`batch-results__status--${row.status}`">
+            <BookkeepingIcon :name="states[row.status].icon" tone="plain" />
+            <text>{{ states[row.status].label }}</text>
+          </view>
+          <wd-button
+            v-if="row.status === 'success' && row.entryId"
+            size="small"
+            variant="text"
+            :disabled="busy"
+            @click="emit('open', row.entryId)"
+          >
+            查看账目
+          </wd-button>
+        </view>
+        <text v-if="row.status === 'failed'" class="batch-results__hint">
+          {{
+            row.code === 'LEDGER_CATEGORY_NOT_FOUND'
+              ? '类目已不可用，请调整这笔。'
+              : '这笔未保存，请核对后再试。'
+          }}
+        </text>
+        <view v-if="canEdit && row.entry && row.status !== 'success'" class="batch-results__tools">
+          <wd-button size="small" plain :disabled="busy" @click="emit('edit', row.itemId)">修改</wd-button>
+          <wd-button size="small" plain type="info" :disabled="busy" @click="emit('remove', row.itemId)">
+            移除
+          </wd-button>
+        </view>
       </view>
     </view>
-    <text v-if="!rows.length" class="batch-results__hint">未保存项已移除，可重新输入另一批。</text>
-    <wd-button
-      block
-      plain
-      :loading="busy"
-      :disabled="busy"
-      data-testid="smart-batch-query"
-      @click="emit('query')"
-    >
-      核对原结果
-    </wd-button>
-    <wd-button v-if="canRetry" block :disabled="busy" data-testid="smart-batch-retry" @click="emit('retry')">
-      仅保存未成功项
-    </wd-button>
-  </view>
+    <view v-if="unknown || canRetry" class="batch-results__actions">
+      <template v-if="unknown">
+        <text class="batch-results__notice">先查回结果，避免重复记账。</text>
+        <wd-button block round :disabled="busy" data-testid="smart-batch-query" @click="emit('query')">
+          核对保存结果
+        </wd-button>
+      </template>
+      <wd-button v-else block round :disabled="busy" data-testid="smart-batch-retry" @click="emit('retry')">
+        确认补存未成功项
+      </wd-button>
+    </view>
+  </ReceiptPaper>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { BatchResult, DraftChoice, DraftEntry } from '../../../../types/ledger-draft'
-/** 页面只读结果，不要求恢复消费原文。 */
+import type { BatchResult } from '../../../../types/ledger-draft'
+import type { DraftDisplay } from '../use-ledger-draft'
+import { entryDisplay } from '../bookkeeping-card-view'
+import ReceiptPaper from './ReceiptPaper.vue'
+import BookkeepingIcon from './BookkeepingIcon.vue'
+
+/** 查历史只提供回执；当前页仍有草稿时才展示金额及类目。 */
 const props = defineProps<{
   result: Omit<BatchResult, 'items'> & { items: readonly BatchResult['items'][number][] }
+  display: DraftDisplay | null
   busy: boolean
   canRetry: boolean
-  /** 当前页仍保留的清单，不从历史回执恢复。 */
-  entries: readonly DraftEntry[]
-  /** 当前可选类目的显示资料。 */
-  categories: readonly DraftChoice[]
-  /** 当前成员显示资料，不包含后台身份。 */
-  members: readonly DraftChoice[]
-  /** 是否仍在本次确认流程，退出后为否。 */
-  hasDraft: boolean
-  /** 所有未知结果核对后才允许编辑未成功项。 */
   canEdit: boolean
 }>()
-/** 保存、回查和查看分别交回父级，组件不能自行重发。 */
 const emit = defineEmits<{
   query: []
   retry: []
-  open: [entryId: string]
-  edit: [itemId: string]
-  remove: [itemId: string]
+  open: [id: string]
+  edit: [id: string]
+  remove: [id: string]
 }>()
-/** 将正式状态与本页显示资料按稳定编号对应；退出后的回查不带回消费正文。 */
-const rows = computed(
-  /** 只有当前页仍有资料时才展示金额和成员，不能从回执推回失败清单。 */
-  () =>
-    props.result.items.flatMap(
-      /** 保留原执行顺序，移除未成功项后不再显示本页已经删去的草稿。 */
-      (
-        /* 正式的逐项执行状态。 */
-        item,
-        /* 原批次中稳定的显示位置。 */
-        index,
-      ) => {
-        /** 本页中与回执对应的明确项目，历史回查时为空。 */
-        const entry = props.entries.find(
-          /** 不能把另一项的金额拼到当前成功状态上。 */
-          (
-            /* 当前页中的候选显示项。 */
-            candidate,
-          ) => candidate.id === item.itemId,
-        )
-        if (props.hasDraft && !entry && item.status !== 'success') return []
-        return [
-          {
-            ...item,
-            position: index + 1,
-            entry,
-            title:
-              props.categories.find(
-                /** 只查当前页快照中的类目显示名称。 */
-                (
-                  /* 当前允许的类目选项。 */
-                  category,
-                ) => category.key === entry?.categoryKey,
-              )?.name || (entry ? '类目待确认' : '原账目'),
-            member:
-              props.members.find(
-                /** 成员短编号只作显示匹配，不作身份权限。 */
-                (
-                  /* 当前允许显示的成员。 */
-                  member,
-                ) => member.key === entry?.memberKey,
-              )?.name || '待补充成员',
-            amount: entry?.amountCents
-              ? `${entry.type === 'income' ? '+' : '−'} ¥${(entry.amountCents / 100).toFixed(2)}`
-              : '',
-          },
-        ]
-      },
-    ),
+
+/** 每种状态同时带文字和本地图标。 */
+const states = {
+  success: { label: '已记账', icon: 'check' },
+  failed: { label: '未保存', icon: 'alert' },
+  unknown: { label: '待核对', icon: 'clock' },
+  unexecuted: { label: '未执行', icon: 'dash' },
+} as const
+const unknown = computed(() => props.result.items.some((item) => item.status === 'unknown'))
+const rows = computed(() =>
+  props.result.items.flatMap((item, index) => {
+    const display = props.display
+    const entry = display?.entries.find((candidate) => candidate.id === item.itemId)
+    if (display && !entry && item.status !== 'success') return []
+    const details =
+      display && entry
+        ? entryDisplay(entry, display.categories, display.members)
+        : ({ title: `第 ${index + 1} 笔`, amount: '', icon: 'tag', tone: 'neutral' } as const)
+    return [{ ...item, ...details, entry }]
+  }),
 )
-/** 所有状态都有文字，不能只使用颜色表达。 */
-const labels = { success: '已保存', failed: '未保存', unknown: '待核对', unexecuted: '未执行' }
-/** 只统计正式成功，不把未确定状态算入成功数。 */
-const successCount = computed(
-  /**
-   * 从本页只读状态计算显示或操作条件，不在计算中调用云端。
-   */
-  () =>
-    props.result.items.filter(
-      /**
-       * 按当前类型、范围或状态保留符合条件的项，返回独立列表。
-       */
-      (
-        /**
-         * 当前集合中的单项，使用所在集合的既有范围和检查规则。
-         */
-        item,
-      ) => item.status === 'success',
-    ).length,
-)
-/** 固定原因文案，不展示云端或模型任意文本。 */
-function describe(
-  /**
-   * 程序固定的错误编号，不包含原话或第三方异常。
-   */
-  code: string | null,
-  /**
-   * 已经核对的正式状态，未知结果不能当作失败或成功。
-   */
-  status: string,
-): string {
-  if (status === 'unknown') return '暂时不能确定是否保存成功，请先核对原结果。'
-  if (code === 'LEDGER_CATEGORY_NOT_FOUND') return '当前类目不可用，请修改这笔后重新确认。'
-  if (status === 'unexecuted') return '这笔尚未执行，已保存的账目保持。'
-  return '这笔未能保存，请核对清单后手动再试。'
-}
+const summary = computed(() => {
+  const counts = { success: 0, failed: 0, unknown: 0, unexecuted: 0 }
+  for (const row of rows.value) counts[row.status]++
+  const order = ['success', 'failed', 'unknown', 'unexecuted'] as const
+  return (
+    order
+      .filter((status) => counts[status])
+      .map((status) => `${counts[status]} 笔${states[status].label}`)
+      .join(' · ') || '未保存项已移除。'
+  )
+})
 </script>
 
 <style lang="scss" scoped>
-/* 正式结果与待确认清单分开，未知结果不放直接重试按钮。 */
+/* 小票状态带文字，历史记录无原话也能逐项查看。 */
 .batch-results {
-  &__amount {
-    font-size: 36rpx;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
+  &__title,
+  &__hint,
+  &__notice {
+    display: block;
   }
-  &__actions {
-    display: flex;
-    gap: 16rpx;
-  }
-  display: flex;
-  flex-direction: column;
-  gap: 24rpx;
   &__title {
-    padding: 28rpx;
-    font-size: 40rpx;
+    font-size: 30rpx;
     font-weight: 700;
-    background: #e6f4eb;
-    border-radius: $brand-radius-card;
   }
   &__hint {
-    display: block;
-    line-height: 1.8;
+    margin-top: 8rpx;
     font-size: 24rpx;
-    color: $brand-color-text-secondary;
+    line-height: 1.5;
+    color: #536b60;
   }
-  &__card {
-    padding: 28rpx;
+  &__row {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 24rpx;
-    border: 1rpx solid $brand-color-border;
-    background: $brand-color-surface;
-    border-radius: $brand-radius-card;
+    gap: 16rpx;
+    padding: 20rpx 0;
+    border-bottom: 1rpx solid $brand-color-border;
   }
-  &__heading {
-    width: 100%;
+  &__body {
+    min-width: 0;
+    flex: 1;
+  }
+  &__line {
     display: flex;
     justify-content: space-between;
-    font-size: 28rpx;
+    align-items: flex-start;
+    gap: 8rpx;
+    font-size: 29rpx;
+    font-weight: 700;
+  }
+  &__line--status {
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 6rpx;
+  }
+  &__name {
+    overflow-wrap: anywhere;
+  }
+  &__amount {
+    flex: none;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  &__status {
+    display: flex;
+    align-items: center;
+    gap: 6rpx;
+    border-radius: 16rpx;
+    padding: 5rpx 10rpx;
+    font-size: 23rpx;
+    background: #f1f3ed;
+    color: #536b60;
+  }
+  &__status--success {
+    background: #eaf5ed;
+    color: $brand-color-action;
+  }
+  &__status--unknown,
+  &__status--failed {
+    background: #fbeddf;
+    color: #805137;
+  }
+  &__tools,
+  &__actions {
+    margin-top: 16rpx;
+  }
+  &__tools {
+    display: flex;
+    gap: 12rpx;
+  }
+  &__notice {
+    margin-bottom: 16rpx;
+    padding: 14rpx 20rpx;
+    border-radius: $brand-radius-input;
+    background: #fcf3ea;
+    color: #805137;
+    font-size: 24rpx;
   }
 }
 </style>
