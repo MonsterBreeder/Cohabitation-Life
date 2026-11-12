@@ -58,7 +58,7 @@ function isResult(value: unknown): value is InvitationResult {
   if (result.status === 'INVITE_PREVIEW') return typeof result.household?.name === 'string' && typeof result.household?.memberCount === 'number' && typeof result.inviter?.nickname === 'string' && isPreviewAvatar(result.inviter?.avatar)
   if (result.status === 'TRANSFER_CONFIRM') return true
   if (result.status === 'HOME') return typeof result.household?.name === 'string' && Array.isArray(result.household?.members)
-  return ['INVITE_INVALID', 'INVITE_EXPIRED', 'INVITE_USED', 'HOME_FULL', 'ALREADY_IN_HOME', 'FORBIDDEN', 'NO_OTHER_MEMBER', 'NO_HOME', 'MULTIPLE_HOUSEHOLDS', 'INVALID_REQUEST', 'CONTENT_REJECTED', 'TEMPORARY_FAILURE'].includes(result.status)
+  return ['INVITE_DISABLED', 'INVITE_INVALID', 'INVITE_EXPIRED', 'INVITE_USED', 'HOME_FULL', 'ALREADY_IN_HOME', 'FORBIDDEN', 'NO_OTHER_MEMBER', 'NO_HOME', 'MULTIPLE_HOUSEHOLDS', 'INVALID_REQUEST', 'CONTENT_REJECTED', 'TEMPORARY_FAILURE'].includes(result.status)
 }
 
 /** 兼容手机仍连接旧版云端时缺少邀请对象昵称的返回，避免新页面把有效邀请误判成失败。 */

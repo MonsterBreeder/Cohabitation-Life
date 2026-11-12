@@ -41,7 +41,7 @@
         :members="household.members"
         :member-avatar-urls="memberAvatarUrls"
         :member-avatar-loading="memberAvatarLoading"
-        :can-invite="household.currentMemberRole === 'owner'"
+        :can-invite="householdStore.canInviteMember"
         @edit="openHouseholdEditor"
         @invite="openMemberManagement"
       />
@@ -108,7 +108,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
-import { onShareAppMessage, onShareTimeline, onShow } from '@dcloudio/uni-app'
+import { onShow } from '@dcloudio/uni-app'
 import MonthlyExpenseCard from '../../components/home/MonthlyExpenseCard.vue'
 import WarmEmptyState from '../../components/WarmEmptyState.vue'
 import HomeFootprintCard from './components/HomeFootprintCard.vue'
@@ -123,8 +123,6 @@ import { useLedgerStore } from '../../store/modules/ledger'
 import { useFootprintStore } from '../../store/modules/footprint'
 import { formatLedgerMonth } from '../../utils/format'
 import {
-  createHomeShareMessage,
-  createHomeTimelineShare,
   isCurrentMemberAvatarRequest,
   resolveHomeLoadDestination,
 } from './home-view'
@@ -246,9 +244,9 @@ function openHouseholdEditor(): void {
   uni.navigateTo({ url: '/subpackages/household/edit-household/index' })
 }
 
-/** 只有家庭创建者能从封面进入邀请管理，权限仍由云端在后续操作中再次确认。 */
+/** 确认云端已开放邀请后，单人家庭创建者才可从封面进入。 */
 function openMemberManagement(): void {
-  if (household.value?.currentMemberRole !== 'owner') return
+  if (!householdStore.canInviteMember) return
   uni.navigateTo({ url: '/subpackages/household/member-management/index' })
 }
 
@@ -339,9 +337,7 @@ onShow(() => {
   void loadHome()
 })
 
-// 注册两个微信页面级分享入口；缺少对应生命周期时，右上角菜单会显示为不可用。
-onShareAppMessage(() => createHomeShareMessage())
-onShareTimeline(() => createHomeTimelineShare())
+// 首页不注册微信分享生命周期，好友转发与朋友圈分享均保持关闭。
 </script>
 
 <style lang="scss" scoped>

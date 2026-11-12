@@ -51,11 +51,15 @@
           :editable="member.isSelf"
           @press="openProfileEditor"
         />
-        <button v-if="household.currentMemberRole === 'owner'" class="profile-action" @click="openMemberManagement">
+        <button
+          v-if="householdStore.canInviteMember || (household.currentMemberRole === 'owner' && household.memberCount === 2)"
+          class="profile-action"
+          @click="openMemberManagement"
+        >
           <view class="profile-action__icon"><wd-icon name="user-add" size="36rpx" color="#267a5a" /></view>
           <view class="profile-action__content">
             <text class="profile-action__title">{{ household.memberCount === 1 ? '邀请成员' : '管理成员' }}</text>
-            <text class="profile-action__copy">{{ household.memberCount === 1 ? '邀请另一位成员一起使用这个家' : '查看成员和管理邀请' }}</text>
+            <text class="profile-action__copy">{{ household.memberCount === 1 ? '邀请另一位成员一起使用这个家' : '查看或移除家庭成员' }}</text>
           </view>
           <wd-icon name="arrow-right" size="32rpx" color="#74847d" />
         </button>
