@@ -36,6 +36,14 @@ export const useHouseholdStore = defineStore('household', {
   }),
   getters: {
     canCreate: (state) => state.phase === 'editable' || state.phase === 'failed',
+    // 页面刷新期间隐藏旧入口，等当前家庭资料和云端配置一并确认。
+    optionalEntriesEnabled: (state) =>
+      state.phase === 'loaded' && state.household?.invitationEnabled === true,
+    canInviteMember(): boolean {
+      return this.optionalEntriesEnabled
+        && this.household?.currentMemberRole === 'owner'
+        && this.household.memberCount === 1
+    },
   },
   actions: {
     applyHome(result: Extract<HouseholdResult, { status: 'HOME' }>) {

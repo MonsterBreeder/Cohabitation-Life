@@ -39,6 +39,17 @@ async function getDocument(collection, id) {
   }
 }
 
+// 邀请和一句话记多笔共用这个开关。配置故障独立处理，避免影响家庭资料。
+async function readOptionalEntriesEnabled() {
+  try {
+    const settings = await getDocument(db.collection('appSettings'), 'family-invitations')
+    return settings?.enabled === true
+  } catch (error) {
+    console.warn('读取邀请和记账入口配置失败', { code: error?.errCode })
+    return false
+  }
+}
+
 function createRepository() {
   const avatarCollection = db.collection('avatarMedia')
   const avatarMedia = {
@@ -207,10 +218,21 @@ exports.main = async (event) => {
     if (event && event.action === 'getAvatarUrl') return await getAvatarUrl(event, media)
     if (event && event.action === 'releaseAvatarSlots') return await releaseSlots(event, media)
     // 首页查询不接收家庭编号，只按微信云端确认的当前身份查找归属。
-    if (event && event.action === 'get') return await getCurrentHousehold(dependencies)
+    if (event && event.action === 'get') {
+      const result = await getCurrentHousehold(dependencies)
+      // 两位成员也需要知道记账入口是否开放，家庭归属仍由上面的查询确认。
+      if (result.status === 'HOME') {
+        result.household.invitationEnabled = await readOptionalEntriesEnabled()
+      }
+      return result
+    }
     if (event && event.action === 'updateHousehold') return await updateHousehold(event, dependencies)
     if (event && event.action === 'updateProfile') return await updateProfile(event, dependencies)
-    if (event && event.action === 'createInvite') return await createInvitation(event, dependencies)
+    if (event && event.action === 'createInvite') {
+      // 每次创建都检查当前配置，旧页面或旧版本也不能在关闭后生成新邀请。
+      if (!await readOptionalEntriesEnabled()) return { status: 'INVITE_DISABLED', retryable: false }
+      return await createInvitation(event, dependencies)
+    }
     if (event && event.action === 'previewInvite') return await previewInvitation(event, dependencies)
     if (event && event.action === 'joinInvite') return await joinInvitation(event, dependencies)
     if (event && event.action === 'removeOtherMember') return await removeOtherMember(event, dependencies)

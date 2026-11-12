@@ -243,7 +243,9 @@ try {
   cloud = createDraftCloud(householdId, fallback)
   pageError.value = '请在微信中使用一句话记账，或返回手动记账。'
 }
+// 旧页面地址也遵守入口开关，关闭时直接提供返回手动记账的操作。
 if (!householdId) pageError.value = '需要先有家，才能使用一句话记账。'
+else if (!household.optionalEntriesEnabled) pageError.value = '一句话记账暂未开放。'
 const flow = useLedgerDraft(cloud)
 const { state, busy, canCompose, canConfirm, canRetry, complete, successful, hasUnknown } = flow
 const editing = computed(
@@ -361,7 +363,11 @@ function endBatch() {
 }
 
 function back() {
-  uni.navigateBack()
+  const pages = getCurrentPages()
+  const manualPage = 'subpackages/ledger/ledger-add/index'
+  // 之前在手动表单时返回原页保留草稿，其他入口直接打开手动记账。
+  if (pages[pages.length - 2]?.route === manualPage) uni.navigateBack()
+  else uni.redirectTo({ url: `/${manualPage}` })
 }
 
 onLoad(() => {

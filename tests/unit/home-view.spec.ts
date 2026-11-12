@@ -1,8 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import {
-  createHomeShareMessage,
-  createHomeTimelineShare,
   householdAvatarSource,
   profileAvatarSource,
   isCurrentMemberAvatarRequest,
@@ -26,22 +24,10 @@ describe('home view rules', () => {
     expect(profileAvatarSource('person-neutral')).toBe('/static/avatars/people/person-01.png')
   })
 
-  // 保护首页微信分享：好友与朋友圈使用公开品牌文案，不携带任何家庭私密数据。
-  it('builds privacy-safe home share content for friends and timeline', () => {
-    expect(createHomeShareMessage()).toEqual({
-      title: '睦录｜把共同生活认真记下来',
-      path: '/pages/index/index',
-    })
-    expect(createHomeTimelineShare()).toEqual({
-      title: '睦录｜把共同生活认真记下来',
-      query: '',
-    })
-  })
-
-  // 保护页面必须真正注册两个微信分享入口，避免只有文案函数却仍然显示菜单置灰。
-  it('registers friend and timeline share hooks on the home page', () => {
-    expect(homePageSource).toContain('onShareAppMessage(() => createHomeShareMessage())')
-    expect(homePageSource).toContain('onShareTimeline(() => createHomeTimelineShare())')
+  // 首页关闭好友转发和朋友圈分享，家庭邀请在独立页面操作。
+  it('不注册首页的微信转发和朋友圈分享', () => {
+    expect(homePageSource).not.toMatch(/onShareAppMessage|onShareTimeline|showShareMenu/)
+    expect(homePageSource).not.toContain('open-type="share"')
   })
 
   it('只接受当前家庭当前批次的成员头像结果', () => {

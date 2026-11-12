@@ -18,7 +18,7 @@ function registerPageChecks() {
       const app = getApp()
       const pinia = app.$vm.$pinia
       const homeStore = pinia._s.get('household')
-      const oldHome = homeStore ? homeStore.household : pinia.state.value.household
+      const oldHome = homeStore ? { ...homeStore.$state } : pinia.state.value.household
       const existingCloud = wx.cloud
       const cloud = existingCloud || {}
       if (!existingCloud) wx.cloud = cloud
@@ -26,8 +26,14 @@ function registerPageChecks() {
       const original = cloud.callFunction
       const init = cloud.init
       const id = 'chat-check-home'
-      const home = { id, name: '虚构测试家庭', memberCount: 1, members: [] }
+      const profile = { nickname: '测试用户', avatar: { kind: 'builtin', id: 'person-neutral' } }
+      const home = {
+        id, name: '虚构测试家庭', memberCount: 1, currentMemberRole: 'owner',
+        avatar: { kind: 'builtin', id: 'household-01' },
+        members: [{ ...profile, isSelf: true }],
+      }
       const fixture = {
+        enabled: false,
         requests: [],
         writes: 0,
         draftId: '',
@@ -54,6 +60,11 @@ function registerPageChecks() {
       })
       const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
       const controlled = async ({ name, data }) => {
+        // 新建账目页会重新读取家庭和数据库开关，测试中使用受控结果。
+        if (name === 'household' && data.action === 'get') {
+          return { result: { status: 'HOME', retryable: false, created: false, profile,
+            household: { ...home, invitationEnabled: fixture.enabled } } }
+        }
         if (name === 'ledger' && data.action === 'initCategories')
           return { result: { status: 'INITED', categories: [] } }
         if (name !== 'ledgerBookkeeping') throw new Error('检查禁止真实云动作')
@@ -160,7 +171,10 @@ function registerPageChecks() {
           cloud.init = init
           if (!existingCloud) delete wx.cloud
           const current = pinia._s.get('household')
-          if (current) current.household = homeStore ? oldHome : oldHome?.household
+          if (current) {
+            if (oldHome) current.$patch(oldHome)
+            else current.$reset()
+          }
           else if (oldHome) pinia.state.value.household = oldHome
           else delete pinia.state.value.household
           delete app.__bookkeepingChatFixture
@@ -227,24 +241,51 @@ function registerPageChecks() {
   async function typeAndSend(page, text) {
     const input = await waitFor(page, 'textarea')
     await input.input(text)
-    await (await waitFor(page, '[data-testid="smart-draft-send"]')).tap()
+    await tapButton(await waitFor(page, '[data-testid="smart-draft-send"]'))
+  }
+
+  /** 组件外层承载定位标记，真正响应触摸的是内部原生按钮。 */
+  async function tapButton(element) {
+    const button = await element.$('button')
+    await (button || element).tap()
+  }
+
+  /** 关闭时仍能进入手动表单，从旧地址也不会初始化一句话记账。 */
+  async function verifyClosedEntry() {
+    const manual = await program.navigateTo('/subpackages/ledger/ledger-add/index')
+    await waitFor(manual, '[data-testid="ledger-add-form"]')
+    expect(await find(manual, '[data-testid="ledger-add-smart"]')).toBeNull()
+    const smart = await program.navigateTo('/subpackages/ledger/ledger-smart-add/index')
+    const message = await waitFor(smart, '.ledger-smart-add__initial')
+    expect(await message.text()).toContain('一句话记账暂未开放')
+    expect((await report()).requests).toEqual([])
+    await program.navigateBack()
+    await program.navigateBack()
   }
 
   /** 从手动入口打开，补问、纠正并用实际按钮查回与补存。 */
   async function verifyConversation() {
+    await program.evaluate(() => { getApp().__bookkeepingChatFixture.fixture.enabled = true })
     const manual = await program.navigateTo('/subpackages/ledger/ledger-add/index')
     expect(manual.path).toContain('ledger-add')
     await screenshot('00-manual')
     const entrance = await waitFor(manual, '[data-testid="ledger-add-smart"]')
-    await entrance.tap()
-    const page = await program.currentPage()
+    // Wot UI 把点击事件绑定在单元格内部，触发后等待微信完成页面跳转。
+    const cell = await entrance.$('.wd-cell')
+    await (cell || entrance).tap()
+    let page = await program.currentPage()
+    const deadline = Date.now() + 5000
+    while (!page.path.includes('ledger-smart-add') && Date.now() < deadline) {
+      await manual.waitFor(100)
+      page = await program.currentPage()
+    }
     expect(page.path).toContain('ledger-smart-add')
     await waitFor(page, '[data-testid="smart-draft-initial"]')
     await screenshot('01-initial')
     await waitFor(page, 'textarea')
     await typeAndSend(page, '昨天午饭 50 元，打车 28 元')
     expect((await report()).requests).not.toContain('understandDraft')
-    await (await waitFor(page, '[data-testid="smart-draft-consent-accept"]')).tap()
+    await tapButton(await waitFor(page, '[data-testid="smart-draft-consent-accept"]'))
     await waitFor(page, '[data-testid="smart-draft-progress"]')
     await screenshot('02-understanding')
     await page.waitFor(1500)
@@ -259,11 +300,11 @@ function registerPageChecks() {
     expect(activeRows.length).toBeGreaterThan(5)
     expect((await report()).writes).toBe(0)
     await screenshot('03-correction')
-    await confirm.tap()
+    await tapButton(confirm)
     await waitFor(page, '[data-testid="smart-batch-query"]')
     await screenshot('04-pending')
-    await (await waitFor(page, '[data-testid="smart-batch-query"]')).tap()
-    await (await waitFor(page, '[data-testid="smart-batch-retry"]')).tap()
+    await tapButton(await waitFor(page, '[data-testid="smart-batch-query"]'))
+    await tapButton(await waitFor(page, '[data-testid="smart-batch-retry"]'))
     await page.waitFor(1400)
     expect((await report()).writes).toBe(2)
     expect((await report()).statuses).toEqual(['success', 'success'])
@@ -277,6 +318,7 @@ function registerPageChecks() {
 
   beforeAll(connect, 25000)
   afterAll(disconnect, 25000)
+  test('关闭开关后保留手动表单，并拦住旧的一句话记账地址', verifyClosedEntry, 30000)
   test('实际记账入口可在聊天中补问、纠正、保存及核对', verifyConversation, 65000)
 }
 
