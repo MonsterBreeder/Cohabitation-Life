@@ -21,10 +21,6 @@ export function canRemoveOtherMember(household?: HouseholdSummary): boolean {
   return household?.currentMemberRole === 'owner' && household.memberCount === 2
 }
 
-export function canInvite(household?: HouseholdSummary): boolean {
-  return household?.currentMemberRole === 'owner' && household.memberCount === 1
-}
-
 export type InvitationPanelState = 'ready' | 'preparing' | 'failed' | 'idle'
 
 /** 页面状态必须以真实请求状态为准，不能把“没有邀请”一律显示成“正在准备”。 */

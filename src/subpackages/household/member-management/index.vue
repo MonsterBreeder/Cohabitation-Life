@@ -3,7 +3,7 @@
     <view class="management-card">
       <text class="management-card__eyebrow">家庭成员</text>
       <text class="management-card__title">{{ household?.name || '我的家庭' }}</text>
-      <text class="management-card__description">{{ household?.memberCount === 1 ? '现在只有你一人，可以邀请另一位成员。' : '你们正在共同使用这个家。' }}</text>
+      <text class="management-card__description">{{ memberDescription }}</text>
 
       <view v-if="canInviteHousehold" class="management-card__actions">
         <view class="invitee-field">
@@ -61,17 +61,23 @@
 </template>
 
 <script setup lang="ts">
-import { onShareAppMessage, onShow } from '@dcloudio/uni-app'
+import { onLoad, onShareAppMessage, onShow } from '@dcloudio/uni-app'
 import { computed, shallowRef } from 'vue'
 import { useHouseholdStore } from '../../../store/modules/household'
 import { useInvitationStore } from '../../../store/modules/invitation'
-import { canInvite, canRemoveOtherMember, invitationNameFromInput, invitationNameValidation, invitationPanelState } from './member-management-view'
+import { canRemoveOtherMember, invitationNameFromInput, invitationNameValidation, invitationPanelState } from './member-management-view'
 
 const householdStore = useHouseholdStore()
 const invitation = useInvitationStore()
 const household = computed(() => householdStore.household)
-const canInviteHousehold = computed(() => canInvite(household.value))
+const canInviteHousehold = computed(() => householdStore.canInviteMember)
 const canRemoveHousehold = computed(() => canRemoveOtherMember(household.value))
+// 两人家庭仍显示成员管理，单人家庭只在开放时提示可以邀请。
+const memberDescription = computed(() => {
+  if (household.value?.memberCount === 2) return '你们正在共同使用这个家。'
+  if (canInviteHousehold.value) return '现在只有你一人，可以邀请另一位成员。'
+  return household.value ? '这个家目前有一位成员。' : ''
+})
 const isBusy = computed(() => invitation.isBusy)
 const pendingInvite = computed(() => invitation.pending)
 const errorMessage = computed(() => invitation.errorMessage)
@@ -100,7 +106,7 @@ function clearInviteeName(): void {
 }
 
 async function prepareInvite(): Promise<void> {
-  if (isBusy.value || pendingInvite.value) return
+  if (!canInviteHousehold.value || isBusy.value || pendingInvite.value) return
   const validation = invitationNameValidation(inviteeName.value)
   if (!validation.valid) {
     invitation.errorMessage = inviteeName.value ? '请输入不超过 12 个字的称呼' : '请先填写想邀请的人'
@@ -109,8 +115,11 @@ async function prepareInvite(): Promise<void> {
   const name = validation.value
   const result = await invitation.create(name)
   if (result?.status === 'INVITE_READY') invitation.renamePending(name)
-  if (result?.status === 'CONTENT_REJECTED') invitation.errorMessage = '暂时无法准备邀请，请稍后重试'
-  else if (result?.status !== 'INVITE_READY') invitation.errorMessage = '暂时无法准备邀请，请稍后重试'
+  else if (result?.status === 'INVITE_DISABLED') {
+    // 如果用户停留在页面时开关关闭，收到云端反馈后立即刷新入口。
+    uni.showToast({ title: '邀请暂未开放', icon: 'none' })
+    await load()
+  } else invitation.errorMessage = '暂时无法准备邀请，请稍后重试'
 }
 
 async function confirmRemove(): Promise<void> {
@@ -119,23 +128,31 @@ async function confirmRemove(): Promise<void> {
   const second = await uni.showModal({ title: '再次确认', content: '确定要移除另一位成员吗？', confirmText: '确定移除', confirmColor: '#d66b55' })
   if (!second.confirm) return
   const result = await invitation.removeOther()
-  if (result?.status !== 'HOME') invitation.errorMessage = '暂时无法移除成员，请稍后重试'
+  if (result?.status === 'HOME') await load()
+  else invitation.errorMessage = '暂时无法移除成员，请稍后重试'
 }
 
-/** 页面只负责恢复家庭资料；邀请由用户明确点击后准备，避免页面进入阶段被自动请求卡住。 */
+/** 每次显示都重新确认家庭和邀请开关；邀请仍需用户主动准备。 */
 async function load(): Promise<void> {
-  if (!household.value) await householdStore.loadCurrent()
+  await householdStore.loadCurrent({ preserveExisting: true })
   if (pendingInvite.value?.inviteeName && pendingInvite.value.inviteeName !== '家人') inviteeName.value = pendingInvite.value.inviteeName
 }
 
+onLoad(() => {
+  // #ifdef MP-WEIXIN
+  // 只用页面按钮发送邀请，避免右上角菜单成为另一处入口。
+  wx.hideShareMenu({})
+  // #endif
+})
 onShow(() => { void load() })
 
-onShareAppMessage(() => {
+onShareAppMessage(({ from }) => {
   const inviteToken = pendingInvite.value?.inviteToken
+  if (from !== 'button' || !canInviteHousehold.value || !inviteToken) return {}
   return {
     // 邀请对象昵称只在创建者本机展示，分享给对方的内容不携带该本地称呼。
     title: '邀请你一起使用这个家',
-    path: inviteToken ? `/pages/login/index?inviteToken=${inviteToken}` : '/pages/login/index',
+    path: `/pages/login/index?inviteToken=${inviteToken}`,
     success: () => invitation.markShared(),
   }
 })

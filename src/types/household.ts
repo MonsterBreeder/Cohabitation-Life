@@ -18,6 +18,8 @@ export interface HouseholdSummary {
   memberCount: number
   currentMemberRole: 'owner' | 'member'
   members: HouseholdMemberDisplay[]
+  /** 云端返回的邀请和一句话记多笔开关；旧版云端缺少该字段时隐藏两个入口。 */
+  invitationEnabled?: boolean
 }
 
 /** 成员编号只保留在云端；首页仅凭这些资料显示“我”和另一位成员。 */

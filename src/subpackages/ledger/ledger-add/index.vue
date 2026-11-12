@@ -12,8 +12,8 @@
 -->
 <template>
   <view class="ledger-add-page">
-    <!-- 新入口仅用于新建账目；导航保留原手动页面实例和草稿。 -->
-    <view v-if="!isEditMode" class="ledger-add-page__smart-entry">
+    <!-- 入口仅在新建账目且开关开启时显示；手动表单独立使用。 -->
+    <view v-if="showSmartAdd" class="ledger-add-page__smart-entry">
       <wd-cell
         title="一句话记多笔"
         label="发消息记收支，核对后确认"
@@ -258,7 +258,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import AmountInput from './components/AmountInput.vue'
 import CategoryPicker from './components/CategoryPicker.vue'
 import MealPeriodPicker from './components/MealPeriodPicker.vue'
@@ -350,9 +350,10 @@ const errors = computed(() => {
 const saveState = computed(() => describeSaveButton(errors.value, isSaving.value, isEditMode.value))
 
 const isEditMode = ref(false)
+const showSmartAdd = computed(() => !isEditMode.value && householdStore.optionalEntriesEnabled)
 /** 进入账本分包内的独立整理页，原手动输入不清空。 */
 function openSmartAdd(): void {
-  if (isBusy.value || isEditMode.value) return
+  if (isBusy.value || !showSmartAdd.value) return
   uni.navigateTo({ url: '/subpackages/ledger/ledger-smart-add/index' })
 }
 const editingEntryId = ref<string | null>(null)
@@ -367,10 +368,11 @@ onLoad((options: any) => {
   } else {
     isReady.value = true
   }
-  // 设置 context（云端会从 identityKey 解析 selfMemberKey）
-  if (householdId.value) ledgerStore.setHouseholdContext(householdId.value, '')
-  // 确保类目已加载
-  if (categories.value.length === 0) void ledgerStore.loadCategories()
+})
+
+onShow(() => {
+  // 重新进入新建页时刷新开关，保留已加载家庭资料和手动账目草稿。
+  if (!isEditMode.value) void householdStore.loadCurrent({ preserveExisting: true })
 })
 
 async function loadForEdit(entryId: string): Promise<void> {
@@ -553,8 +555,12 @@ async function onSave(): Promise<void> {
 watch(
   () => householdId.value,
   (id) => {
-    if (id) ledgerStore.setHouseholdContext(id, '')
+    if (!id) return
+    // 直接打开手动页时，等家庭资料返回再加载类目，表单仍可正常使用。
+    ledgerStore.setHouseholdContext(id, '')
+    if (categories.value.length === 0) void ledgerStore.loadCategories()
   },
+  { immediate: true },
 )
 </script>
 

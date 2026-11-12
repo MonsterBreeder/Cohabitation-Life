@@ -24,6 +24,7 @@ export interface PreviewProfile {
 export type InvitationStatus =
   | 'INVITE_READY'
   | 'INVITE_PREVIEW'
+  | 'INVITE_DISABLED' // 云端暂停发出新邀请
   | 'TRANSFER_CONFIRM'
   | 'INVITE_INVALID'
   | 'INVITE_EXPIRED'
