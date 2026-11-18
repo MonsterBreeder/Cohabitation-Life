@@ -159,6 +159,16 @@ suite('睦录统一聊天', () => {
     expect(installed).toBe(true)
   }, 20_000)
 
+  // 每个场景从空记录开始，避免上一个页面的状态查询混入本次断言。
+  beforeEach(async () => {
+    await program.evaluate(() => {
+      const fixture = getApp().__lifeChatFixture
+      fixture.actions.length = 0
+      fixture.calls.length = 0
+      fixture.writes = 0
+    })
+  })
+
   // 恢复当前模拟器的方法与内存状态，退出聊天会撤回页面状态。
   afterAll(async () => {
     if (!program) return
@@ -225,6 +235,37 @@ suite('睦录统一聊天', () => {
     }))
   }
 
+  test('开场例句在微信端完整显示，点按只填入输入框', async () => {
+    const page = await program.navigateTo('/subpackages/ledger/life-chat/index?scope=all')
+    try {
+      const panel = await wait(page, '.life-chat-welcome__examples')
+      const row = await wait(page, '.life-chat-welcome__row')
+      const heading = await wait(page, '.life-chat-welcome__example-title')
+      const example = await wait(page, '.life-chat-welcome__example-text')
+      const [panelSize, rowSize, headingSize, exampleSize, headingOffset, exampleOffset] =
+        await Promise.all([
+          panel.size(),
+          row.size(),
+          heading.size(),
+          example.size(),
+          heading.offset(),
+          example.offset(),
+        ])
+      // 原发布版按钮只有一行的高度，三行容器盖不住实际内容。
+      if (process.env.MULU_LIFE_CHAT_WELCOME_SCREENSHOT)
+        await program.screenshot({ path: process.env.MULU_LIFE_CHAT_WELCOME_SCREENSHOT })
+      expect(panelSize.height + 2).toBeGreaterThanOrEqual(rowSize.height * 3)
+      expect(exampleOffset.top + 1).toBeGreaterThanOrEqual(headingOffset.top + headingSize.height)
+      expect(exampleSize.height).toBeGreaterThan(0)
+      const before = await state()
+      await row.tap()
+      expect(await (await wait(page, 'textarea')).property('value')).toBe('本月餐饮花了多少')
+      expect(await state()).toEqual(before)
+    } finally {
+      await program.navigateBack()
+    }
+  }, 30_000)
+
   test('从真实聊天输入，打开同意卡，查账修改并查回原保存结果', async () => {
     const page = await program.navigateTo('/subpackages/ledger/life-chat/index?scope=all')
     await ask(page, '查一下昨天的打车账')
@@ -251,8 +292,8 @@ suite('睦录统一聊天', () => {
   test('逐一点击三个栏目入口，打开对应聊天并返回原页', async () => {
     await program.navigateTo('/pages/index/index')
     const entries = [
-      ['/pages/index/index', 'task-life-chat', 'task', '把想记的事告诉我。'],
-      ['/pages/ledger/index', 'ledger-home-ai-entry', 'ledger', '可以查账、记账'],
+      ['/pages/index/index', 'task-life-chat', 'task', '记下一件小事'],
+      ['/pages/ledger/index', 'ledger-home-ai-entry', 'ledger', '聊聊家里的账'],
       ['/pages/footprint/index', 'footprint-life-chat', 'footprint', '最近去了哪里？'],
     ]
     for (const [path, button, scope, introduction] of entries) {
@@ -261,7 +302,7 @@ suite('睦录统一聊天', () => {
       await tap(original, button)
       const chat = await waitForPath('subpackages/ledger/life-chat/index')
       expect(chat.query.scope).toBe(scope)
-      expect(await (await wait(chat, '.life-chat__bubble')).text()).toContain(introduction)
+      expect(await (await wait(chat, '.life-chat-welcome__title')).text()).toBe(introduction)
       await program.navigateBack()
       await waitForPath(original.path)
       if (path !== '/pages/index/index') await program.navigateBack()
