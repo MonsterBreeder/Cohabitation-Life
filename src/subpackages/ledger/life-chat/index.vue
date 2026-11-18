@@ -25,33 +25,8 @@
     <template v-else>
       <scroll-view class="life-chat__scroll" scroll-y :scroll-into-view="anchor" @scroll="trackScroll">
         <view class="life-chat__timeline">
-          <!-- 开场和逐条回复沿用原记账对话，示例收进气泡，避免开场变成按钮列表。 -->
-          <view class="life-chat__message">
-            <view class="life-chat__sender">
-              <image class="life-chat__logo" src="/static/brand/logo.png" mode="aspectFit" />
-              <text>睦录</text>
-            </view>
-            <view class="life-chat__bubble life-chat__bubble--assistant">
-              <text>{{ introduction }}</text>
-              <view class="life-chat__examples">
-                <text class="life-chat__example-label">比如，你可以说</text>
-                <wd-button
-                  v-for="example in examples"
-                  :key="example"
-                  variant="text"
-                  size="small"
-                  custom-class="life-chat__example-button"
-                  :disabled="busy || !!ledger"
-                  @click="text = example"
-                >
-                  <view class="life-chat__example-content">
-                    <text>{{ example }}</text>
-                    <wd-icon name="arrow-right" size="24rpx" />
-                  </view>
-                </wd-button>
-              </view>
-            </view>
-          </view>
+          <!-- 开场例句只回填原输入栏，发送仍走聊天原有流程。 -->
+          <LifeChatWelcome :scope="scope" :disabled="composerDisabled || !!ledger" @choose="text = $event" />
           <view v-for="item in messages" :key="item.id" class="life-chat__message">
             <view v-if="item.text" class="life-chat__bubble life-chat__bubble--mine">{{ item.text }}</view>
             <template v-else-if="item.result">
@@ -257,6 +232,7 @@ import DraftEntryList from '../ledger-smart-add/components/DraftEntryList.vue'
 import BatchResults from '../ledger-smart-add/components/BatchResults.vue'
 import { resultNotice, useLifeChat } from './use-life-chat'
 import LifeChatCard from './components/LifeChatCard.vue'
+import LifeChatWelcome from './components/LifeChatWelcome.vue'
 
 // 使用进入页面时的家庭状态，观察切换并撤回原对话。
 const household = useHouseholdStore()
@@ -293,20 +269,6 @@ let disposed = false
 let paging = false
 const selectingPlace = shallowRef(false)
 
-const introductions: Record<LifeChatScope, string> = {
-  all: '想查账，还是记点什么？',
-  ledger: '可以查账、记账，也可以修改自己记的账。',
-  task: '把想记的事告诉我。也可以修改或删除已有事项。',
-  footprint: '最近去了哪里？也可以修改或删除已有足迹。',
-}
-const sampleText: Record<LifeChatScope, string[]> = {
-  all: ['本月餐饮花了多少', '记一下周五交电费', '记一下昨天去了西湖'],
-  ledger: ['本月餐饮花了多少', '昨天我午饭花了 50 元'],
-  task: ['记一下周五交电费'],
-  footprint: ['记一下昨天去了西湖'],
-}
-const introduction = computed(() => introductions[scope.value])
-const examples = computed(() => sampleText[scope.value])
 const editing = computed(
   () =>
     ledgerState.value?.view?.draft.entries.find(
@@ -603,40 +565,6 @@ watch(
     align-self: flex-end;
     background: #e2f1e8;
     border-color: transparent;
-  }
-  // 示例保留原气泡里的次要文字层级，点击仍只填入，不触发发送。
-  &__examples {
-    display: flex;
-    flex-direction: column;
-    margin-top: 14rpx;
-    padding-top: 14rpx;
-    border-top: 1rpx solid $brand-color-border;
-  }
-  &__example-label {
-    color: #536b60;
-    font-size: 24rpx;
-  }
-  :deep(.life-chat__example-button) {
-    display: block;
-    height: auto;
-    min-height: 72rpx;
-    padding: 12rpx 0;
-    font-size: 24rpx;
-    font-weight: 400;
-    line-height: 1.55;
-    white-space: normal;
-    text-align: left;
-    border-radius: 8rpx;
-    &:focus-visible {
-      outline: 2rpx solid $brand-color-action;
-      outline-offset: 4rpx;
-    }
-  }
-  &__example-content {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16rpx;
   }
   &__progress {
     display: flex;
