@@ -28,14 +28,27 @@
       >
         <!-- Wot UI 开放的触发器插槽用于承载品牌按钮，避免根节点样式隔离把主题绿还原成默认蓝。 -->
         <template #trigger="{ disabled }">
-          <view
-            class="global-quick-add__trigger"
-            :class="{ 'global-quick-add__trigger--disabled': disabled }"
-            role="button"
-            :aria-label="active ? '关闭快速新增' : '打开快速新增'"
-            @click.stop="toggleMenu"
-          >
-            <wd-icon :name="active ? 'close' : 'plus'" size="44rpx" color="#ffffff" />
+          <view class="global-quick-add__stack">
+            <!-- 两个按钮同用原加号定位，展开手动菜单时聊天让出这列。 -->
+            <view
+              v-if="lifeChatEnabled && !active"
+              class="global-quick-add__chat"
+              role="button"
+              aria-label="打开睦录助手"
+              data-testid="global-life-chat"
+              @click.stop="openLifeChat"
+            >
+              <wd-icon name="message" size="44rpx" color="#267A5A" />
+            </view>
+            <view
+              class="global-quick-add__trigger"
+              :class="{ 'global-quick-add__trigger--disabled': disabled }"
+              role="button"
+              :aria-label="active ? '关闭快速新增' : '打开快速新增'"
+              @click.stop="toggleMenu"
+            >
+              <wd-icon :name="active ? 'close' : 'plus'" size="44rpx" color="#ffffff" />
+            </view>
           </view>
         </template>
 
@@ -63,6 +76,10 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, shallowRef, watch } from 'vue'
+import { lifeChatEnabled, lifeChatUrl } from '../utils/life-chat-entry'
+// #ifdef H5
+import { lifeChatPresented } from '../utils/life-chat-entry'
+// #endif
 import {
   QUICK_ADD_ACTIONS,
   navigateToQuickAdd,
@@ -84,7 +101,12 @@ const props = withDefaults(defineProps<Props>(), {
 // 展开与跳转锁只属于当前页面实例，不进入全局状态，返回页面后可继续正常使用。
 const active = shallowRef(false)
 const navigating = shallowRef(false)
-const canRender = computed(() => props.visible && !props.blocked)
+const canRender = computed(() => {
+  // #ifdef H5
+  if (lifeChatPresented.value) return false
+  // #endif
+  return props.visible && !props.blocked
+})
 const fabGap = computed(() => ({ right: 32, bottom: props.withTabBar ? 104 : 24 }))
 
 // 尺寸、间距和主题色直接交给 Wot UI 按钮根元素，避免微信样式隔离导致按钮再次相贴或变回默认色。
@@ -111,6 +133,21 @@ function toggleMenu(): void {
   active.value = !active.value
 }
 
+/** 两个浮动入口复用同一跳转锁，连点也只会打开一个页面。 */
+function openLifeChat(): void {
+  if (!canRender.value || active.value || navigating.value) return
+  navigating.value = true
+  uni.navigateTo({
+    url: lifeChatUrl('all'),
+    fail: () => {
+      uni.showToast({ title: '暂时无法打开睦录助手', icon: 'none' })
+    },
+    complete: () => {
+      navigating.value = false
+    },
+  })
+}
+
 /** 第一次点击结束前锁住其他动作，避免同时打开多个填写页。 */
 async function handleAction(action: QuickAddAction): Promise<void> {
   if (navigating.value) return
@@ -131,6 +168,25 @@ onBeforeUnmount(() => {
 
 <style lang="scss" scoped>
 .global-quick-add {
+  &__stack {
+    position: relative;
+  }
+  // 同列两个 100rpx 点按区之间留 20rpx，定位基准与原加号一致。
+  &__chat {
+    position: absolute;
+    right: 0;
+    bottom: 120rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100rpx;
+    height: 100rpx;
+    box-sizing: border-box;
+    border: 2rpx solid #b5d8c3;
+    border-radius: 50%;
+    background: $brand-color-surface;
+    box-shadow: 0 8rpx 20rpx rgba($brand-color-action, 0.15);
+  }
   // 主触区稍作放大以便单手点击，仍由 Wot UI 定位，展开后的选项保持紧凑尺寸。
   &__trigger {
     display: flex;

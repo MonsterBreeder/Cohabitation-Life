@@ -3,7 +3,7 @@
 const cloud = require('wx-server-sdk')
 const crypto = require('crypto')
 const { buildLedgerAnswer, validateGeneratedAnswer, LedgerAiDomainError } = require('./ledger-ai-domain')
-const { normaliseLedgerAiEntry } = require('./repository-data')
+const { normaliseLedgerAiEntry, loadLedgerAiEntries, loadLedgerAiContext } = require('./repository-data')
 const { createModelAdapter, describeModelFailure } = require('./model-adapter')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
@@ -42,23 +42,10 @@ async function getTransactionDoc(collection, id) {
   }
 }
 async function loadEntries(householdId) {
-  const result = []
-  for (let offset = 0; offset < 1000; offset += 100) {
-    const page = await db.collection('ledgerEntries').where({ householdId, deletedAt: null }).orderBy('occurredAt', 'desc').skip(offset).limit(100).get()
-    result.push(...page.data)
-    if (page.data.length < 100) return result
-  }
-  throw new Error('LEDGER_RANGE_TOO_LARGE')
+  return loadLedgerAiEntries(db, householdId)
 }
 async function loadEntryContext(household, identityKey) {
-  const categoriesResult = await db.collection('ledgerCategories').where({ householdId: household._id }).limit(100).get()
-  const categoriesById = Object.fromEntries(categoriesResult.data.map((item) => [item._id, item]))
-  const membersByKey = {}
-  for (const memberKey of household.memberKeys || []) {
-    const profile = await getDoc(db.collection('users'), memberKey)
-    membersByKey[memberKey] = { nickname: profile?.nickname || (memberKey === identityKey ? '我' : '家庭成员') }
-  }
-  return { categoriesById, membersByKey, selfMemberKey: identityKey }
+  return loadLedgerAiContext(db, household, identityKey, getDoc)
 }
 function sessionExpired(session, nowMs) {
   return !session || nowMs - Date.parse(session.lastActiveAt) > SESSION_IDLE_MS || nowMs - Date.parse(session.createdAt) > SESSION_MAX_MS

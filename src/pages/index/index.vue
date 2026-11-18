@@ -1,5 +1,5 @@
 <template>
-  <view class="home-page">
+  <view class="home-page" :class="{ 'home-page--chat': lifeChatEnabled }">
     <wd-toast />
 
     <!-- 加载态：转圈 + 标准文案（与全站 loading 风格统一；方案 2 全站统一为转圈） -->
@@ -67,12 +67,35 @@
 
       <!-- 事项区：单成员 / 双成员家庭都用同一套——只是单成员没有 "完成记录" 链接。
            不再把单成员锁在外面"等邀请另一半"——一个人也能记下自己的事。 -->
-      <view v-if="taskCurrent" class="home-tasks">
-        <template v-if="hasAnyOpenTask">
-          <TaskList :current="taskCurrent" @press="onPressTask" />
-        </template>
+      <view v-if="taskCurrent || lifeChatEnabled" class="home-tasks">
+        <!-- 有事项时嵌入首组标题，空列表或加载失败时仍保留同排的栏目入口。 -->
+        <TaskList v-if="taskCurrent && hasAnyOpenTask" :current="taskCurrent" @press="onPressTask">
+          <template v-if="lifeChatEnabled" #action>
+            <wd-button
+              variant="text"
+              size="small"
+              icon="message"
+              custom-style="background: transparent; padding: 0; font-size: 24rpx;"
+              @click="goTaskChat"
+            >
+              <text data-testid="task-life-chat">一句话记事</text>
+            </wd-button>
+          </template>
+        </TaskList>
+        <view v-else-if="lifeChatEnabled" class="home-tasks__heading">
+          <text class="home-tasks__title">事项</text>
+          <wd-button
+            variant="text"
+            size="small"
+            icon="message"
+            custom-style="background: transparent; padding: 0; font-size: 24rpx;"
+            @click="goTaskChat"
+          >
+            <text data-testid="task-life-chat">一句话记事</text>
+          </wd-button>
+        </view>
         <WarmEmptyState
-          v-else
+          v-if="taskCurrent && !hasAnyOpenTask"
           image-src="/static/warm-life/scenes/empty-tasks.png"
           title="先记下一件事"
           copy="生活里的小事记下来，才不会从聊天里溜走。"
@@ -115,6 +138,7 @@ import HomeFootprintCard from './components/HomeFootprintCard.vue'
 import HomeFamilyCover from './components/HomeFamilyCover.vue'
 import AppTabBar from '../../components/AppTabBar.vue'
 import GlobalQuickAdd from '../../components/GlobalQuickAdd.vue'
+import { lifeChatEnabled, lifeChatUrl } from '../../utils/life-chat-entry'
 import TaskList from '../../components/task/TaskList.vue'
 import { useAuthStore } from '../../store/modules/auth'
 import { useHouseholdStore } from '../../store/modules/household'
@@ -122,15 +146,17 @@ import { useTaskStore } from '../../store/modules/task'
 import { useLedgerStore } from '../../store/modules/ledger'
 import { useFootprintStore } from '../../store/modules/footprint'
 import { formatLedgerMonth } from '../../utils/format'
-import {
-  isCurrentMemberAvatarRequest,
-  resolveHomeLoadDestination,
-} from './home-view'
+import { isCurrentMemberAvatarRequest, resolveHomeLoadDestination } from './home-view'
 import { getAvatarTemporaryUrl } from '../../services/avatar-media'
 import type { CustomAvatar, HouseholdMemberDisplay } from '../../types/household'
 import type { CurrentTasks } from '../../types/task'
 
 const authStore = useAuthStore()
+/** 从首页事项区只打开事项助手。 */
+function goTaskChat(): void {
+  uni.navigateTo({ url: lifeChatUrl('task') })
+}
+
 const householdStore = useHouseholdStore()
 const taskStore = useTaskStore()
 const ledgerStore = useLedgerStore()
@@ -346,6 +372,10 @@ onShow(() => {
   padding: 48rpx 32rpx 160rpx;
   box-sizing: border-box;
   background: $brand-color-background;
+  // 开放双悬浮入口时，最后一组事项可以滚到按钮上方再操作。
+  &--chat {
+    padding-bottom: 320rpx;
+  }
 }
 .page-state {
   display: flex;
@@ -422,6 +452,19 @@ onShow(() => {
 }
 .home-tasks {
   margin-top: 36rpx;
+  // 空列表的标题和聊天动作同排，有列表时由原事项分组承载。
+  &__heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16rpx;
+    min-height: 52rpx;
+  }
+  &__title {
+    color: $brand-color-text;
+    font-size: 28rpx;
+    font-weight: 700;
+  }
 }
 .home-error {
   display: block;
