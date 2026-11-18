@@ -49,7 +49,9 @@ async function getDocument(collection, id) {
   return null
 }
 
-function createRepository() {
+// 手动入口默认使用原数据库，聊天在同一事务中补充确认检查。
+function createRepository(database = db) {
+  const db = database
   const entries = db.collection('ledgerEntries')
   const categories = db.collection('ledgerCategories')
   const operations = db.collection('ledgerOperations')
@@ -140,6 +142,9 @@ function createRepository() {
   }
 }
 
+// 仅供同一后台部署包组装领域依赖。
+exports.createLedgerRepository = createRepository
+
 function buildDependencies(identityKey, householdId, selfMemberKey) {
   const repository = createRepository()
   return {
@@ -199,14 +204,15 @@ function remainingExecutionMs(
   return fallback
 }
 
-exports.main =
 /** 以真实微信身份处理固定账本动作，返回受控业务结果而不外传原始异常。 */
-async (
+async function handleLedger(
   /* 小程序提供的不可信动作与资料，不能自报可信身份。 */
   event,
   /* 平台实际运行控制，可用时提供原剩余时间。 */
   runtimeContext,
-) => {
+  /* 同一云函数内传入的扫码包设置，客户端的请求数据不能选择它。 */
+  preview,
+) {
   /** 从开始处理请求就计时，家庭读取和权限检查占用同一时限。 */
   const startedAt = Date.now()
   const context = cloud.getWXContext()
@@ -234,8 +240,9 @@ async (
     const action = event && event.action
     // 独立的AI动作沿用当前云端身份，忽略页面的selfMemberKey。
     if (['getDraftAvailability', 'understandDraft', 'editDraft', 'cancelDraft', 'prepareBatch', 'saveBatch', 'queryBatch', 'stopBatch', 'listBatches'].includes(action)) {
+      const environment = preview?.environment ?? process.env
       dependencies.selfMemberKey = identityKey
-      dependencies.draftSigningKey = process.env.AI_CENTER_DRAFT_SIGNING_KEY
+      dependencies.draftSigningKey = environment.AI_CENTER_DRAFT_SIGNING_KEY
       // 单次执行保留本地安全上限；不假定部署后云函数有相同运行时限。
       const remaining = remainingExecutionMs(runtimeContext, startedAt)
       if (['saveBatch', 'understandDraft'].includes(action) && (remaining === undefined || remaining < 2000)) throw new LedgerDomainError('LEDGER_AI_UNAVAILABLE')
@@ -244,8 +251,8 @@ async (
       dependencies.cloudDeadline = Date.now() + Math.min(30_000, availableMs)
       dependencies.aiDeadline = Date.now() + Math.min(60_000, availableMs)
       /** 本地调试保持原连接，线上只有显式开启才尝试加载云端模块。 */
-      const connectAi = () => process.env.AI_CENTER_CLOUD_BOOKKEEPING === '1'
-        ? createCloudAiCenterClient(dependencies)
+      const connectAi = () => environment.AI_CENTER_CLOUD_BOOKKEEPING === '1'
+        ? createCloudAiCenterClient(dependencies, environment, preview?.reserve)
         : createAiCenterClient()
       if (action === 'getDraftAvailability') {
         try {
@@ -312,3 +319,7 @@ async (
     return { status: 'LEDGER_TEMPORARY_FAILURE', retryable: true, errorMessage: '暂时无法完成账目操作，请稍后重试' }
   }
 }
+
+// 微信入口只接受平台的原两项参数。预览入口由聊天云函数在核对家庭后调用。
+exports.main = (event, runtimeContext) => handleLedger(event, runtimeContext)
+exports.handlePreviewDraft = handleLedger

@@ -373,6 +373,7 @@ import LedgerEntryItem from '../../components/ledger/LedgerEntryItem.vue'
 import RestorableEntryItem from './RestorableEntryItem.vue'
 import AppTabBar from '../../components/AppTabBar.vue'
 import GlobalQuickAdd from '../../components/GlobalQuickAdd.vue'
+import { lifeChatEnabled, lifeChatUrl } from '../../utils/life-chat-entry'
 import WarmEmptyState from '../../components/WarmEmptyState.vue'
 import { useHouseholdStore } from '../../store/modules/household'
 import { useLedgerStore } from '../../store/modules/ledger'
@@ -576,7 +577,7 @@ function onPressStats(): void {
 
 /** 进入独立问账页，不清空当前月份、日期和其他筛选。 */
 function onPressLedgerAi(): void {
-  uni.navigateTo({ url: LEDGER_AI_ENTRY_URL })
+  uni.navigateTo({ url: lifeChatEnabled ? lifeChatUrl('ledger') : LEDGER_AI_ENTRY_URL })
 }
 
 function onShiftMonth(delta: number): void {

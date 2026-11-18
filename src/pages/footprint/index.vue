@@ -39,7 +39,12 @@
           </view>
           <text class="footprint-page__hero-note">把一起走过的地方，慢慢留在地图上</text>
         </view>
-        <wd-button size="small" round icon="add" @click="goAdd">新增足迹</wd-button>
+        <view class="footprint-page__actions">
+          <wd-button v-if="lifeChatEnabled" size="small" plain round @click="goChat">
+            <text data-testid="footprint-life-chat">一句话记足迹</text>
+          </wd-button>
+          <wd-button size="small" round icon="add" @click="goAdd">新增足迹</wd-button>
+        </view>
         <!-- 路线装饰只用于营造旅行手账感，不承载点击或业务信息。 -->
         <view class="footprint-page__hero-route">
           <view class="footprint-page__route-dot footprint-page__route-dot--start" />
@@ -210,6 +215,7 @@ import { onLoad, onReady, onShow } from '@dcloudio/uni-app'
 import AppTabBar from '../../components/AppTabBar.vue'
 import FootprintNavigationButton from '../../components/FootprintNavigationButton.vue'
 import GlobalQuickAdd from '../../components/GlobalQuickAdd.vue'
+import { lifeChatEnabled, lifeChatUrl } from '../../utils/life-chat-entry'
 import WarmEmptyState from '../../components/WarmEmptyState.vue'
 import FootprintTimeline from './components/FootprintTimeline.vue'
 import { useAuthStore } from '../../store/modules/auth'
@@ -361,6 +367,11 @@ async function loadPage(): Promise<void> {
 function goAdd(): void {
   uni.navigateTo({ url: '/subpackages/footprint/footprint-form/index' })
 }
+
+/** 足迹页专用入口保留地图模式和当前位置，不开启定位。 */
+function goChat(): void {
+  uni.navigateTo({ url: lifeChatUrl('footprint') })
+}
 function goDetail(entryId: string): void {
   const entry = entries.value.find((item) => item.id === entryId)
   const url =
@@ -429,6 +440,13 @@ onReady(() => {
 
 <style lang="scss" scoped>
 .footprint-page {
+  // 空间不足时入口可以竖向换行，手动新增始终有独立触区。
+  &__actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 12rpx;
+  }
   min-height: 100vh;
   padding: 22rpx 28rpx 180rpx;
   box-sizing: border-box;
