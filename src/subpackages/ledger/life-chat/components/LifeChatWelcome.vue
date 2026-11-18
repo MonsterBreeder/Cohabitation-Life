@@ -13,20 +13,20 @@
       <image class="life-chat-welcome__art" :src="welcome.art" mode="aspectFit" aria-hidden="true" />
     </view>
 
-    <!-- 整行都是点按区，加号表示把例句加入输入框。 -->
+    <!-- 原生按钮承载两行内容，避免微信端通用按钮的单行高度裁切例句。 -->
     <view class="life-chat-welcome__hint">
       <text class="life-chat-welcome__hint-title">试着说一句</text>
       <text>点选填入输入框</text>
     </view>
     <view class="life-chat-welcome__examples">
-      <wd-button
+      <button
         v-for="example in welcome.examples"
         :key="example.text"
-        block
-        variant="text"
-        custom-class="life-chat-welcome__example-button"
+        class="life-chat-welcome__example-button"
+        :class="{ 'life-chat-welcome__example-button--disabled': disabled }"
+        :hover-class="disabled ? 'none' : 'life-chat-welcome__example-button--pressed'"
         :disabled="disabled"
-        @click="emit('choose', example.text)"
+        @click="!disabled && emit('choose', example.text)"
       >
         <view class="life-chat-welcome__row">
           <view
@@ -42,7 +42,7 @@
           </view>
           <view class="life-chat-welcome__add" aria-hidden="true"><wd-icon name="plus" size="26rpx" /></view>
         </view>
-      </wd-button>
+      </button>
     </view>
   </view>
 </template>
@@ -172,28 +172,38 @@ const welcome = computed(() => welcomes[props.scope])
     border-radius: $brand-radius-card;
     background: $brand-color-surface;
   }
-  :deep(.life-chat-welcome__example-button) {
+  &__example-button {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
     height: auto;
+    margin: 0;
     padding: 0;
+    border: 0;
     border-radius: 12rpx;
     background: transparent;
     line-height: 1.45;
     text-align: left;
     white-space: normal;
+    &::after {
+      border: 0;
+      pointer-events: none;
+    }
     &:focus-visible {
       outline: 2rpx solid $brand-color-action;
       outline-offset: -2rpx;
     }
+    &--disabled {
+      background: transparent;
+      opacity: 0.5;
+    }
+    &--pressed,
+    &:not([disabled]):active {
+      background: #f1f7f2;
+    }
   }
-  :deep(.life-chat-welcome__example-button .wd-button__text) {
-    width: 100%;
-  }
-  :deep(.life-chat-welcome__example-button + .life-chat-welcome__example-button) {
+  &__example-button + &__example-button {
     border-top: 1rpx solid $brand-color-border;
-  }
-  :deep(.life-chat-welcome__example-button:not(.is-disabled):active),
-  :deep(.life-chat-welcome__example-button.wd-button--active) {
-    background: #f1f7f2;
   }
   &__row {
     display: flex;
