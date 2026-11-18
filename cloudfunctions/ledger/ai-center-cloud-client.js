@@ -49,6 +49,8 @@ function createCloudAiCenterClient(
   dependencies,
   /* 云函数环境设置，不从页面读取。 */
   environment = process.env,
+  /* 扫码预览可在发出模型请求前核对同一份测试总额度。 */
+  reservePreviewRequest,
 ) {
   /** 使用独立每日设置，避免把旧试用总额度误当成每日额度。 */
   const limit = Number(environment.AI_CENTER_CLOUD_DAILY_MAX_REQUESTS)
@@ -57,7 +59,8 @@ function createCloudAiCenterClient(
     !dependencies.householdId || !Number.isSafeInteger(limit) || limit < 1 || limit > 100)
     throw new LedgerDomainError('LEDGER_AI_UNAVAILABLE')
   /** 只按已核实的家庭分配每日额度，控制记录不进入账目或历史回执。 */
-  const gateId = `lai_daily_${createHash('sha256').update(dependencies.householdId).digest('hex')}`
+  const namespace = reservePreviewRequest ? 'lai_preview' : 'lai'
+  const gateId = `${namespace}_daily_${createHash('sha256').update(dependencies.householdId).digest('hex')}`
 
   /** 只在打开线上记账后加载同次发布的 ai-center 生成模块。 */
   let runtime
@@ -97,8 +100,8 @@ function createCloudAiCenterClient(
       ) => {
         /** 在同一事务取得计数、旧试用记录和确切请求的防重凭据。 */
         const record = await tx.getBatch(gateId)
-        const legacy = action === 'finish' ? undefined : await tx.getBatch(legacyGateId)
-        const receiptId = `lai_request_${ref.key}`
+        const legacy = action === 'finish' || reservePreviewRequest ? undefined : await tx.getBatch(legacyGateId)
+        const receiptId = `${namespace}_request_${ref.key}`
         const receipt = action === 'finish' ? undefined : await tx.getBatch(receiptId)
         /** 以实际接受请求时的云端时间确定计入哪一天。 */
         const now = Date.now()
@@ -162,7 +165,7 @@ function createCloudAiCenterClient(
     async health() {
       /** 此处不登记新的模型请求，也不改已有次数。 */
       const record = await dependencies.repository.getBatch(gateId)
-      const legacy = await dependencies.repository.getBatch(legacyGateId)
+      const legacy = reservePreviewRequest ? undefined : await dependencies.repository.getBatch(legacyGateId)
       const { calls, legacyCalls } = dailyUsage(record, legacy, Date.now())
       if (calls + legacyCalls >= limit) throw new LedgerDomainError('LEDGER_AI_UNAVAILABLE')
       return true
@@ -182,8 +185,10 @@ function createCloudAiCenterClient(
       active.set(ref.key, controller)
       try {
         /** 登记之后也必须有足够的原请求剩余时间。 */
+        if (expiresAt - Date.now() < 1000) throw new LedgerDomainError('LEDGER_AI_TIMEOUT')
+        if (reservePreviewRequest && !await reservePreviewRequest()) throw new LedgerDomainError('LEDGER_AI_PREVIEW_LIMIT')
         const timeoutMs = expiresAt - Date.now()
-        if (timeoutMs < 1000) throw new LedgerDomainError('LEDGER_AI_TIMEOUT')
+        if (timeoutMs < 1000 || controller.signal.aborted) throw new LedgerDomainError('LEDGER_AI_TIMEOUT')
         /** 结果仍是草稿，只有后续原确认流程才能写正式账目。 */
         const result = await runtime.understandCloudBookkeeping({ ...value, timeoutMs }, environment, controller.signal)
         if (controller.signal.aborted || !await transition(ref, 'finish', expiresAt))

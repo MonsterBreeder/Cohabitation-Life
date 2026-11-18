@@ -1,5 +1,5 @@
 /** 文件用途：调用固定账本草稿动作并严格检查返回，保持原单笔客户端和时限不变。 */
-import { cloudEnvironmentId } from '../config/cloud'
+import { cloudEnvironmentId, lifeChatPreviewFunctionName } from '../config/cloud'
 import type { BatchResult, DraftEntry, DraftView } from '../types/ledger-draft'
 
 /** 单次云端调用能力，可注入测试，不含身份或服务凭据。 */
@@ -210,6 +210,8 @@ export function createDraftCloud(
   householdId: string,
   /** 固定测试依赖，正式使用微信运行时。 */
   injected?: DraftCloudRuntime,
+  /** 只有聊天扫码包需要通过同一个服务扣减测试额度。 */
+  preview = false,
 ) {
   /** 本页使用同一个已初始化微信连接。 */
   const runtime = injected || (globalThis as unknown as { wx?: { cloud?: DraftCloudRuntime } }).wx?.cloud
@@ -232,10 +234,12 @@ export function createDraftCloud(
     let timer: ReturnType<typeof setTimeout> | undefined
     try {
       // 异步前固定实际传输的普通资料，不将Vue代理或后续页面修改交给后台。
-      const data = JSON.parse(JSON.stringify({ ...input, action, householdId })) as Record<string, unknown>
+      const draft = { ...input, action, householdId }
+      const payload = preview ? { action: 'preview_bookkeeping', householdId, draft } : draft
+      const data = JSON.parse(JSON.stringify(payload)) as Record<string, unknown>
       /** 一句话记账使用独立云函数，数据中不携带可信身份。 */
       const response = await Promise.race([
-        runtime!.callFunction({ name: 'ledgerBookkeeping', data }),
+        runtime!.callFunction({ name: preview ? lifeChatPreviewFunctionName : 'ledgerBookkeeping', data }),
         new Promise<never>(
           /**
            * 建立本次有界异步等待，由明确完成或失败结束，不自动重复执行。
@@ -308,6 +312,7 @@ export function createDraftCloud(
       LEDGER_DRAFT_LIMIT: '本次描述或清单超过限制，请分开描述，最多十笔。',
       LEDGER_DRAFT_UNSUPPORTED: '这里只整理文字人民币收支，暂不处理图片、换汇或修改旧账。',
       LEDGER_AI_BUSY: '当前正在整理，请稍后手动再试。',
+      LEDGER_AI_PREVIEW_LIMIT: '本轮聊天预览的 6 次测试额度已用完。',
       LEDGER_AI_TIMEOUT: '本次整理超时，请稍后手动再试。',
       LEDGER_FORBIDDEN: '你已没有这个家庭的访问权限。',
       LEDGER_AI_UNAVAILABLE: '一句话记账尚未连接，请先使用手动记账。',

@@ -67,12 +67,14 @@
 
       <!-- 事项区：单成员 / 双成员家庭都用同一套——只是单成员没有 "完成记录" 链接。
            不再把单成员锁在外面"等邀请另一半"——一个人也能记下自己的事。 -->
-      <view v-if="taskCurrent" class="home-tasks">
-        <template v-if="hasAnyOpenTask">
-          <TaskList :current="taskCurrent" @press="onPressTask" />
-        </template>
+      <view v-if="taskCurrent || lifeChatEnabled" class="home-tasks">
+        <!-- 已登录且有家时，事项列表加载不阻塞独立的聊天入口。 -->
+        <wd-button v-if="lifeChatEnabled" plain round size="small" @click="goTaskChat">
+          <text data-testid="task-life-chat">一句话记事</text>
+        </wd-button>
+        <TaskList v-if="taskCurrent && hasAnyOpenTask" :current="taskCurrent" @press="onPressTask" />
         <WarmEmptyState
-          v-else
+          v-else-if="taskCurrent"
           image-src="/static/warm-life/scenes/empty-tasks.png"
           title="先记下一件事"
           copy="生活里的小事记下来，才不会从聊天里溜走。"
@@ -115,6 +117,7 @@ import HomeFootprintCard from './components/HomeFootprintCard.vue'
 import HomeFamilyCover from './components/HomeFamilyCover.vue'
 import AppTabBar from '../../components/AppTabBar.vue'
 import GlobalQuickAdd from '../../components/GlobalQuickAdd.vue'
+import { lifeChatEnabled, lifeChatUrl } from '../../utils/life-chat-entry'
 import TaskList from '../../components/task/TaskList.vue'
 import { useAuthStore } from '../../store/modules/auth'
 import { useHouseholdStore } from '../../store/modules/household'
@@ -122,15 +125,17 @@ import { useTaskStore } from '../../store/modules/task'
 import { useLedgerStore } from '../../store/modules/ledger'
 import { useFootprintStore } from '../../store/modules/footprint'
 import { formatLedgerMonth } from '../../utils/format'
-import {
-  isCurrentMemberAvatarRequest,
-  resolveHomeLoadDestination,
-} from './home-view'
+import { isCurrentMemberAvatarRequest, resolveHomeLoadDestination } from './home-view'
 import { getAvatarTemporaryUrl } from '../../services/avatar-media'
 import type { CustomAvatar, HouseholdMemberDisplay } from '../../types/household'
 import type { CurrentTasks } from '../../types/task'
 
 const authStore = useAuthStore()
+/** 从首页事项区只打开事项助手。 */
+function goTaskChat(): void {
+  uni.navigateTo({ url: lifeChatUrl('task') })
+}
+
 const householdStore = useHouseholdStore()
 const taskStore = useTaskStore()
 const ledgerStore = useLedgerStore()

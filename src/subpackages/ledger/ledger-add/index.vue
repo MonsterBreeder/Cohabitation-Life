@@ -267,6 +267,7 @@ import { useHouseholdStore } from '../../../store/modules/household'
 import { useLedgerStore } from '../../../store/modules/ledger'
 import { formatDateYMD } from '../../../utils/format'
 import { returnAfterQuickCreate } from '../../../utils/quick-add'
+import { lifeChatEnabled, lifeChatUrl } from '../../../utils/life-chat-entry'
 import {
   CATEGORY_COLOR_OPTIONS,
   CATEGORY_ICON_OPTIONS,
@@ -354,7 +355,11 @@ const showSmartAdd = computed(() => !isEditMode.value && householdStore.optional
 /** 进入账本分包内的独立整理页，原手动输入不清空。 */
 function openSmartAdd(): void {
   if (isBusy.value || !showSmartAdd.value) return
-  uni.navigateTo({ url: '/subpackages/ledger/ledger-smart-add/index' })
+  uni.navigateTo({
+    url: lifeChatEnabled
+      ? lifeChatUrl('ledger', 'ledger-create')
+      : '/subpackages/ledger/ledger-smart-add/index',
+  })
 }
 const editingEntryId = ref<string | null>(null)
 const editingOperationToken = ref<string>('')

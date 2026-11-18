@@ -40,7 +40,8 @@ async function getDocument(collection, id) {
   return null
 }
 
-function createRepository() {
+// 聊天传入同一家受控的数据库访问，手动入口沿用原实例。
+function createRepository(db) {
   const tasksCollection = db.collection('tasks')
   const operationsCollection = db.collection('taskOperations')
   const householdsCollection = db.collection('households')
@@ -131,7 +132,7 @@ function decodeCursor(cursor) {
 }
 
 function buildDependencies() {
-  const repository = createRepository()
+  const repository = createRepository(db)
   return {
     identityKey: 'placeholder', // 由 main 覆盖
     repository,
@@ -144,7 +145,7 @@ exports.main = async (event) => {
   const context = cloud.getWXContext()
   try {
     const identityKey = `user_${require('crypto').createHash('sha256').update(`${context.APPID}:${context.OPENID}`).digest('hex')}`
-    const repository = createRepository()
+    const repository = createRepository(db)
     const dependencies = {
       identityKey,
       repository,
@@ -180,6 +181,9 @@ exports.main = async (event) => {
     return { status: 'TASK_TEMPORARY_FAILURE', retryable: true, errorMessage: '暂时无法完成事项操作，请稍后重试' }
   }
 }
+
+// 仅供同一后台部署包复用，客户端动作列表不包含该方法。
+exports.createTaskRepository = createRepository
 
 function humaniseError(code) {
   switch (code) {
