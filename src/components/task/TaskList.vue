@@ -8,15 +8,19 @@
       :data-testid="section.testId"
     >
       <view class="task-list__section-heading">
-        <text class="task-list__section-title">{{ section.title }}</text>
-        <!-- 插画只跟随第一个可见分组，避免在事项列表前额外增加一行。 -->
-        <image
-          v-if="sectionIdx === 0"
-          class="task-list__section-illustration"
-          src="/static/warm-life/scenes/empty-tasks.png"
-          mode="aspectFit"
-          data-testid="home-tasks-scene"
-        />
+        <view class="task-list__section-label">
+          <text class="task-list__section-title">{{ section.title }}</text>
+          <!-- 插画只跟随第一个可见分组，避免在事项列表前额外增加一行。 -->
+          <image
+            v-if="sectionIdx === 0"
+            class="task-list__section-illustration"
+            src="/static/warm-life/scenes/empty-tasks.png"
+            mode="aspectFit"
+            data-testid="home-tasks-scene"
+          />
+        </view>
+        <!-- 首页聊天入口跟随首个现有分组标题，不额外撑出一行。 -->
+        <slot v-if="sectionIdx === 0" name="action" />
       </view>
       <TaskSummaryCard
         v-for="task in section.tasks"
@@ -88,6 +92,14 @@ const visibleSections = computed<TaskSection[]>(() =>
     color: $brand-color-text;
     font-size: 28rpx;
     font-weight: 700;
+  }
+  &__section-label {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16rpx;
+    min-width: 0;
   }
   &__section-illustration {
     width: 66rpx;

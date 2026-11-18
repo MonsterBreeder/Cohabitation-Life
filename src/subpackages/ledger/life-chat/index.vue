@@ -3,7 +3,7 @@
   <view class="life-chat" :style="keyboard ? { '--life-keyboard': `${keyboard}px` } : undefined">
     <view v-if="booting || !ready" class="life-chat__initial">
       <wd-loading v-if="booting" color="#267A5A" size="40rpx" />
-      <text>{{ booting ? '正在加载聊天助手…' : error }}</text>
+      <text>{{ booting ? '正在加载聊天助手。' : error }}</text>
       <template v-if="!booting">
         <LifeChatCard
           v-if="recoveredWhileClosed"
@@ -25,44 +25,62 @@
     <template v-else>
       <scroll-view class="life-chat__scroll" scroll-y :scroll-into-view="anchor" @scroll="trackScroll">
         <view class="life-chat__timeline">
-          <view class="life-chat__sender">
-            <image class="life-chat__logo" src="/static/brand/logo.png" mode="aspectFit" />
-            <text>睦录</text>
+          <!-- 开场和逐条回复沿用原记账对话，示例收进气泡，避免开场变成按钮列表。 -->
+          <view class="life-chat__message">
+            <view class="life-chat__sender">
+              <image class="life-chat__logo" src="/static/brand/logo.png" mode="aspectFit" />
+              <text>睦录</text>
+            </view>
+            <view class="life-chat__bubble life-chat__bubble--assistant">
+              <text>{{ introduction }}</text>
+              <view class="life-chat__examples">
+                <text class="life-chat__example-label">比如，你可以说</text>
+                <wd-button
+                  v-for="example in examples"
+                  :key="example"
+                  variant="text"
+                  size="small"
+                  custom-class="life-chat__example-button"
+                  :disabled="busy || !!ledger"
+                  @click="text = example"
+                >
+                  <view class="life-chat__example-content">
+                    <text>{{ example }}</text>
+                    <wd-icon name="arrow-right" size="24rpx" />
+                  </view>
+                </wd-button>
+              </view>
+            </view>
           </view>
-          <view class="life-chat__bubble">{{ introduction }}</view>
-          <view class="life-chat__examples">
-            <wd-button
-              v-for="example in examples"
-              :key="example"
-              size="small"
-              plain
-              round
-              :disabled="busy || !!ledger"
-              @click="text = example"
-            >
-              {{ example }}
-            </wd-button>
-          </view>
-          <template v-for="item in messages" :key="item.id">
+          <view v-for="item in messages" :key="item.id" class="life-chat__message">
             <view v-if="item.text" class="life-chat__bubble life-chat__bubble--mine">{{ item.text }}</view>
-            <LifeChatCard
-              v-else-if="item.result"
-              :result="item.result"
-              :notice="resultNotice(item.result)"
-              :active="!!item.result.credential && item.result.credential === activeCard"
-              :busy="busy"
-              @source="openSource(item.result, $event)"
-              @more="loadMore(item.id, item.result)"
-              @stats="openStats"
-              @choose="chat.card('choose', item.result, { index: $event })"
-              @cancel="chat.card('cancel', item.result)"
-              @confirm="confirm(item.result)"
-              @place="pickPlace(item.result)"
-              @details="openDetails(item.result.domain, item.result.id)"
-            />
-          </template>
+            <template v-else-if="item.result">
+              <view class="life-chat__sender">
+                <image class="life-chat__logo" src="/static/brand/logo.png" mode="aspectFit" />
+                <text>睦录</text>
+              </view>
+              <LifeChatCard
+                :result="item.result"
+                :notice="resultNotice(item.result)"
+                :active="!!item.result.credential && item.result.credential === activeCard"
+                :busy="busy"
+                @source="openSource(item.result, $event)"
+                @more="loadMore(item.id, item.result)"
+                @stats="openStats"
+                @choose="chat.card('choose', item.result, { index: $event })"
+                @cancel="chat.card('cancel', item.result)"
+                @confirm="confirm(item.result)"
+                @place="pickPlace(item.result)"
+                @details="openDetails(item.result.domain, item.result.id)"
+              />
+            </template>
+          </view>
           <template v-if="ledger && ledgerState">
-            <template v-for="item in ledgerState.messages" :key="item.id">
+            <view v-for="item in ledgerState.messages" :key="item.id" class="life-chat__message">
+              <view v-if="item.kind !== 'user'" class="life-chat__sender">
+                <image class="life-chat__logo" src="/static/brand/logo.png" mode="aspectFit" />
+                <text>睦录</text>
+              </view>
               <view
                 v-if="item.kind === 'assistant' || item.kind === 'user'"
                 class="life-chat__bubble"
@@ -92,8 +110,11 @@
                 @retry="ledger.retrySave(item.result.batchId)"
                 @open="openDetails('ledger', $event)"
               />
-            </template>
-            <view v-if="ledgerState.error || ledgerState.failedMessage" class="life-chat__notice">
+            </view>
+            <view
+              v-if="ledgerState.error || ledgerState.failedMessage"
+              class="life-chat__notice life-chat__notice--error"
+            >
               <text>{{ ledgerState.error || '这笔账暂时没能整理。' }}</text>
               <wd-button
                 v-if="ledgerState.failedMessage"
@@ -140,15 +161,18 @@
             </wd-button>
           </template>
           <view v-if="consenting" class="life-chat__notice">
+            <text class="life-chat__notice-title">发送前了解数据用途</text>
             <text>这句话和完成本次操作所需的资料会交给模型处理。未确认的内容退出后清空。</text>
-            <wd-button round size="small" data-testid="life-chat-consent" @click="chat.send(true)">
+            <wd-button block round data-testid="life-chat-consent" @click="chat.send(true)">
               同意并发送
             </wd-button>
             <wd-button size="small" variant="text" @click="consenting = false">暂不发送</wd-button>
           </view>
-          <view v-if="activity" class="life-chat__progress" data-testid="life-chat-progress">
-            <wd-loading color="#267A5A" size="32rpx" />
-            <text>{{ activity }}</text>
+          <view v-if="activity" class="life-chat__message" role="status">
+            <view class="life-chat__progress" data-testid="life-chat-progress">
+              <wd-loading color="#267A5A" size="32rpx" />
+              <text>{{ activity }}</text>
+            </view>
           </view>
           <wd-button
             v-if="status === '正在处理这条消息…'"
@@ -158,7 +182,7 @@
           >
             取消处理
           </wd-button>
-          <view v-if="error" class="life-chat__notice" role="alert">
+          <view v-if="error" class="life-chat__notice life-chat__notice--error" role="alert">
             <text>{{ error }}</text>
           </view>
           <wd-button
@@ -182,12 +206,14 @@
           >
             继续处理剩余 {{ remainingActions.count }} 项
           </wd-button>
-          <view id="life-chat-end-a" />
-          <view id="life-chat-end-b" />
+          <view id="life-chat-end-a" class="life-chat__anchor" />
+          <view id="life-chat-end-b" class="life-chat__anchor" />
         </view>
       </scroll-view>
       <view class="life-chat__footer" :class="{ 'life-chat__footer--keyboard': keyboard }">
-        <wd-button v-if="hasNew" size="small" variant="text" @click="jumpLatest">查看新消息</wd-button>
+        <view v-if="hasNew" class="life-chat__jump">
+          <wd-button size="small" plain round @click="jumpLatest">查看新消息</wd-button>
+        </view>
         <DraftComposer
           :text="ledgerState?.text ?? text"
           placeholder="说一句…"
@@ -512,10 +538,12 @@ watch(
 
 <style lang="scss" scoped>
 .life-chat {
-  // 聊天页沿用纸白、浅绿和深绿；正文滚动和键盘避让分属两层。
+  // 与原记账页使用相同的导航、纸白底色和气泡比例，底栏只避让一次键盘。
   display: flex;
   flex-direction: column;
-  height: calc(100vh - var(--life-keyboard, 0px));
+  height: calc(100vh - var(--window-top, 0px) - var(--window-bottom, 0px) - var(--life-keyboard, 0px));
+  overflow: hidden;
+  box-sizing: border-box;
   background: $brand-color-background;
   color: $brand-color-text;
   font-size: 28rpx;
@@ -525,8 +553,9 @@ watch(
     align-items: center;
     justify-content: center;
     flex-direction: column;
-    gap: 24rpx;
-    padding: 32rpx;
+    gap: 20rpx;
+    padding: 36rpx;
+    text-align: center;
   }
   &__scroll {
     flex: 1;
@@ -534,66 +563,124 @@ watch(
     height: 0;
   }
   &__timeline {
+    padding: 32rpx 28rpx 20rpx;
+  }
+  &__message {
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    gap: 20rpx;
-    padding: 28rpx 28rpx 36rpx;
+    margin-bottom: 22rpx;
   }
   &__sender {
     display: flex;
     align-items: center;
-    gap: 12rpx;
-    color: $brand-color-text-secondary;
-    font-size: 24rpx;
-    font-weight: 700;
+    gap: 10rpx;
+    margin-bottom: 10rpx;
+    color: #536b60;
+    font-size: 23rpx;
+    font-weight: 600;
   }
   &__logo {
-    width: 46rpx;
-    height: 46rpx;
-    border-radius: 10rpx;
+    width: 42rpx;
+    height: 42rpx;
+  }
+  &__bubble,
+  &__progress,
+  &__notice {
+    border: 1rpx solid $brand-color-border;
+    border-radius: $brand-radius-card;
+    background: $brand-color-surface;
   }
   &__bubble {
     align-self: flex-start;
-    max-width: 87%;
-    padding: 16rpx 20rpx;
-    border: 1rpx solid $brand-color-border;
-    border-radius: 24rpx;
-    background: $brand-color-surface;
+    max-width: 84%;
+    padding: 18rpx 22rpx;
+    line-height: 1.55;
+    white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
   &__bubble--mine {
     align-self: flex-end;
-    background: #e3f1e8;
+    background: #e2f1e8;
+    border-color: transparent;
   }
+  // 示例保留原气泡里的次要文字层级，点击仍只填入，不触发发送。
   &__examples {
     display: flex;
-    flex-wrap: wrap;
-    gap: 10rpx;
+    flex-direction: column;
+    margin-top: 14rpx;
+    padding-top: 14rpx;
+    border-top: 1rpx solid $brand-color-border;
+  }
+  &__example-label {
+    color: #536b60;
+    font-size: 24rpx;
+  }
+  :deep(.life-chat__example-button) {
+    display: block;
+    height: auto;
+    min-height: 72rpx;
+    padding: 12rpx 0;
+    font-size: 24rpx;
+    font-weight: 400;
+    line-height: 1.55;
+    white-space: normal;
+    text-align: left;
+    border-radius: 8rpx;
+    &:focus-visible {
+      outline: 2rpx solid $brand-color-action;
+      outline-offset: 4rpx;
+    }
+  }
+  &__example-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16rpx;
   }
   &__progress {
     display: flex;
     align-items: center;
     gap: 14rpx;
     align-self: flex-start;
+    padding: 17rpx 22rpx;
+    font-size: 26rpx;
     color: $brand-color-action;
   }
   &__notice {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 14rpx;
-    padding: 20rpx;
-    border-radius: 18rpx;
-    background: #f8eee3;
+    gap: 16rpx;
+    margin-bottom: 20rpx;
+    padding: 22rpx;
+    font-size: 26rpx;
+    line-height: 1.6;
+  }
+  &__notice-title {
+    font-weight: 700;
+    font-size: 29rpx;
+  }
+  &__notice--error {
+    background: #fcf0e8;
+    color: #814532;
   }
   &__footer {
+    position: relative;
     padding: 16rpx 24rpx calc(14rpx + env(safe-area-inset-bottom));
     border-top: 1rpx solid $brand-color-border;
     background: $brand-color-surface;
   }
   &__footer--keyboard {
-    padding-bottom: 12rpx;
+    padding-bottom: 14rpx;
+  }
+  &__jump {
+    position: absolute;
+    right: 24rpx;
+    bottom: calc(100% + 12rpx);
+  }
+  &__anchor {
+    height: 1px;
   }
 }
 </style>
